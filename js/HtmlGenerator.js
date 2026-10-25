@@ -56,7 +56,7 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
   const renderer = new window.marked.Renderer();
   const usedSlugs = new Set();
 
-  renderer.heading = ({ text, depth }) => {
+  renderer.heading = function ({ text, depth, tokens }) {
     const cleanTitle = text.replace(/<[^>]*>/g, '').replace(/[*_`]/g, '').trim();
     const baseSlug = toSlug(cleanTitle) || `section-${depth}`;
     let uniqueSlug = baseSlug;
@@ -66,10 +66,22 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
     }
     usedSlugs.add(uniqueSlug);
 
+    const renderedText =
+      this.parser && tokens ? this.parser.parseInline(tokens) : text;
+
     if (depth === 1) {
-      return `<h1 id="${uniqueSlug}" class="doc-heading doc-main-title">${text}</h1>`;
+      return `<h1 id="${uniqueSlug}" class="doc-heading doc-main-title">${renderedText}</h1>`;
     }
-    return `<h${depth} id="${uniqueSlug}" class="doc-heading doc-h${depth}">${text}</h${depth}>`;
+    return `<h${depth} id="${uniqueSlug}" class="doc-heading doc-h${depth}">${renderedText}</h${depth}>`;
+  };
+
+  // Interprète __texte__ comme du souligné (<u>) et **texte** comme du gras (<strong>)
+  renderer.strong = function ({ tokens, raw, text }) {
+    const inner = this.parser && tokens ? this.parser.parseInline(tokens) : text;
+    if (typeof raw === 'string' && raw.startsWith('__')) {
+      return `<u>${inner}</u>`;
+    }
+    return `<strong>${inner}</strong>`;
   };
 
   // Rendu sobre des blocs de code avec coloration syntaxique, sans en-tête ni bouton Copier
@@ -91,11 +103,9 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
     return `<pre class="code-block"><code class="hljs ${escapeHtml(validLang)}">${highlighted}</code></pre>`;
   };
 
-  renderer.listitem = ({ text, task, checked }) => {
-    let formattedText = text;
-    if (typeof formattedText === 'string' && formattedText.includes('**')) {
-      formattedText = formattedText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    }
+  renderer.listitem = function ({ text, task, checked, tokens, loose }) {
+    const formattedText =
+      this.parser && tokens ? this.parser.parse(tokens, Boolean(loose)) : text;
     if (task) {
       const checkClass = checked ? 'task-checked' : 'task-unchecked';
       const boxText = checked ? '[x]' : '[ ]';
@@ -110,7 +120,28 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
     breaks: true,
   });
 
-  const parsed = window.marked.parse(cleanMarkdown);
+  // Normalise l'indentation des sous-listes (4 espaces par niveau) pour que Marked.js
+  // imbrique uniformément les listes à puces (- *) et les listes numérotées (1.)
+  let inFence = false;
+  const markedReadyMarkdown = cleanMarkdown
+    .split('\n')
+    .map((line) => {
+      if (line.trimStart().startsWith('```')) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) return line;
+      const listMatch = line.match(/^([ \t]+)((?:[-*+]|\d+[.)])[ \t]+.*)$/);
+      if (listMatch) {
+        const spaceCount = listMatch[1].replace(/\t/g, '  ').length;
+        const level = Math.ceil(spaceCount / 2);
+        return ' '.repeat(level * 4) + listMatch[2];
+      }
+      return line;
+    })
+    .join('\n');
+
+  const parsed = window.marked.parse(markedReadyMarkdown);
 
   return parsed.replace(/(<table\b[^>]*>[\s\S]*?<\/table>)/gi, (match) => {
     let tableHtml = match;

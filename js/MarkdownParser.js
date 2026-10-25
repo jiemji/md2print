@@ -179,8 +179,8 @@ export const parseToAST = (mdText) => {
     // --- Liste non-ordonnée (et checklist) ---
     const ulMatch = trimmed.match(/^(\s*)([-*+])\s+(.*)$/);
     if (ulMatch) {
-      const indent = ulMatch[1].length;
-      const level = Math.floor(indent / 2);
+      const indent = ulMatch[1].replace(/\t/g, '  ').length;
+      const level = Math.ceil(indent / 2);
       const rawItemText = ulMatch[3].replace(/^\[([ xX])\]\s+/, (_, chk) => (chk.toLowerCase() === 'x' ? '[x] ' : '[ ] '));
       ast.push({
         type: 'list_item',
@@ -194,10 +194,10 @@ export const parseToAST = (mdText) => {
     }
 
     // --- Liste ordonnée ---
-    const olMatch = trimmed.match(/^(\s*)(\d+)\.\s+(.*)$/);
+    const olMatch = trimmed.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
     if (olMatch) {
-      const indent = olMatch[1].length;
-      const level = Math.floor(indent / 2);
+      const indent = olMatch[1].replace(/\t/g, '  ').length;
+      const level = Math.ceil(indent / 2);
       const text = olMatch[3];
       ast.push({
         type: 'list_item',

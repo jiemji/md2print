@@ -155,23 +155,23 @@ export const getImageDimensions = (dataUrl, maxWidth = 520, maxHeight = 340) =>
   });
 
 /**
- * Génère la cartouche textuelle sur 2 lignes représentant une image Base64 dans l'éditeur.
+ * Génère le jeton interne représentant une image Base64 dans le flux Markdown de l'éditeur.
  * @param {string} id - Identifiant interne de l'image (ex: 'img-1')
  * @param {string} [alt='image'] - Texte alternatif / nom de l'image
- * @returns {string} Cartouche sur 2 lignes
+ * @returns {string} Jeton interne de cartouche
  */
 export const createImageCartouche = (id, alt = 'image') => {
   const cleanAlt = (alt || 'image').replace(/[\r\n[\]()]/g, '').trim() || 'image';
-  return `[image : ${cleanAlt} (${id})]\n[binaire base64 masqué]`;
+  return `[image : ${cleanAlt} (${id})]`;
 };
 
 /**
  * Remplace toutes les images Base64 brutes ![alt](data:image/...;base64,...) d'un texte Markdown
- * par des cartouches de 2 lignes [image] tout en stockant le binaire dans localImages.
+ * par des jetons de cartouches [image] tout en stockant le binaire dans localImages.
  * @param {string} markdownText - Contenu Markdown brut (ex: à l'ouverture d'un fichier .md)
  * @param {Record<string, string>} localImages - Dictionnaire en mémoire des images
  * @param {function(): string} nextIdFn - Fonction générant un identifiant unique (ex: 'img-1')
- * @returns {string} Contenu Markdown avec cartouches [image] sur 2 lignes
+ * @returns {string} Contenu Markdown avec jetons [image]
  */
 export const collapseBase64ToCartouches = (markdownText, localImages, nextIdFn) => {
   if (!markdownText) return '';
@@ -186,7 +186,7 @@ export const collapseBase64ToCartouches = (markdownText, localImages, nextIdFn) 
 };
 
 /**
- * Remplace les cartouches de 2 lignes [image] ainsi que les chemins d'images locaux
+ * Remplace les jetons de cartouches [image] ainsi que les chemins d'images locaux
  * par leur Data URL Base64 stockée dans localImages (pour l'aperçu, la sauvegarde .md et les exports).
  * @param {string} markdownText
  * @param {Record<string, string>} localImages
@@ -195,10 +195,10 @@ export const collapseBase64ToCartouches = (markdownText, localImages, nextIdFn) 
 export const resolveImagePaths = (markdownText, localImages = {}) => {
   if (!markdownText) return '';
 
-  // 1. Résolution des cartouches sur 2 lignes [image : alt (img-X)]\n[binaire base64 masqué]
+  // 1. Résolution des cartouches [image : alt (img-X)] (avec ou sans ligne secondaire historique)
   let resolved = markdownText.replace(
-    /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]\r?\n\[binaire base64 masqué\]/gi,
-    (match, alt, id) => {
+    /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\](?:\r?\n\[binaire base64 masqué\])?/gi,
+    (_match, alt, id) => {
       const dataUrl = localImages[id];
       if (!dataUrl) return '';
       const cleanAlt = (alt || 'image').trim();

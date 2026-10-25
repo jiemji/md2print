@@ -212,32 +212,287 @@ function serializeEditorToMarkdown() {
 }
 
 /**
- * Peuple l'éditeur (#mdEditor) à partir d'un texte Markdown contenant éventuellement des cartouches
- * ou des images Base64, en créant les objets graphiques .image-cartouche correspondants.
- * @param {string} markdownText
+ * Calcule la longueur en unités de curseur d'un nœud DOM
+ * (1 par caractère texte ou saut de ligne, 1 par objet graphique .image-cartouche, 0 pour la sentinelle).
+ * @param {Node} node
+ * @returns {number}
+ */
+function getNodeUnitLength(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.nodeValue.length;
+  }
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    if (node.classList.contains('image-cartouche')) return 1;
+    if (node.tagName === 'BR') return node.dataset.sentinel === 'true' ? 0 : 1;
+    let sum = 0;
+    for (const child of node.childNodes) {
+      sum += getNodeUnitLength(child);
+    }
+    return sum;
+  }
+  return 0;
+}
+
+/**
+ * Calcule l'offset en unités depuis le début de root jusqu'au point DOM (targetContainer, targetOffset).
+ * @param {HTMLElement} root
+ * @param {Node} targetContainer
+ * @param {number} targetOffset
+ * @returns {number|null}
+ */
+function getPointOffset(root, targetContainer, targetOffset) {
+  let offset = 0;
+  let found = false;
+
+  const walk = (node) => {
+    if (found) return;
+    if (node === targetContainer) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        offset += targetOffset;
+      } else {
+        for (let i = 0; i < targetOffset && i < node.childNodes.length; i++) {
+          offset += getNodeUnitLength(node.childNodes[i]);
+        }
+      }
+      found = true;
+      return;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      offset += node.nodeValue.length;
+      return;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.classList.contains('image-cartouche')) {
+        if (node.contains(targetContainer)) {
+          offset += 1;
+          found = true;
+          return;
+        }
+        offset += 1;
+        return;
+      }
+      if (node.tagName === 'BR') {
+        if (node.dataset.sentinel !== 'true') offset += 1;
+        return;
+      }
+      for (const child of node.childNodes) {
+        walk(child);
+        if (found) return;
+      }
+    }
+  };
+
+  walk(root);
+  return found ? offset : null;
+}
+
+/**
+ * Retourne les offsets (start, end) de la sélection courante dans #mdEditor.
+ * @returns {{ start: number, end: number } | null}
+ */
+function getEditorSelectionOffsets() {
+  if (!dom.mdEditor) return null;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !dom.mdEditor.contains(sel.anchorNode)) {
+    return null;
+  }
+  const range = sel.getRangeAt(0);
+  const start = getPointOffset(dom.mdEditor, range.startContainer, range.startOffset);
+  const end = range.collapsed
+    ? start
+    : getPointOffset(dom.mdEditor, range.endContainer, range.endOffset);
+  if (start === null || end === null) return null;
+  return { start, end };
+}
+
+/**
+ * Retrouve le couple (container, offset) DOM correspondant à un nombre d'unités depuis le début de root.
+ * @param {HTMLElement} root
+ * @param {number} targetUnits
+ * @returns {{ container: Node, offset: number }}
+ */
+function findDomPosition(root, targetUnits) {
+  let remaining = Math.max(0, targetUnits);
+  let result = null;
+
+  const walk = (node) => {
+    if (result) return;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const len = node.nodeValue.length;
+      if (remaining <= len) {
+        result = { container: node, offset: remaining };
+        return;
+      }
+      remaining -= len;
+      return;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.classList.contains('image-cartouche')) {
+        const parent = node.parentNode;
+        const idx = Array.from(parent.childNodes).indexOf(node);
+        if (remaining === 0) {
+          result = { container: parent, offset: idx };
+          return;
+        }
+        if (remaining === 1) {
+          result = { container: parent, offset: idx + 1 };
+          return;
+        }
+        remaining -= 1;
+        return;
+      }
+      if (node.tagName === 'BR') {
+        if (node.dataset.sentinel === 'true') {
+          const parent = node.parentNode;
+          const idx = Array.from(parent.childNodes).indexOf(node);
+          result = { container: parent, offset: idx };
+          return;
+        }
+        remaining -= 1;
+        return;
+      }
+      for (const child of node.childNodes) {
+        walk(child);
+        if (result) return;
+      }
+    }
+  };
+
+  walk(root);
+
+  if (!result) {
+    const sentinel = root.querySelector('br[data-sentinel="true"]');
+    if (sentinel) {
+      const idx = Array.from(root.childNodes).indexOf(sentinel);
+      return { container: root, offset: idx };
+    }
+    return { container: root, offset: root.childNodes.length };
+  }
+  return result;
+}
+
+/**
+ * Restaure la sélection / position du curseur dans #mdEditor à partir des offsets en unités.
+ * @param {{ start: number, end: number } | null} offsets
  * @returns {void}
  */
-function setEditorContent(markdownText) {
-  if (!dom.mdEditor) return;
-  dom.mdEditor.innerHTML = '';
+function restoreEditorSelectionOffsets(offsets) {
+  if (!dom.mdEditor || !offsets) return;
+  const startPos = findDomPosition(dom.mdEditor, offsets.start);
+  const endPos =
+    offsets.end === offsets.start
+      ? startPos
+      : findDomPosition(dom.mdEditor, offsets.end);
 
-  if (!markdownText) return;
+  const sel = window.getSelection();
+  if (!sel) return;
+  const range = document.createRange();
+  range.setStart(startPos.container, startPos.offset);
+  range.setEnd(endPos.container, endPos.offset);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
 
-  const normalizedText = collapseBase64ToCartouches(
-    markdownText,
-    state.localImages,
-    getNextImageId
-  );
+/**
+ * Parse récursivement un segment de texte brut (sans cartouche image) pour appliquer
+ * le formatage non-WYSIWYG aux balises gras (**...**), souligné (__...__ ou <u>...</u>)
+ * et italique (*...* ou _..._) tout en conservant les délimiteurs visibles.
+ * L'invariant de longueur (1 caractère = 1 unité de sélection) est intégralement préservé.
+ * @param {string} text
+ * @returns {DocumentFragment}
+ */
+function buildFormattedTextNodes(text) {
+  const fragment = document.createDocumentFragment();
+  if (!text) return fragment;
 
-  const cartoucheRegex = /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]\r?\n\[binaire base64 masqué\]/gi;
+  const inlineFormatRegex =
+    /(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
+
   let lastIndex = 0;
   let match;
-  const fragment = document.createDocumentFragment();
 
-  while ((match = cartoucheRegex.exec(normalizedText)) !== null) {
+  while ((match = inlineFormatRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       fragment.appendChild(
-        document.createTextNode(normalizedText.substring(lastIndex, match.index))
+        document.createTextNode(text.substring(lastIndex, match.index))
+      );
+    }
+
+    const span = document.createElement('span');
+
+    if (match[1] !== undefined) {
+      // ***gras et italique***
+      span.className = 'md-bold md-italic';
+      span.appendChild(document.createTextNode('***'));
+      span.appendChild(buildFormattedTextNodes(match[2]));
+      span.appendChild(document.createTextNode('***'));
+    } else if (match[3] !== undefined) {
+      // **gras**
+      span.className = 'md-bold';
+      span.appendChild(document.createTextNode('**'));
+      span.appendChild(buildFormattedTextNodes(match[4]));
+      span.appendChild(document.createTextNode('**'));
+    } else if (match[5] !== undefined) {
+      // __souligné__
+      span.className = 'md-underline';
+      span.appendChild(document.createTextNode('__'));
+      span.appendChild(buildFormattedTextNodes(match[6]));
+      span.appendChild(document.createTextNode('__'));
+    } else if (match[7] !== undefined) {
+      // *italique*
+      span.className = 'md-italic';
+      span.appendChild(document.createTextNode('*'));
+      span.appendChild(buildFormattedTextNodes(match[8]));
+      span.appendChild(document.createTextNode('*'));
+    } else if (match[9] !== undefined) {
+      // _italique_
+      span.className = 'md-italic';
+      span.appendChild(document.createTextNode('_'));
+      span.appendChild(buildFormattedTextNodes(match[10]));
+      span.appendChild(document.createTextNode('_'));
+    } else if (match[11] !== undefined) {
+      // <u>souligné</u>
+      span.className = 'md-underline';
+      span.appendChild(document.createTextNode('<u>'));
+      span.appendChild(buildFormattedTextNodes(match[12]));
+      span.appendChild(document.createTextNode('</u>'));
+    }
+
+    span.normalize();
+    fragment.appendChild(span);
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+  }
+
+  return fragment;
+}
+
+/**
+ * Construit un DocumentFragment pour une ligne de texte en remplaçant les jetons [image]
+ * par les objets graphiques .image-cartouche correspondants et en formatant les balises inline
+ * (gras, souligné, italique) sans masquer les délimiteurs.
+ * @param {string} lineText
+ * @returns {DocumentFragment}
+ */
+function buildLineInlineNodes(lineText) {
+  const fragment = document.createDocumentFragment();
+  if (!lineText) return fragment;
+
+  const cartoucheRegex = /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]/gi;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = cartoucheRegex.exec(lineText)) !== null) {
+    if (match.index > lastIndex) {
+      fragment.appendChild(
+        buildFormattedTextNodes(lineText.substring(lastIndex, match.index))
       );
     }
     const alt = (match[1] || 'image').trim();
@@ -246,12 +501,87 @@ function setEditorContent(markdownText) {
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < normalizedText.length) {
-    fragment.appendChild(document.createTextNode(normalizedText.substring(lastIndex)));
+  if (lastIndex < lineText.length) {
+    fragment.appendChild(
+      buildFormattedTextNodes(lineText.substring(lastIndex))
+    );
   }
+
+  return fragment;
+}
+
+/**
+ * Peuple l'éditeur (#mdEditor) à partir d'un texte Markdown :
+ * - Convertit les images Base64 / jetons en objets graphiques .image-cartouche
+ * - Applique le formatage (gras + taille de police H1 à H5) sur les lignes débutant par # à #####
+ *   tout en conservant les balises # visibles (non-WYSIWYG).
+ * @param {string} markdownText
+ * @param {boolean} [preserveCaret=false] - Si true, sauvegarde et restaure la position du curseur
+ * @returns {void}
+ */
+function setEditorContent(markdownText, preserveCaret = false) {
+  if (!dom.mdEditor) return;
+
+  const savedOffsets = preserveCaret ? getEditorSelectionOffsets() : null;
+  dom.mdEditor.innerHTML = '';
+
+  if (!markdownText) {
+    return;
+  }
+
+  const normalizedText = collapseBase64ToCartouches(
+    markdownText,
+    state.localImages,
+    getNextImageId
+  ).replace(/\[binaire base64 masqué\]\r?\n?/gi, '');
+
+  const lines = normalizedText.split('\n');
+  const fragment = document.createDocumentFragment();
+
+  lines.forEach((line, idx) => {
+    if (line.length > 0) {
+      const headingMatch = line.match(/^(#{1,5})(?!#)/);
+      const listMatch = !headingMatch
+        ? line.match(/^([ \t]*)(?:[-*]|\d+[.)])[ \t]+/)
+        : null;
+      const inlineNodes = buildLineInlineNodes(line);
+
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const headingSpan = document.createElement('span');
+        headingSpan.className = `md-heading-line md-h${level}`;
+        headingSpan.appendChild(inlineNodes);
+        fragment.appendChild(headingSpan);
+      } else if (listMatch) {
+        const rawIndent = listMatch[1];
+        const indentSpaces = rawIndent.replace(/\t/g, '  ').length;
+        const rawVisualWidth = rawIndent.length;
+        const nestingLevel = Math.ceil(indentSpaces / 2);
+        const targetShiftCh = (nestingLevel + 1) * 5;
+        const paddingLeftCh = Math.max(0, targetShiftCh - rawVisualWidth);
+
+        const listSpan = document.createElement('span');
+        listSpan.className = 'md-list-line';
+        listSpan.dataset.listLevel = String(nestingLevel);
+        listSpan.style.paddingLeft = `${paddingLeftCh}ch`;
+        listSpan.appendChild(inlineNodes);
+        fragment.appendChild(listSpan);
+      } else {
+        fragment.appendChild(inlineNodes);
+      }
+    }
+
+    if (idx < lines.length - 1) {
+      fragment.appendChild(document.createTextNode('\n'));
+    }
+  });
 
   dom.mdEditor.appendChild(fragment);
   ensureTrailingSentinel();
+
+  if (savedOffsets) {
+    restoreEditorSelectionOffsets(savedOffsets);
+  }
 }
 
 /**
@@ -466,7 +796,7 @@ function syncFromEditorDOM() {
   if (state.markdown.length === 0 && !dom.mdEditor.querySelector('.image-cartouche')) {
     dom.mdEditor.innerHTML = '';
   } else {
-    ensureTrailingSentinel();
+    setEditorContent(state.markdown, true);
   }
   updatePreview();
 }
@@ -556,8 +886,13 @@ function initEventListeners() {
     }
   });
 
-  // F2 — Éditeur de texte standard avec objets graphiques .image-cartouche (Moitié gauche)
-  dom.mdEditor.addEventListener('input', () => {
+  // F2 — Éditeur de texte standard avec objets graphiques .image-cartouche et balises # à ##### (Moitié gauche)
+  dom.mdEditor.addEventListener('input', (e) => {
+    if (e.isComposing) return;
+    syncFromEditorDOM();
+  });
+
+  dom.mdEditor.addEventListener('compositionend', () => {
     syncFromEditorDOM();
   });
 
@@ -588,8 +923,53 @@ function initEventListeners() {
     if (e.key === 'Tab') {
       e.preventDefault();
       clearCartoucheSelectionStyles();
-      insertNodeAtEditorCaret(document.createTextNode('  '));
-      syncFromEditorDOM();
+
+      const sel = window.getSelection();
+      const offsets = getEditorSelectionOffsets();
+      const anchorEl =
+        sel?.anchorNode?.nodeType === Node.ELEMENT_NODE
+          ? sel.anchorNode
+          : sel?.anchorNode?.parentElement;
+      const listLineSpan = anchorEl?.closest('.md-list-line');
+
+      if (listLineSpan) {
+        if (e.shiftKey) {
+          const firstNode = listLineSpan.firstChild;
+          if (firstNode && firstNode.nodeType === Node.TEXT_NODE) {
+            const match = firstNode.nodeValue.match(/^( {1,2}|\t)/);
+            if (match) {
+              const removeLen = match[0].length;
+              firstNode.nodeValue = firstNode.nodeValue.substring(removeLen);
+              syncFromEditorDOM();
+              if (offsets) {
+                restoreEditorSelectionOffsets({
+                  start: Math.max(0, offsets.start - removeLen),
+                  end: Math.max(0, offsets.end - removeLen),
+                });
+              }
+            }
+          }
+          return;
+        }
+
+        listLineSpan.insertBefore(
+          document.createTextNode('  '),
+          listLineSpan.firstChild
+        );
+        syncFromEditorDOM();
+        if (offsets) {
+          restoreEditorSelectionOffsets({
+            start: offsets.start + 2,
+            end: offsets.end + 2,
+          });
+        }
+        return;
+      }
+
+      if (!e.shiftKey) {
+        insertNodeAtEditorCaret(document.createTextNode('  '));
+        syncFromEditorDOM();
+      }
       return;
     }
 

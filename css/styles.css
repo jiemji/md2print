@@ -367,6 +367,58 @@ body {
   box-shadow: 0 0 0 2px var(--accent-color);
 }
 
+/* === Formatage des Balises Titres (# à #####) dans l'Éditeur Markdown === */
+.md-heading-line {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.md-h1 {
+  font-size: 1.75rem;
+  line-height: 1.35;
+}
+
+.md-h2 {
+  font-size: 1.45rem;
+  line-height: 1.4;
+}
+
+.md-h3 {
+  font-size: 1.25rem;
+  line-height: 1.45;
+}
+
+.md-h4 {
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.md-h5 {
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* === Formatage Inline (Gras, Souligné, Italique) dans l'Éditeur Markdown === */
+.md-bold {
+  font-weight: 700;
+}
+
+.md-underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-italic {
+  font-style: italic;
+}
+
+/* === Formatage des Listes à Puces (- *) et Numérotées dans l'Éditeur Markdown === */
+.md-list-line {
+  padding-left: 5ch;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* === Barre Centrale de Redimensionnement === */
 .pane-resizer {
   width: 6px;
