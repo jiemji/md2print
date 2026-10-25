@@ -399,8 +399,15 @@ function restoreEditorSelectionOffsets(offsets) {
 
 /**
  * Parse récursivement un segment de texte brut (sans cartouche image) pour appliquer
- * le formatage non-WYSIWYG aux balises gras (**...**), souligné (__...__ ou <u>...</u>)
- * et italique (*...* ou _..._) tout en conservant les délimiteurs visibles.
+ * le formatage non-WYSIWYG aux balises inline :
+ * - Code inline (`...`)
+ * - Liens ([libellé](url))
+ * - Gras + Italique (***...***)
+ * - Gras (**...**)
+ * - Souligné (__...__ ou <u>...</u>)
+ * - Barré (~~...~~)
+ * - Italique (*...* ou _..._)
+ * tout en conservant l'ensemble des délimiteurs visibles.
  * L'invariant de longueur (1 caractère = 1 unité de sélection) est intégralement préservé.
  * @param {string} text
  * @returns {DocumentFragment}
@@ -410,7 +417,7 @@ function buildFormattedTextNodes(text) {
   if (!text) return fragment;
 
   const inlineFormatRegex =
-    /(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
+    /(`[^`\n]+?`)|(\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
 
   let lastIndex = 0;
   let match;
@@ -425,40 +432,78 @@ function buildFormattedTextNodes(text) {
     const span = document.createElement('span');
 
     if (match[1] !== undefined) {
+      // `code inline` (pas d'interprétation récursive à l'intérieur)
+      span.className = 'md-inline-code';
+      span.appendChild(document.createTextNode(match[1]));
+    } else if (match[2] !== undefined) {
+      // [libellé](url)
+      span.className = 'md-link';
+      const openBracket = document.createElement('span');
+      openBracket.className = 'md-link-bracket';
+      openBracket.textContent = '[';
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'md-link-label';
+      labelSpan.appendChild(buildFormattedTextNodes(match[3]));
+
+      const midBracket = document.createElement('span');
+      midBracket.className = 'md-link-bracket';
+      midBracket.textContent = '](';
+
+      const urlSpan = document.createElement('span');
+      urlSpan.className = 'md-link-url';
+      urlSpan.textContent = match[4];
+
+      const closeBracket = document.createElement('span');
+      closeBracket.className = 'md-link-bracket';
+      closeBracket.textContent = ')';
+
+      span.appendChild(openBracket);
+      span.appendChild(labelSpan);
+      span.appendChild(midBracket);
+      span.appendChild(urlSpan);
+      span.appendChild(closeBracket);
+    } else if (match[5] !== undefined) {
       // ***gras et italique***
       span.className = 'md-bold md-italic';
       span.appendChild(document.createTextNode('***'));
-      span.appendChild(buildFormattedTextNodes(match[2]));
+      span.appendChild(buildFormattedTextNodes(match[6]));
       span.appendChild(document.createTextNode('***'));
-    } else if (match[3] !== undefined) {
+    } else if (match[7] !== undefined) {
       // **gras**
       span.className = 'md-bold';
       span.appendChild(document.createTextNode('**'));
-      span.appendChild(buildFormattedTextNodes(match[4]));
+      span.appendChild(buildFormattedTextNodes(match[8]));
       span.appendChild(document.createTextNode('**'));
-    } else if (match[5] !== undefined) {
+    } else if (match[9] !== undefined) {
       // __souligné__
       span.className = 'md-underline';
       span.appendChild(document.createTextNode('__'));
-      span.appendChild(buildFormattedTextNodes(match[6]));
+      span.appendChild(buildFormattedTextNodes(match[10]));
       span.appendChild(document.createTextNode('__'));
-    } else if (match[7] !== undefined) {
+    } else if (match[11] !== undefined) {
+      // ~~barré~~
+      span.className = 'md-strike';
+      span.appendChild(document.createTextNode('~~'));
+      span.appendChild(buildFormattedTextNodes(match[12]));
+      span.appendChild(document.createTextNode('~~'));
+    } else if (match[13] !== undefined) {
       // *italique*
       span.className = 'md-italic';
       span.appendChild(document.createTextNode('*'));
-      span.appendChild(buildFormattedTextNodes(match[8]));
+      span.appendChild(buildFormattedTextNodes(match[14]));
       span.appendChild(document.createTextNode('*'));
-    } else if (match[9] !== undefined) {
+    } else if (match[15] !== undefined) {
       // _italique_
       span.className = 'md-italic';
       span.appendChild(document.createTextNode('_'));
-      span.appendChild(buildFormattedTextNodes(match[10]));
+      span.appendChild(buildFormattedTextNodes(match[16]));
       span.appendChild(document.createTextNode('_'));
-    } else if (match[11] !== undefined) {
+    } else if (match[17] !== undefined) {
       // <u>souligné</u>
       span.className = 'md-underline';
       span.appendChild(document.createTextNode('<u>'));
-      span.appendChild(buildFormattedTextNodes(match[12]));
+      span.appendChild(buildFormattedTextNodes(match[18]));
       span.appendChild(document.createTextNode('</u>'));
     }
 
@@ -477,7 +522,7 @@ function buildFormattedTextNodes(text) {
 /**
  * Construit un DocumentFragment pour une ligne de texte en remplaçant les jetons [image]
  * par les objets graphiques .image-cartouche correspondants et en formatant les balises inline
- * (gras, souligné, italique) sans masquer les délimiteurs.
+ * (code inline, liens, gras, souligné, barré, italique) sans masquer les délimiteurs.
  * @param {string} lineText
  * @returns {DocumentFragment}
  */
@@ -602,9 +647,10 @@ function buildTableBlockRowSpans(tableLines) {
 /**
  * Peuple l'éditeur (#mdEditor) à partir d'un texte Markdown :
  * - Convertit les images Base64 / jetons en objets graphiques .image-cartouche
- * - Applique le formatage (gras + taille de police H1 à H5) sur les lignes débutant par # à #####
- * - Décale les listes à puces (- *) et numérotées de 5 caractères par niveau d'imbrication
+ * - Formate les blocs de code (``` ... ```) sans interpréter le Markdown interne
  * - Aligne visuellement les colonnes des tableaux Markdown via CSS sans altérer le fichier .md
+ * - Formate les séparateurs horizontaux (---, ***, ___), les titres (# à #####) et les citations (> ...)
+ * - Décale les listes (- *, 1.) et listes de tâches (- [ ], - [x]) de 5 caractères par niveau d'imbrication
  * @param {string} markdownText
  * @param {boolean} [preserveCaret=false] - Si true, sauvegarde et restaure la position du curseur
  * @returns {void}
@@ -633,12 +679,39 @@ function setEditorContent(markdownText, preserveCaret = false) {
   while (i < lines.length) {
     const line = lines[i];
 
+    // Délimiteur de bloc de code (```)
     if (line.trimStart().startsWith('```')) {
       inCodeBlock = !inCodeBlock;
+      if (line.length > 0) {
+        const fenceSpan = document.createElement('span');
+        fenceSpan.className = 'md-codeblock-fence';
+        fenceSpan.textContent = line;
+        fragment.appendChild(fenceSpan);
+      }
+      if (i < lines.length - 1) {
+        fragment.appendChild(document.createTextNode('\n'));
+      }
+      i++;
+      continue;
+    }
+
+    // Contenu interne d'un bloc de code (pas d'interprétation Markdown)
+    if (inCodeBlock) {
+      if (line.length > 0) {
+        const codeLineSpan = document.createElement('span');
+        codeLineSpan.className = 'md-codeblock-line';
+        codeLineSpan.textContent = line;
+        fragment.appendChild(codeLineSpan);
+      }
+      if (i < lines.length - 1) {
+        fragment.appendChild(document.createTextNode('\n'));
+      }
+      i++;
+      continue;
     }
 
     // Regroupement et alignement automatique des colonnes pour les blocs de tableaux Markdown
-    if (!inCodeBlock && isMarkdownTableLine(line)) {
+    if (isMarkdownTableLine(line)) {
       const tableLines = [];
       let j = i;
       while (j < lines.length && isMarkdownTableLine(lines[j])) {
@@ -660,19 +733,33 @@ function setEditorContent(markdownText, preserveCaret = false) {
     }
 
     if (line.length > 0) {
-      const headingMatch = !inCodeBlock ? line.match(/^(#{1,5})(?!#)/) : null;
+      const hrMatch = line.match(/^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/);
+      const headingMatch = !hrMatch ? line.match(/^(#{1,5})(?!#)/) : null;
+      const quoteMatch =
+        !hrMatch && !headingMatch ? line.match(/^([ \t]*)(>+)[ \t]*/) : null;
       const listMatch =
-        !inCodeBlock && !headingMatch
+        !hrMatch && !headingMatch && !quoteMatch
           ? line.match(/^([ \t]*)(?:[-*]|\d+[.)])[ \t]+/)
           : null;
-      const inlineNodes = buildLineInlineNodes(line);
 
-      if (headingMatch) {
+      if (hrMatch) {
+        const hrSpan = document.createElement('span');
+        hrSpan.className = 'md-hr-line';
+        hrSpan.textContent = line;
+        fragment.appendChild(hrSpan);
+      } else if (headingMatch) {
         const level = headingMatch[1].length;
         const headingSpan = document.createElement('span');
         headingSpan.className = `md-heading-line md-h${level}`;
-        headingSpan.appendChild(inlineNodes);
+        headingSpan.appendChild(buildLineInlineNodes(line));
         fragment.appendChild(headingSpan);
+      } else if (quoteMatch) {
+        const quoteLevel = quoteMatch[2].length;
+        const quoteSpan = document.createElement('span');
+        quoteSpan.className = 'md-quote-line';
+        quoteSpan.style.paddingLeft = `${quoteLevel * 2}ch`;
+        quoteSpan.appendChild(buildLineInlineNodes(line));
+        fragment.appendChild(quoteSpan);
       } else if (listMatch) {
         const rawIndent = listMatch[1];
         const indentSpaces = rawIndent.replace(/\t/g, '  ').length;
@@ -682,13 +769,40 @@ function setEditorContent(markdownText, preserveCaret = false) {
         const paddingLeftCh = Math.max(0, targetShiftCh - rawVisualWidth);
 
         const listSpan = document.createElement('span');
-        listSpan.className = 'md-list-line';
         listSpan.dataset.listLevel = String(nestingLevel);
         listSpan.style.paddingLeft = `${paddingLeftCh}ch`;
-        listSpan.appendChild(inlineNodes);
+
+        const taskMatch = line.match(
+          /^([ \t]*(?:[-*]|\d+[.)])[ \t]+)(\[([ xX])\])([ \t]+.*|$)/
+        );
+
+        if (taskMatch) {
+          const isChecked = taskMatch[3].toLowerCase() === 'x';
+          listSpan.className = isChecked
+            ? 'md-list-line md-task-line md-task-checked'
+            : 'md-list-line md-task-line';
+
+          listSpan.appendChild(document.createTextNode(taskMatch[1]));
+
+          const boxSpan = document.createElement('span');
+          boxSpan.className = 'md-task-box';
+          boxSpan.textContent = taskMatch[2];
+          listSpan.appendChild(boxSpan);
+
+          if (taskMatch[4]) {
+            const textSpan = document.createElement('span');
+            textSpan.className = 'md-task-text';
+            textSpan.appendChild(buildLineInlineNodes(taskMatch[4]));
+            listSpan.appendChild(textSpan);
+          }
+        } else {
+          listSpan.className = 'md-list-line';
+          listSpan.appendChild(buildLineInlineNodes(line));
+        }
+
         fragment.appendChild(listSpan);
       } else {
-        fragment.appendChild(inlineNodes);
+        fragment.appendChild(buildLineInlineNodes(line));
       }
     }
 

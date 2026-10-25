@@ -4,6 +4,27 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.1.0] - 2026-10-25
+
+### Feature
+- **Objet graphique Cartouche `[image]` sur 2 lignes de hauteur dans l'éditeur** :
+  - Transformation de `#mdEditor` en éditeur `contenteditable="true"` permettant d'afficher chaque image Base64 sous la forme d'un objet graphique dédié (`.image-cartouche`) de 2 lignes de hauteur sans exposer la chaîne Base64 à l'utilisateur.
+  - Suppression de l'objet graphique et de son image associée en le sélectionnant comme du texte puis en appuyant sur `Suppr` (`Delete`) ou `Backspace` (`handleCartoucheDeletion`).
+  - Fichiers impactés : [`index.html`](file:///g:/devapps/md2print/index.html), [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css), [`js/app.js`](file:///g:/devapps/md2print/js/app.js), [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js).
+- **Formatage syntaxique en direct non-WYSIWYG dans l'éditeur Markdown (`#mdEditor`)** :
+  - **Titres `#` à `#####`** : mise en gras et échelle de tailles typographiques progressives (`.md-h1` à `.md-h5`) tout en conservant les dièses `#` visibles.
+  - **Styles inline récursifs** : prise en charge du gras (`**texte**`), du souligné (`__texte__` et `<u>texte</u>`), de l'italique (`*texte*` et `_texte_`), du gras-italique (`***texte***`), du barré (`~~texte~~`), du code inline (`` `code` ``) et des liens (`[libellé](url)`), tout en préservant l'invariant `1 caractère = 1 unité de sélection` pour le maintien exact du curseur.
+  - **Listes à puces (`-`, `*`), listes numérotées (`1.`) et listes de tâches (`- [ ]`, `- [x]`)** : décalage de 5 caractères (`5ch`) vers la droite dès le premier niveau et +5 caractères supplémentaires par niveau d'imbrication (`Tab` / `Shift+Tab`), avec style barré automatique sur les tâches cochées (`[x]`).
+  - **Alignement visuel automatique des colonnes de tableaux (`| ... |`)** : calcul dynamique de la largeur maximale (`ch`) de chaque colonne et alignement vertical en grille de toutes les barres `|` via CSS (`buildTableBlockRowSpans`) sans ajouter d'espaces parasites dans le fichier `.md`.
+  - **Blocs de code (` ``` ... ``` `), citations (`> ...`) et séparateurs horizontaux (`---`, `***`, `___`)** : mise en forme dédiée des délimiteurs et lignes de bloc, et désactivation de l'interprétation Markdown à l'intérieur des blocs de code.
+  - Fichiers impactés : [`js/app.js`](file:///g:/devapps/md2print/js/app.js), [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css), [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js), [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js).
+
+### Fix
+- **Saut de ligne immédiat au premier appui sur `Entrée` et support des touches mortes (`^`, `¨`)** :
+  - Maintien d'un élément sentinelle `<br data-sentinel="true">` en fin d'éditeur (`ensureTrailingSentinel`) pour qu'un seul appui sur `Entrée` en fin de document crée immédiatement un saut de ligne visible.
+  - Prise en charge de `e.isComposing` et `compositionend` pour ne pas interrompre la saisie des accents composés au clavier.
+  - Fichiers impactés : [`js/app.js`](file:///g:/devapps/md2print/js/app.js).
+
 ## [1.0.0] - 2026-10-25
 
 ### Feature

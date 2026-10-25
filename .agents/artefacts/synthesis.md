@@ -1,6 +1,6 @@
 # Synthèse du Projet — md2print
 
-> **Version : 1.0.0** — Dernière mise à jour : 2026-10-25
+> **Version : 1.1.0** — Dernière mise à jour : 2026-10-25
 
 ---
 
@@ -13,7 +13,7 @@
 ## 2. Fonctionnalités Clés
 
 - **Gestion des fichiers et dossiers Markdown (F1)** : ouverture unitaire, ouverture de dossier avec liste déroulante des fichiers `.md`, création d'un nouveau fichier avec alerte si modifié (`isDirty`), et sauvegarde par téléchargement classique (`Sauvegarder` ou `Ctrl+S`).
-- **Éditeur Markdown standard (F2)** : champ `<textarea>` pleine hauteur, indentation par touche `Tab`, glisser-déposer de fichier `.md`, collage/dépôt d'images converties en Base64, et normalisation automatique des tableaux Markdown.
+- **Éditeur Markdown non-WYSIWYG enrichi (F2)** : conteneur `<div id="mdEditor" contenteditable="true">` pleine hauteur conservant toutes les balises Markdown visibles tout en appliquant leur formatage visuel en temps réel (titres `#` à `#####`, gras, souligné, italique, barré, code inline, liens, blocs de code, citations, séparateurs, listes à puces/numérotées/tâches décalées de 5 caractères par niveau d'imbrication, alignement automatique des colonnes de tableaux en grille CSS, et objets graphiques `.image-cartouche` sur 2 lignes de hauteur).
 - **Aperçu temps réel `iframe` et Export HTML autonome (F3 & F4)** : rendu fidèle en mode **Rapport** continu ou **Slide** présentation, bandeau supérieur sobre, sommaire latéral repliable avec `ScrollSpy`, coloration syntaxique `highlight.js` sans barre d'en-tête.
 - **Exports Word `.docx` et PowerPoint `.pptx` (F5 & F6)** : chargement par défaut (et personnalisable via le menu `Configuration`) de `output_config.json` et `Modele_word.docx`, support des titres, listes, tableaux et images Base64.
 - **Charte graphique sobre sans émoji ni icône (F7)** : interface 100 % textuelle proposant deux thèmes CSS : **Mode Sombre (Bleu foncé et gris)** par défaut et **Mode Clair (Sépia)**.
@@ -37,16 +37,16 @@
 
 ---
 
-## 4. Dernières Améliorations (v1.0.0)
+## 4. Dernières Améliorations (v1.1.0)
 
-1. **Rédaction et validation du Cahier des Charges V1** (`docs/CAHIER_DES_CHARGES.md`).
-2. **Implémentation complète de l'architecture modulaire ES6+** unifiant l'édition Markdown, l'aperçu `iframe` synchronisé et les trois moteurs d'export (`.html`, `.docx`, `.pptx`).
-3. **Intégration locale des 5 bibliothèques tierces dans `vendor/`** pour garantir un fonctionnement 100 % hors-ligne.
-4. **Documentation JSDoc complète** sur l'ensemble des modules JavaScript.
+1. **Objets graphiques `.image-cartouche` (2 lignes de hauteur)** : remplacement du texte Base64 par un objet graphique sélectionnable et supprimable au clavier (`Suppr` / `Backspace`).
+2. **Saut de ligne immédiat sur un seul appui sur `Entrée`** : ajout de la sentinelle `<br data-sentinel="true">` en fin d'éditeur et support des touches mortes (`isComposing`).
+3. **Formatage syntaxique non-WYSIWYG complet dans l'éditeur** : titres `#` à `#####`, gras `**`, souligné `__`, italique `*`, barré `~~`, code inline `` ` ``, liens `[...](...)`, blocs de code ` ``` `, citations `>`, séparateurs `---`, listes et checklists décalées de `5ch` par niveau (`Tab` / `Shift+Tab`), et alignement automatique des colonnes de tableaux `| ... |` via CSS.
+4. **Rendu du souligné (`__texte__` -> `<u>`) et des sous-listes** unifié entre l'éditeur, l'aperçu HTML et les exports DOCX/PPTX.
 
 ---
 
 ## 5. Statut du Code
 
-- **État global** : Version 1.0.0 livrée, modulaire, 100 % hors-ligne, conforme aux directives d'interface (zéro émoji, zéro icône).
+- **État global** : Version 1.1.0 livrée, modulaire, 100 % hors-ligne, conforme aux directives d'interface (zéro émoji, zéro icône).
 - **Prochaines pistes suggérées** : Validation manuelle complète par le développeur via serveur HTTP local, persistance optionnelle du brouillon dans `localStorage`.

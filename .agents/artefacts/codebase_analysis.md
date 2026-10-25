@@ -1,6 +1,6 @@
 # Rapport d'Analyse — md2print
 
-> Version 1.0.0 — Mise à jour le 25 octobre 2026
+> Version 1.1.0 — Mise à jour le 25 octobre 2026
 
 ## 1. Fiche d'Identité
 
@@ -8,7 +8,7 @@
 |---|---|
 | **Type** | Webapp SPA (Single Page Application) |
 | **Stack** | HTML5, CSS3 (Vanilla), JavaScript ES6+ (Modules ES) |
-| **Version** | 1.0.0 (documentée dans [`docs/CHANGELOG.md`](file:///g:/devapps/md2print/docs/CHANGELOG.md)) |
+| **Version** | 1.1.0 (documentée dans [`docs/CHANGELOG.md`](file:///g:/devapps/md2print/docs/CHANGELOG.md)) |
 | **Taille** | 9 fichiers source principaux (`index.html`, `css/styles.css`, 7 modules dans `js/`) |
 | **Build system** | Non — exécution directe via serveur HTTP local |
 | **Persistance** | En mémoire dans l'objet `state` + sauvegarde par téléchargement `.md` |
@@ -39,7 +39,7 @@ graph TD
   - Barre de menu supérieure 100 % textuelle (zéro émoji, zéro icône).
   - Thèmes Sombre (`data-theme="dark"`) et Clair Sépia (`data-theme="sepia"`).
 - **Couche Orchestration ([`js/app.js`](file:///g:/devapps/md2print/js/app.js))** :
-  - Singleton `state`, cache DOM `dom`, gestion des fichiers/dossiers `.md`, glisser-déposer et collage d'images Base64, synchronisation du défilement gauche/droite, déclenchement des exports.
+  - Singleton `state`, cache DOM `dom`, gestion des fichiers/dossiers `.md`, éditeur `contenteditable="true"` avec formatage syntaxique en direct non-WYSIWYG, alignement automatique des colonnes de tableaux en grille CSS, objets graphiques `.image-cartouche` sur 2 lignes de hauteur, synchronisation du défilement gauche/droite, déclenchement des exports.
 - **Couche Parsing & Génération (`js/`)** :
   - [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Normalisation des tableaux Markdown, résolution des images Base64, lecture/écriture de fichiers.
   - [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Construction de l'AST Markdown (titres, listes, tableaux, code, citations, images).

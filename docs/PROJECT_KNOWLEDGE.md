@@ -1,6 +1,6 @@
 # md2print — Documentation Technique de Référence (PROJECT_KNOWLEDGE)
 
-> **Version courante : 1.0.0** --- Mise à jour : 2026-10-25
+> **Version courante : 1.1.0** --- Mise à jour : 2026-10-25
 
 ---
 
@@ -33,8 +33,9 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 │                  ▼                                   ▼                  │
 │  ┌───────────────────────────────┐   ┌───────────────────────────────┐  │
 │  │ Moitié Gauche : Éditeur (.md) │   │ Moitié Droite : Aperçu Iframe │  │
-│  │ - <textarea id="mdEditor">    │◄─►│ - Mode Rapport / Mode Slide   │  │
-│  │ - Drag & Drop .md / Images    │   │ - Sommaire repliable (TOC)    │  │
+│  │ - <div id="mdEditor">         │◄─►│ - Mode Rapport / Mode Slide   │  │
+│  │ - Formatage non-WYSIWYG       │   │ - Sommaire repliable (TOC)    │  │
+│  │ - Cartouches [image] (2 lig.) │   │                               │  │
 │  └───────────────┬───────────────┘   └───────────────▲───────────────┘  │
 │                  │                                   │                  │
 │                  ▼                                   │                  │
@@ -82,11 +83,15 @@ const state = {
 
 ---
 
-## 4. Gestion des Images et Normalisation Markdown
+## 4. Éditeur Non-WYSIWYG, Cartouches Image et Normalisation Markdown
 
 1. **Objet Graphique Cartouche `[image]` sur 2 lignes de hauteur (`createCartoucheElement` / `setEditorContent`)** : Toute image déposée ou collée (`Ctrl+V`) dans `#mdEditor` (ou présente en Base64 à l'ouverture d'un fichier `.md`) est stockée dans `state.localImages[id]` et affichée dans l'éditeur sous la forme d'un composant graphique non-éditable (`<span class="image-cartouche" contenteditable="false">[image]</span>`) occupant 2 lignes de hauteur (`height: calc(2 * 1.65em)`). L'utilisateur peut sélectionner cet objet graphique comme du texte (au clic ou par sélection glissée) et appuyer sur `Suppr` (`Delete`) ou `Backspace` pour supprimer l'objet et l'image associée (`handleCartoucheDeletion`).
-2. **Résolution Base64 (`resolveImagePaths`)** : Convertit les cartouches `[image]` de 2 lignes ainsi que les références `(data:image/...;chemin)` vers leur syntaxe Markdown Base64 complète (`![alt](data:image/...;base64,...)`) lors de la prévisualisation, de la sauvegarde `.md` et des exports HTML, DOCX et PPTX.
-3. **Normalisation (`normalizeMarkdown`)** : Répare automatiquement les tableaux Markdown dont le nombre de colonnes diffère entre l'en-tête, le séparateur et les lignes de données, garantit les sauts de ligne autour des tableaux et ajoute des espaces insécables devant `€`.
+2. **Formatage Syntaxique en Direct Non-WYSIWYG (`setEditorContent` / `buildFormattedTextNodes` / `buildTableBlockRowSpans`)** :
+   - **Invariant de sélection (`1 caractère = 1 unité`, `1 cartouche = 1 unité`)** : Toutes les balises Markdown restent visibles dans `#mdEditor`, ce qui permet à `getEditorSelectionOffsets()` et `restoreEditorSelectionOffsets()` de préserver la position exacte du curseur lors de la frappe. Un élément `<br data-sentinel="true">` (`ensureTrailingSentinel`) garantit la prise en compte immédiate d'un seul appui sur `Entrée` en fin de document.
+   - **Blocs et lignes** : Titres `#` à `#####` (`.md-h1` à `.md-h5`), listes `-`, `*`, `1.` et listes de tâches `- [ ]` / `- [x]` décalées de `5ch` par niveau d'imbrication (`Tab` / `Shift+Tab`), blocs de code ` ``` ... ``` `, citations `> ...`, séparateurs `---` et alignement visuel automatique des colonnes de tableaux `| ... |` en grille via CSS (`min-width` en `ch`).
+   - **Styles inline récursifs** : Code inline (`` `code` ``), liens (`[libellé](url)`), gras (`**texte**`), souligné (`__texte__` et `<u>texte</u>`), barré (`~~texte~~`) et italique (`*texte*` et `_texte_`).
+3. **Résolution Base64 (`resolveImagePaths`)** : Convertit les cartouches `[image]` de 2 lignes ainsi que les références `(data:image/...;chemin)` vers leur syntaxe Markdown Base64 complète (`![alt](data:image/...;base64,...)`) lors de la prévisualisation, de la sauvegarde `.md` et des exports HTML, DOCX et PPTX.
+4. **Normalisation (`normalizeMarkdown`)** : Répare automatiquement les tableaux Markdown dont le nombre de colonnes diffère entre l'en-tête, le séparateur et les lignes de données, garantit les sauts de ligne autour des tableaux et ajoute des espaces insécables devant `€`.
 
 ---
 
