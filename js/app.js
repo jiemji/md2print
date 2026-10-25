@@ -9,6 +9,9 @@ import {
   readFileAsText,
   readFileAsArrayBuffer,
   readFileAsDataURL,
+  createImageCartouche,
+  collapseBase64ToCartouches,
+  resolveImagePaths,
 } from './utils.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
@@ -22,6 +25,7 @@ const state = {
   folderFiles: [],
   selectedFolderIndex: '',
   localImages: {},
+  imageSeq: 1,
   currentViewport: 'report', // 'report' | 'slide'
   theme: 'dark', // 'dark' | 'sepia'
   outputConfig: null,
@@ -143,6 +147,330 @@ function confirmDiscardIfDirty() {
   return window.confirm('Des modifications non sauvegardées seront perdues. Voulez-vous continuer ?');
 }
 
+// --- Gestion de l'Objet Graphique Cartouche [image] dans l'Éditeur ---
+
+/**
+ * Génère un identifiant court unique pour une nouvelle image importée en Base64.
+ * @returns {string}
+ */
+function getNextImageId() {
+  return `img-${state.imageSeq++}`;
+}
+
+/**
+ * Crée l'élément DOM graphique (cartouche de 2 lignes de hauteur) représentant une image Base64.
+ * @param {string} imgId - Identifiant interne dans state.localImages
+ * @param {string} [alt='image'] - Texte alternatif de l'image
+ * @returns {HTMLSpanElement}
+ */
+function createCartoucheElement(imgId, alt = 'image') {
+  const span = document.createElement('span');
+  span.className = 'image-cartouche';
+  span.contentEditable = 'false';
+  span.dataset.imageId = imgId;
+  span.dataset.imageAlt = alt || 'image';
+  span.title = alt ? `Image : ${alt}` : 'Image encapsulée en Base64';
+  span.textContent = '[image]';
+  return span;
+}
+
+/**
+ * Sérialise le contenu DOM de l'éditeur (#mdEditor) en chaîne Markdown,
+ * en convertissant chaque objet graphique .image-cartouche en jeton de cartouche.
+ * @returns {string}
+ */
+function serializeEditorToMarkdown() {
+  if (!dom.mdEditor) return '';
+  let result = '';
+
+  const walk = (node) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        result += child.nodeValue;
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.classList.contains('image-cartouche')) {
+          const id = child.dataset.imageId || '';
+          const alt = child.dataset.imageAlt || 'image';
+          result += createImageCartouche(id, alt);
+        } else if (child.tagName === 'BR') {
+          if (child.dataset.sentinel === 'true') continue;
+          result += '\n';
+        } else if (child.tagName === 'DIV' || child.tagName === 'P') {
+          if (result.length > 0 && !result.endsWith('\n')) {
+            result += '\n';
+          }
+          walk(child);
+        } else {
+          walk(child);
+        }
+      }
+    }
+  };
+
+  walk(dom.mdEditor);
+  return result.replace(/\u00A0/g, ' ');
+}
+
+/**
+ * Peuple l'éditeur (#mdEditor) à partir d'un texte Markdown contenant éventuellement des cartouches
+ * ou des images Base64, en créant les objets graphiques .image-cartouche correspondants.
+ * @param {string} markdownText
+ * @returns {void}
+ */
+function setEditorContent(markdownText) {
+  if (!dom.mdEditor) return;
+  dom.mdEditor.innerHTML = '';
+
+  if (!markdownText) return;
+
+  const normalizedText = collapseBase64ToCartouches(
+    markdownText,
+    state.localImages,
+    getNextImageId
+  );
+
+  const cartoucheRegex = /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]\r?\n\[binaire base64 masqué\]/gi;
+  let lastIndex = 0;
+  let match;
+  const fragment = document.createDocumentFragment();
+
+  while ((match = cartoucheRegex.exec(normalizedText)) !== null) {
+    if (match.index > lastIndex) {
+      fragment.appendChild(
+        document.createTextNode(normalizedText.substring(lastIndex, match.index))
+      );
+    }
+    const alt = (match[1] || 'image').trim();
+    const id = match[2];
+    fragment.appendChild(createCartoucheElement(id, alt));
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < normalizedText.length) {
+    fragment.appendChild(document.createTextNode(normalizedText.substring(lastIndex)));
+  }
+
+  dom.mdEditor.appendChild(fragment);
+  ensureTrailingSentinel();
+}
+
+/**
+ * Maintient un élément <br data-sentinel="true"> en fin d'éditeur contenteditable
+ * afin qu'un seul appui sur Entrée (\n) en fin de texte crée immédiatement une nouvelle ligne visible.
+ * @returns {void}
+ */
+function ensureTrailingSentinel() {
+  if (!dom.mdEditor) return;
+
+  // Supprime les sentinelles existantes qui ne sont plus en dernière position
+  const existingSentinels = Array.from(
+    dom.mdEditor.querySelectorAll('br[data-sentinel="true"]')
+  );
+
+  const hasRealContent = Array.from(dom.mdEditor.childNodes).some((node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue.length > 0;
+    if (node.nodeType === Node.ELEMENT_NODE) return node.dataset.sentinel !== 'true';
+    return false;
+  });
+
+  if (!hasRealContent) {
+    existingSentinels.forEach((el) => el.remove());
+    return;
+  }
+
+  let sentinel = existingSentinels.pop();
+  existingSentinels.forEach((el) => el.remove());
+
+  if (!sentinel) {
+    sentinel = document.createElement('br');
+    sentinel.dataset.sentinel = 'true';
+  }
+
+  if (dom.mdEditor.lastChild !== sentinel) {
+    dom.mdEditor.appendChild(sentinel);
+  }
+}
+
+/**
+ * Insère un nœud DOM (texte ou objet graphique .image-cartouche) à la position courante du curseur dans #mdEditor.
+ * @param {Node} node
+ * @returns {void}
+ */
+function insertNodeAtEditorCaret(node) {
+  dom.mdEditor.focus();
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !dom.mdEditor.contains(sel.anchorNode)) {
+    const sentinel = dom.mdEditor.querySelector('br[data-sentinel="true"]');
+    if (sentinel) {
+      dom.mdEditor.insertBefore(node, sentinel);
+    } else {
+      dom.mdEditor.appendChild(node);
+    }
+    ensureTrailingSentinel();
+    return;
+  }
+
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+
+  // Si le curseur se trouve sur ou après la sentinelle finale, insérer juste avant elle
+  const sentinel = dom.mdEditor.querySelector('br[data-sentinel="true"]');
+  if (
+    sentinel &&
+    ((range.startContainer === dom.mdEditor &&
+      range.startOffset >= Array.from(dom.mdEditor.childNodes).indexOf(sentinel)) ||
+      range.startContainer === sentinel)
+  ) {
+    dom.mdEditor.insertBefore(node, sentinel);
+  } else {
+    range.insertNode(node);
+  }
+
+  ensureTrailingSentinel();
+
+  const afterRange = document.createRange();
+  afterRange.setStartAfter(node);
+  afterRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(afterRange);
+}
+
+/**
+ * Retire l'état visuel de sélection sur toutes les cartouches graphiques.
+ * @returns {void}
+ */
+function clearCartoucheSelectionStyles() {
+  dom.mdEditor
+    ?.querySelectorAll('.image-cartouche.is-selected')
+    .forEach((el) => el.classList.remove('is-selected'));
+}
+
+/**
+ * Synchronise la sélection native du navigateur avec l'état visuel (.is-selected) des cartouches.
+ * @returns {void}
+ */
+function updateCartoucheSelectionHighlight() {
+  if (!dom.mdEditor) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+    clearCartoucheSelectionStyles();
+    return;
+  }
+  const range = sel.getRangeAt(0);
+  dom.mdEditor.querySelectorAll('.image-cartouche').forEach((cartouche) => {
+    cartouche.classList.toggle('is-selected', range.intersectsNode(cartouche));
+  });
+}
+
+/**
+ * Gère la suppression d'un objet graphique .image-cartouche avec Suppr (Delete) ou Backspace
+ * lorsqu'il est sélectionné (au clic ou dans une sélection de texte) ou adjacent au curseur.
+ * @param {KeyboardEvent} e
+ * @returns {boolean} true si une cartouche graphique a été supprimée
+ */
+function handleCartoucheDeletion(e) {
+  if (e.key !== 'Backspace' && e.key !== 'Delete') return false;
+
+  // 1. Cartouche(s) explicitement marquée(s) comme sélectionnée(s)
+  const selectedCartouches = Array.from(
+    dom.mdEditor.querySelectorAll('.image-cartouche.is-selected')
+  );
+  if (selectedCartouches.length > 0) {
+    e.preventDefault();
+    selectedCartouches.forEach((el) => el.remove());
+    syncFromEditorDOM();
+    return true;
+  }
+
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+
+  // 2. Plage de texte sélectionnée englobant ou intersectant une cartouche graphique
+  if (!range.collapsed) {
+    const intersecting = Array.from(dom.mdEditor.querySelectorAll('.image-cartouche')).filter(
+      (el) => range.intersectsNode(el)
+    );
+    if (intersecting.length > 0) {
+      e.preventDefault();
+      range.deleteContents();
+      intersecting.forEach((el) => {
+        if (el.parentNode) el.remove();
+      });
+      syncFromEditorDOM();
+      return true;
+    }
+    return false;
+  }
+
+  // 3. Curseur simple collé juste après (Backspace) ou juste avant (Delete) une cartouche graphique
+  const { startContainer, startOffset } = range;
+
+  if (e.key === 'Backspace') {
+    if (startContainer.nodeType === Node.TEXT_NODE && startOffset === 0) {
+      const prev = startContainer.previousSibling;
+      if (prev?.nodeType === Node.ELEMENT_NODE && prev.classList.contains('image-cartouche')) {
+        e.preventDefault();
+        prev.remove();
+        syncFromEditorDOM();
+        return true;
+      }
+    } else if (startContainer.nodeType === Node.ELEMENT_NODE && startOffset > 0) {
+      const prev = startContainer.childNodes[startOffset - 1];
+      if (prev?.nodeType === Node.ELEMENT_NODE && prev.classList.contains('image-cartouche')) {
+        e.preventDefault();
+        prev.remove();
+        syncFromEditorDOM();
+        return true;
+      }
+    }
+  } else if (e.key === 'Delete') {
+    if (
+      startContainer.nodeType === Node.TEXT_NODE &&
+      startOffset === startContainer.nodeValue.length
+    ) {
+      const next = startContainer.nextSibling;
+      if (next?.nodeType === Node.ELEMENT_NODE && next.classList.contains('image-cartouche')) {
+        e.preventDefault();
+        next.remove();
+        syncFromEditorDOM();
+        return true;
+      }
+    } else if (
+      startContainer.nodeType === Node.ELEMENT_NODE &&
+      startOffset < startContainer.childNodes.length
+    ) {
+      const next = startContainer.childNodes[startOffset];
+      if (next?.nodeType === Node.ELEMENT_NODE && next.classList.contains('image-cartouche')) {
+        e.preventDefault();
+        next.remove();
+        syncFromEditorDOM();
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Met à jour state.markdown à partir du DOM de l'éditeur et rafraîchit l'aperçu.
+ * @returns {void}
+ */
+function syncFromEditorDOM() {
+  state.markdown = serializeEditorToMarkdown();
+  if (!state.isDirty) {
+    state.isDirty = true;
+    updateFileNameDisplay();
+  }
+  if (state.markdown.length === 0 && !dom.mdEditor.querySelector('.image-cartouche')) {
+    dom.mdEditor.innerHTML = '';
+  } else {
+    ensureTrailingSentinel();
+  }
+  updatePreview();
+}
+
 // --- Attachement des Événements ---
 /**
  * Attache l'ensemble des écouteurs d'événements de l'interface (menus, éditeur, raccourcis, exports).
@@ -156,7 +484,7 @@ function initEventListeners() {
     state.currentFileName = 'Sans titre.md';
     state.isDirty = false;
     state.selectedFolderIndex = '';
-    dom.mdEditor.value = '';
+    setEditorContent('');
     if (dom.folderFileSelect) dom.folderFileSelect.value = '';
     updateFileNameDisplay();
     updatePreview();
@@ -228,29 +556,48 @@ function initEventListeners() {
     }
   });
 
-  // F2 — Éditeur de texte standard (Moitié gauche)
+  // F2 — Éditeur de texte standard avec objets graphiques .image-cartouche (Moitié gauche)
   dom.mdEditor.addEventListener('input', () => {
-    state.markdown = dom.mdEditor.value;
-    if (!state.isDirty) {
-      state.isDirty = true;
-      updateFileNameDisplay();
-    }
-    updatePreview();
+    syncFromEditorDOM();
   });
 
-  // Touche Tab dans le textarea -> 2 espaces
+  // Clic sur une cartouche graphique [image] -> sélectionne l'objet graphique comme du texte
+  dom.mdEditor.addEventListener('click', (e) => {
+    const cartouche = e.target.closest('.image-cartouche');
+    clearCartoucheSelectionStyles();
+    if (cartouche) {
+      cartouche.classList.add('is-selected');
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNode(cartouche);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+
+  document.addEventListener('selectionchange', () => {
+    updateCartoucheSelectionHighlight();
+  });
+
+  // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Tab (2 espaces) et Enter (\n)
   dom.mdEditor.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      if (handleCartoucheDeletion(e)) return;
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      const start = dom.mdEditor.selectionStart;
-      const end = dom.mdEditor.selectionEnd;
-      dom.mdEditor.setRangeText('  ', start, end, 'end');
-      state.markdown = dom.mdEditor.value;
-      if (!state.isDirty) {
-        state.isDirty = true;
-        updateFileNameDisplay();
-      }
-      updatePreview();
+      clearCartoucheSelectionStyles();
+      insertNodeAtEditorCaret(document.createTextNode('  '));
+      syncFromEditorDOM();
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      clearCartoucheSelectionStyles();
+      insertNodeAtEditorCaret(document.createTextNode('\n'));
+      syncFromEditorDOM();
     }
   });
 
@@ -279,19 +626,28 @@ function initEventListeners() {
     }
   });
 
-  // Collage d'image (Ctrl+V) dans l'éditeur
+  // Collage (Ctrl+V) dans l'éditeur : Image -> Cartouche graphique, Texte -> Texte brut sans HTML parasite
   dom.mdEditor.addEventListener('paste', async (e) => {
     const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          await insertImageAsBase64(file, 'Image collée');
+    if (items) {
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            await insertImageAsBase64(file, 'Image collée');
+          }
+          return;
         }
-        break;
       }
+    }
+
+    const plainText = e.clipboardData?.getData('text/plain');
+    if (plainText !== undefined) {
+      e.preventDefault();
+      clearCartoucheSelectionStyles();
+      insertNodeAtEditorCaret(document.createTextNode(plainText));
+      syncFromEditorDOM();
     }
   });
 
@@ -425,7 +781,7 @@ function populateFolderSelect(mdFiles) {
 }
 
 /**
- * Lit un fichier Markdown et l'affiche dans l'éditeur.
+ * Lit un fichier Markdown et l'affiche dans l'éditeur (avec objets graphiques [image] si présents).
  * @param {File} file - Fichier Markdown à lire
  * @param {boolean} [checkDirty=true] - Indique s'il faut vérifier les modifications non sauvegardées
  * @returns {Promise<void>}
@@ -441,11 +797,11 @@ async function loadMarkdownFile(file, checkDirty = true) {
   }
 
   try {
-    const content = await readFileAsText(file);
-    state.markdown = content;
+    const rawContent = await readFileAsText(file);
+    setEditorContent(rawContent);
+    state.markdown = serializeEditorToMarkdown();
     state.currentFileName = file.name;
     state.isDirty = false;
-    dom.mdEditor.value = content;
     dom.mdEditor.scrollTop = 0;
     updateFileNameDisplay();
     updatePreview();
@@ -456,10 +812,12 @@ async function loadMarkdownFile(file, checkDirty = true) {
 }
 
 /**
- * Sauvegarde le contenu de l'éditeur par téléchargement classique d'un fichier .md.
+ * Sauvegarde le contenu de l'éditeur par téléchargement classique d'un fichier .md
+ * en réinjectant le binaire Base64 complet à la place des objets graphiques [image].
  * @returns {void}
  */
 function handleSaveMarkdown() {
+  state.markdown = serializeEditorToMarkdown();
   let fileName = state.currentFileName;
   if (!fileName || fileName === 'Sans titre.md') {
     const detectedTitle = extractTitle(state.markdown);
@@ -470,7 +828,8 @@ function handleSaveMarkdown() {
     state.currentFileName = fileName;
   }
 
-  const blob = new Blob([state.markdown], { type: 'text/markdown;charset=utf-8' });
+  const fullMarkdown = resolveImagePaths(state.markdown, state.localImages);
+  const blob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
   downloadBlob(blob, fileName);
   state.isDirty = false;
   updateFileNameDisplay();
@@ -478,7 +837,8 @@ function handleSaveMarkdown() {
 }
 
 /**
- * Insère une image déposée ou collée en Base64 dans l'éditeur Markdown.
+ * Insère une image déposée ou collée sous forme d'objet graphique [image] (2 lignes de hauteur)
+ * dans l'éditeur, tout en conservant le binaire Base64 en mémoire dans state.localImages.
  * @param {File} file - Fichier image à convertir en Base64
  * @param {string} [customAlt] - Texte alternatif optionnel
  * @returns {Promise<void>}
@@ -487,22 +847,18 @@ async function insertImageAsBase64(file, customAlt) {
   try {
     const dataUrl = await readFileAsDataURL(file);
     const alt = customAlt || file.name.replace(/\.[^/.]+$/, '') || 'Image';
-    const mdSnippet = `\n![${alt}](${dataUrl})\n`;
+    const imgId = getNextImageId();
 
+    state.localImages[imgId] = dataUrl;
     if (file.name) {
       state.localImages[file.name] = dataUrl;
       state.localImages[file.name.toLowerCase()] = dataUrl;
     }
 
-    const start = dom.mdEditor.selectionStart ?? dom.mdEditor.value.length;
-    const end = dom.mdEditor.selectionEnd ?? start;
-    dom.mdEditor.setRangeText(mdSnippet, start, end, 'end');
-    state.markdown = dom.mdEditor.value;
-    state.isDirty = true;
-    updateFileNameDisplay();
-    updatePreview();
-    dom.mdEditor.focus();
-    showToast(`Image insérée en Base64 : ${alt}`, 'success');
+    const cartoucheEl = createCartoucheElement(imgId, alt);
+    insertNodeAtEditorCaret(cartoucheEl);
+    syncFromEditorDOM();
+    showToast(`Image insérée : ${alt}`, 'success');
   } catch (err) {
     showToast(`Erreur image : ${err.message}`, 'error');
   }
@@ -615,6 +971,7 @@ function updatePreview() {
  * @returns {void}
  */
 function handleExportHtml() {
+  state.markdown = serializeEditorToMarkdown();
   const title = resolveDocumentTitle();
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: title,
@@ -632,6 +989,7 @@ function handleExportHtml() {
  * @returns {Promise<void>}
  */
 async function handleExportDocx() {
+  state.markdown = serializeEditorToMarkdown();
   if (!state.markdown.trim()) {
     showToast('Le document Markdown est vide', 'error');
     return;
@@ -662,6 +1020,7 @@ async function handleExportDocx() {
  * @returns {Promise<void>}
  */
 async function handleExportPptx() {
+  state.markdown = serializeEditorToMarkdown();
   if (!state.markdown.trim()) {
     showToast('Le document Markdown est vide', 'error');
     return;

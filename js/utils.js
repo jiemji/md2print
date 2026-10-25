@@ -155,15 +155,59 @@ export const getImageDimensions = (dataUrl, maxWidth = 520, maxHeight = 340) =>
   });
 
 /**
- * Remplace les chemins d'images locaux du type (data:image/png;c:\chemin\image.png)
- * par leur Data URL Base64 stockée dans localImages.
+ * Génère la cartouche textuelle sur 2 lignes représentant une image Base64 dans l'éditeur.
+ * @param {string} id - Identifiant interne de l'image (ex: 'img-1')
+ * @param {string} [alt='image'] - Texte alternatif / nom de l'image
+ * @returns {string} Cartouche sur 2 lignes
+ */
+export const createImageCartouche = (id, alt = 'image') => {
+  const cleanAlt = (alt || 'image').replace(/[\r\n[\]()]/g, '').trim() || 'image';
+  return `[image : ${cleanAlt} (${id})]\n[binaire base64 masqué]`;
+};
+
+/**
+ * Remplace toutes les images Base64 brutes ![alt](data:image/...;base64,...) d'un texte Markdown
+ * par des cartouches de 2 lignes [image] tout en stockant le binaire dans localImages.
+ * @param {string} markdownText - Contenu Markdown brut (ex: à l'ouverture d'un fichier .md)
+ * @param {Record<string, string>} localImages - Dictionnaire en mémoire des images
+ * @param {function(): string} nextIdFn - Fonction générant un identifiant unique (ex: 'img-1')
+ * @returns {string} Contenu Markdown avec cartouches [image] sur 2 lignes
+ */
+export const collapseBase64ToCartouches = (markdownText, localImages, nextIdFn) => {
+  if (!markdownText) return '';
+  return markdownText.replace(
+    /!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9+.-]+;base64,[^)]+)\)/gi,
+    (_match, alt, dataUrl) => {
+      const id = nextIdFn();
+      localImages[id] = dataUrl.trim();
+      return createImageCartouche(id, alt || 'image');
+    }
+  );
+};
+
+/**
+ * Remplace les cartouches de 2 lignes [image] ainsi que les chemins d'images locaux
+ * par leur Data URL Base64 stockée dans localImages (pour l'aperçu, la sauvegarde .md et les exports).
  * @param {string} markdownText
  * @param {Record<string, string>} localImages
  * @returns {string}
  */
 export const resolveImagePaths = (markdownText, localImages = {}) => {
   if (!markdownText) return '';
-  return markdownText.replace(/\(data:image\/([a-zA-Z0-9+.-]+);(?!base64,)([^)]+)\)/gi, (match, _mime, rawPath) => {
+
+  // 1. Résolution des cartouches sur 2 lignes [image : alt (img-X)]\n[binaire base64 masqué]
+  let resolved = markdownText.replace(
+    /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]\r?\n\[binaire base64 masqué\]/gi,
+    (match, alt, id) => {
+      const dataUrl = localImages[id];
+      if (!dataUrl) return '';
+      const cleanAlt = (alt || 'image').trim();
+      return `![${cleanAlt}](${dataUrl})`;
+    }
+  );
+
+  // 2. Résolution des chemins locaux éventuels (data:image/png;c:\chemin\image.png)
+  resolved = resolved.replace(/\(data:image\/([a-zA-Z0-9+.-]+);(?!base64,)([^)]+)\)/gi, (match, _mime, rawPath) => {
     const path = rawPath.trim();
     const fileName = path.split(/[\\/]/).pop();
     if (localImages[path]) return `(${localImages[path]})`;
@@ -181,6 +225,8 @@ export const resolveImagePaths = (markdownText, localImages = {}) => {
     }
     return match;
   });
+
+  return resolved;
 };
 
 /**

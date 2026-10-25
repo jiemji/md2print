@@ -90,8 +90,9 @@ Permettre à un utilisateur de :
    - **Dépôt d'un fichier `.md` / `.markdown` / `.txt`** sur l'éditeur : ouvre le fichier (après confirmation si `state.isDirty === true`).
    - **Dépôt ou collage (`Ctrl+V`) d'un fichier image** (`image/*`) dans l'éditeur :
      - Convertit l'image en Data URL Base64 via `FileReader.readAsDataURL()`.
-     - L'enregistre dans le dictionnaire en mémoire `state.localImages` et insère la syntaxe Markdown `![alt](data:image/...;base64,...)` à la position du curseur.
-     - La fonction `resolveImagePaths()` résout également toute référence de type `(data:image/...;chemin)` vers son flux Base64.
+     - L'enregistre dans le dictionnaire en mémoire `state.localImages` sans afficher le binaire Base64 brut à l'utilisateur.
+     - Insère dans l'éditeur un **objet graphique `.image-cartouche` (`[image]`) de 2 lignes de hauteur** (`contenteditable="false"`), sélectionnable comme du texte (au clic ou par sélection glissée) et supprimable en un seul appui sur `Suppr` (`Delete`) ou `Backspace`.
+     - Lors de la sauvegarde du fichier `.md` (`Sauvegarder` / `Ctrl+S`), des exports (`HTML`, `DOCX`, `PPTX`) et du rendu dans l'aperçu, `resolveImagePaths()` réinjecte automatiquement le flux Base64 complet. À la réouverture d'un fichier `.md`, `setEditorContent()` reconvertit les images Base64 en objets graphiques `[image]` de 2 lignes de hauteur.
 3. **Normalisation Automatique du Markdown (`normalizeMarkdown`)** :
    - Répare automatiquement les tableaux Markdown dont la ligne de séparation `|---|` ou les lignes de données ont un nombre de colonnes différent de l'en-tête.
    - Garantit les sauts de ligne avant et après les tableaux.

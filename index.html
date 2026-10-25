@@ -78,12 +78,15 @@
     <!-- Espace de Travail Split-View (Gauche : Éditeur / Droite : Aperçu) -->
     <main class="workspace" id="workspace">
       <section class="pane-editor" id="paneEditor">
-        <textarea
+        <div
           id="mdEditor"
           class="md-editor"
-          placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          data-placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
           spellcheck="false"
-        ></textarea>
+        ></div>
       </section>
 
       <div class="pane-resizer" id="paneResizer" title="Glisser pour ajuster la largeur"></div>

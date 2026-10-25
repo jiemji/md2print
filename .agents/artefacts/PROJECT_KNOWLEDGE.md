@@ -84,8 +84,8 @@ const state = {
 
 ## 4. Gestion des Images et Normalisation Markdown
 
-1. **Glisser-Déposer et Collage (`Ctrl+V`)** : Toute image déposée ou collée dans `#mdEditor` est convertie en Data URL Base64 (`readFileAsDataURL`), stockée dans `state.localImages` et insérée sous la forme `![alt](data:image/...;base64,...)`.
-2. **Résolution de chemins locaux (`resolveImagePaths`)** : Convertit les références `(data:image/...;chemin)` vers leur flux Base64 avant le rendu HTML, DOCX et PPTX.
+1. **Objet Graphique Cartouche `[image]` sur 2 lignes de hauteur (`createCartoucheElement` / `setEditorContent`)** : Toute image déposée ou collée (`Ctrl+V`) dans `#mdEditor` (ou présente en Base64 à l'ouverture d'un fichier `.md`) est stockée dans `state.localImages[id]` et affichée dans l'éditeur sous la forme d'un composant graphique non-éditable (`<span class="image-cartouche" contenteditable="false">[image]</span>`) occupant 2 lignes de hauteur (`height: calc(2 * 1.65em)`). L'utilisateur peut sélectionner cet objet graphique comme du texte (au clic ou par sélection glissée) et appuyer sur `Suppr` (`Delete`) ou `Backspace` pour supprimer l'objet et l'image associée (`handleCartoucheDeletion`).
+2. **Résolution Base64 (`resolveImagePaths`)** : Convertit les cartouches `[image]` de 2 lignes ainsi que les références `(data:image/...;chemin)` vers leur syntaxe Markdown Base64 complète (`![alt](data:image/...;base64,...)`) lors de la prévisualisation, de la sauvegarde `.md` et des exports HTML, DOCX et PPTX.
 3. **Normalisation (`normalizeMarkdown`)** : Répare automatiquement les tableaux Markdown dont le nombre de colonnes diffère entre l'en-tête, le séparateur et les lignes de données, garantit les sauts de ligne autour des tableaux et ajoute des espaces insécables devant `€`.
 
 ---
