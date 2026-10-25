@@ -511,10 +511,100 @@ function buildLineInlineNodes(lineText) {
 }
 
 /**
+ * Indique si une ligne Markdown fait partie d'un tableau (commence par | et contient au moins un second |).
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isMarkdownTableLine(line) {
+  return /^\s*\|.*\|/.test(line);
+}
+
+/**
+ * Construit les éléments <span class="md-table-line"> pour un bloc contigu de lignes de tableau
+ * en calculant la largeur maximale (en ch) de chaque colonne afin d'aligner visuellement toutes
+ * les barres verticales | sans modifier le texte Markdown sous-jacent.
+ * @param {string[]} tableLines
+ * @returns {HTMLSpanElement[]}
+ */
+function buildTableBlockRowSpans(tableLines) {
+  let maxPrefixWidth = 0;
+  const maxColWidths = [];
+
+  const splitRows = tableLines.map((line) => {
+    const parts = line.split('|');
+    const prefixLen = parts[0].replace(/\t/g, '  ').length;
+    if (prefixLen > maxPrefixWidth) {
+      maxPrefixWidth = prefixLen;
+    }
+
+    // Les segments compris entre deux barres | (indices 1 à parts.length - 2) forment les colonnes fermées
+    for (let p = 1; p < parts.length - 1; p++) {
+      const colIdx = p - 1;
+      const visualLen = parts[p].replace(
+        /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\]/gi,
+        '              '
+      ).length;
+      const prevMax = maxColWidths[colIdx] || 0;
+      if (visualLen > prevMax) {
+        maxColWidths[colIdx] = visualLen;
+      }
+    }
+    return parts;
+  });
+
+  return splitRows.map((parts) => {
+    const rowSpan = document.createElement('span');
+    rowSpan.className = 'md-table-line';
+
+    if (maxPrefixWidth > 0) {
+      const prefixSpan = document.createElement('span');
+      prefixSpan.className = 'md-table-prefix';
+      prefixSpan.style.minWidth = `${maxPrefixWidth}ch`;
+      if (parts[0].length > 0) {
+        prefixSpan.appendChild(buildLineInlineNodes(parts[0]));
+      }
+      rowSpan.appendChild(prefixSpan);
+    } else if (parts[0].length > 0) {
+      rowSpan.appendChild(buildLineInlineNodes(parts[0]));
+    }
+
+    for (let p = 1; p < parts.length - 1; p++) {
+      const colIdx = p - 1;
+      const pipeSpan = document.createElement('span');
+      pipeSpan.className = 'md-table-pipe';
+      pipeSpan.textContent = '|';
+      rowSpan.appendChild(pipeSpan);
+
+      const cellSpan = document.createElement('span');
+      cellSpan.className = 'md-table-cell';
+      const targetWidth = Math.max(1, maxColWidths[colIdx] || 1);
+      cellSpan.style.minWidth = `${targetWidth}ch`;
+      if (parts[p].length > 0) {
+        cellSpan.appendChild(buildLineInlineNodes(parts[p]));
+      }
+      rowSpan.appendChild(cellSpan);
+    }
+
+    const lastPipeSpan = document.createElement('span');
+    lastPipeSpan.className = 'md-table-pipe';
+    lastPipeSpan.textContent = '|';
+    rowSpan.appendChild(lastPipeSpan);
+
+    const trailingPart = parts[parts.length - 1];
+    if (trailingPart.length > 0) {
+      rowSpan.appendChild(buildLineInlineNodes(trailingPart));
+    }
+
+    return rowSpan;
+  });
+}
+
+/**
  * Peuple l'éditeur (#mdEditor) à partir d'un texte Markdown :
  * - Convertit les images Base64 / jetons en objets graphiques .image-cartouche
  * - Applique le formatage (gras + taille de police H1 à H5) sur les lignes débutant par # à #####
- *   tout en conservant les balises # visibles (non-WYSIWYG).
+ * - Décale les listes à puces (- *) et numérotées de 5 caractères par niveau d'imbrication
+ * - Aligne visuellement les colonnes des tableaux Markdown via CSS sans altérer le fichier .md
  * @param {string} markdownText
  * @param {boolean} [preserveCaret=false] - Si true, sauvegarde et restaure la position du curseur
  * @returns {void}
@@ -537,13 +627,44 @@ function setEditorContent(markdownText, preserveCaret = false) {
 
   const lines = normalizedText.split('\n');
   const fragment = document.createDocumentFragment();
+  let inCodeBlock = false;
+  let i = 0;
 
-  lines.forEach((line, idx) => {
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.trimStart().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+    }
+
+    // Regroupement et alignement automatique des colonnes pour les blocs de tableaux Markdown
+    if (!inCodeBlock && isMarkdownTableLine(line)) {
+      const tableLines = [];
+      let j = i;
+      while (j < lines.length && isMarkdownTableLine(lines[j])) {
+        tableLines.push(lines[j]);
+        j++;
+      }
+
+      const tableRowSpans = buildTableBlockRowSpans(tableLines);
+      tableRowSpans.forEach((rowSpan, rowOffset) => {
+        fragment.appendChild(rowSpan);
+        const absoluteLineIdx = i + rowOffset;
+        if (absoluteLineIdx < lines.length - 1) {
+          fragment.appendChild(document.createTextNode('\n'));
+        }
+      });
+
+      i = j;
+      continue;
+    }
+
     if (line.length > 0) {
-      const headingMatch = line.match(/^(#{1,5})(?!#)/);
-      const listMatch = !headingMatch
-        ? line.match(/^([ \t]*)(?:[-*]|\d+[.)])[ \t]+/)
-        : null;
+      const headingMatch = !inCodeBlock ? line.match(/^(#{1,5})(?!#)/) : null;
+      const listMatch =
+        !inCodeBlock && !headingMatch
+          ? line.match(/^([ \t]*)(?:[-*]|\d+[.)])[ \t]+/)
+          : null;
       const inlineNodes = buildLineInlineNodes(line);
 
       if (headingMatch) {
@@ -571,10 +692,11 @@ function setEditorContent(markdownText, preserveCaret = false) {
       }
     }
 
-    if (idx < lines.length - 1) {
+    if (i < lines.length - 1) {
       fragment.appendChild(document.createTextNode('\n'));
     }
-  });
+    i++;
+  }
 
   dom.mdEditor.appendChild(fragment);
   ensureTrailingSentinel();

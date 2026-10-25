@@ -314,6 +314,7 @@ body {
   color: var(--text-primary);
   background-color: var(--bg-primary);
   overflow-y: auto;
+  overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -417,6 +418,22 @@ body {
   padding-left: 5ch;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* === Alignement Visuel Automatique des Colonnes de Tableaux dans l'Éditeur Markdown === */
+.md-table-line {
+  white-space: pre;
+}
+
+.md-table-prefix,
+.md-table-cell {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.md-table-pipe {
+  color: var(--accent-color);
+  font-weight: 700;
 }
 
 /* === Barre Centrale de Redimensionnement === */
