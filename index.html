@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="md2print — Éditeur Markdown et exportateur multi-formats (HTML autonome, DOCX, PPTX)">
+  <title>md2print</title>
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Bibliothèques tierces locales (100 % hors-ligne) -->
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script src="vendor/jszip.min.js"></script>
+  <script src="vendor/docx.umd.js"></script>
+  <script src="vendor/pptxgen.bundle.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Barre de Menu Supérieure -->
+    <header class="app-header">
+      <!-- Zone Gauche : Gestion des fichiers .md -->
+      <div class="header-group header-left">
+        <span class="app-brand">md2print</span>
+        <button type="button" class="btn" id="btnNewFile">Nouveau</button>
+        <button type="button" class="btn" id="btnOpenFile">Ouvrir fichier</button>
+        <input type="file" id="fileInput" class="hidden-input" accept=".md,.markdown,.txt">
+
+        <button type="button" class="btn" id="btnOpenFolder">Ouvrir dossier</button>
+        <input type="file" id="folderInput" class="hidden-input" webkitdirectory multiple>
+
+        <select id="folderFileSelect" class="file-select" title="Fichiers Markdown du dossier" disabled>
+          <option value="">Aucun dossier chargé</option>
+        </select>
+
+        <button type="button" class="btn btn-primary" id="btnSaveFile">Sauvegarder</button>
+        <span class="current-filename" id="currentFileName">Sans titre.md</span>
+      </div>
+
+      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) -->
+      <div class="header-group header-center">
+        <div class="view-switcher">
+          <button type="button" class="view-btn active" data-view="report" id="btnViewReport">Rapport</button>
+          <button type="button" class="view-btn" data-view="slide" id="btnViewSlide">Slide</button>
+        </div>
+      </div>
+
+      <!-- Zone Droite : Configuration, Export et Thème -->
+      <div class="header-group header-right">
+        <!-- Menu déroulant Configuration -->
+        <div class="dropdown" id="dropdownConfig">
+          <button type="button" class="btn" id="btnToggleConfig">Configuration</button>
+          <div class="dropdown-menu">
+            <div class="dropdown-status" id="configStatusText">
+              Config : par défaut<br>Modèle : par défaut
+            </div>
+            <button type="button" class="dropdown-item" id="btnLoadConfigJson">Charger configuration (.json)</button>
+            <button type="button" class="dropdown-item" id="btnLoadTemplateDocx">Charger modèle Word (.docx)</button>
+          </div>
+          <input type="file" id="configJsonInput" class="hidden-input" accept=".json">
+          <input type="file" id="templateDocxInput" class="hidden-input" accept=".docx,.dotx">
+        </div>
+
+        <!-- Menu déroulant Exporter -->
+        <div class="dropdown" id="dropdownExport">
+          <button type="button" class="btn btn-primary" id="btnToggleExport">Exporter</button>
+          <div class="dropdown-menu">
+            <button type="button" class="dropdown-item" id="btnExportHtml">HTML (.html)</button>
+            <button type="button" class="dropdown-item" id="btnExportDocx">Word (.docx)</button>
+            <button type="button" class="dropdown-item" id="btnExportPptx">PowerPoint (.pptx)</button>
+          </div>
+        </div>
+
+        <!-- Bouton de bascule de thème -->
+        <button type="button" class="btn" id="btnToggleTheme">Thème : Sombre</button>
+      </div>
+    </header>
+
+    <!-- Espace de Travail Split-View (Gauche : Éditeur / Droite : Aperçu) -->
+    <main class="workspace" id="workspace">
+      <section class="pane-editor" id="paneEditor">
+        <textarea
+          id="mdEditor"
+          class="md-editor"
+          placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
+          spellcheck="false"
+        ></textarea>
+      </section>
+
+      <div class="pane-resizer" id="paneResizer" title="Glisser pour ajuster la largeur"></div>
+
+      <section class="pane-preview" id="panePreview">
+        <iframe id="previewIframe" class="preview-iframe" title="Aperçu du document formaté"></iframe>
+      </section>
+    </main>
+  </div>
+
+  <!-- Conteneur de Notifications Textuelles -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Contrôleur Principal ES6 -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

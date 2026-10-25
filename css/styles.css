@@ -1,0 +1,397 @@
+/**
+ * styles.css — Feuille de style principale de l'application SPA md2print
+ * Thèmes : Sombre (Bleu foncé et gris, par défaut) et Clair (Sépia)
+ * Politique : Zéro émoji, zéro icône décorative, CSS simple et maintenable.
+ */
+
+:root,
+[data-theme="dark"] {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-elevated: #263349;
+  --bg-hover: #334155;
+  --border-color: #334155;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-text: #ffffff;
+  --danger-color: #ef4444;
+  --success-color: #10b981;
+  --header-height: 52px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, "JetBrains Mono", "Courier New", monospace;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+}
+
+[data-theme="sepia"] {
+  --bg-primary: #f4ecd8;
+  --bg-secondary: #e8dec5;
+  --bg-elevated: #efe6d0;
+  --bg-hover: #dccfb2;
+  --border-color: #cbbba0;
+  --text-primary: #2c241b;
+  --text-secondary: #6e5d4f;
+  --accent-color: #8c5a2b;
+  --accent-hover: #6e451f;
+  --accent-text: #ffffff;
+  --danger-color: #b91c1c;
+  --success-color: #15803d;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* === Barre de Menu Supérieure === */
+.app-header {
+  height: var(--header-height);
+  min-height: var(--header-height);
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  gap: 12px;
+  z-index: 200;
+}
+
+.header-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-left {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+}
+
+.header-center {
+  flex-shrink: 0;
+}
+
+.header-right {
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.app-brand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin-right: 6px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+/* === Boutons & Contrôles du Menu === */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 11px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--accent-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* === Liste déroulante des fichiers du dossier === */
+.file-select {
+  height: 30px;
+  max-width: 190px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.file-select:focus-visible {
+  outline: 2px solid var(--accent-color);
+}
+
+/* === Affichage en lecture seule du nom de fichier === */
+.current-filename {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding-left: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.current-filename.is-dirty {
+  color: var(--text-primary);
+}
+
+/* === Sélecteur de Vue (Rapport / Slide) === */
+.view-switcher {
+  display: inline-flex;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.view-btn {
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.view-btn:hover {
+  color: var(--text-primary);
+}
+
+.view-btn.active {
+  background-color: var(--accent-color);
+  color: var(--accent-text);
+}
+
+/* === Menus Déroulants (Configuration & Exporter) === */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 230px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 500;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.dropdown.open .dropdown-menu {
+  display: flex;
+}
+
+.dropdown-status {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.hidden-input {
+  display: none;
+}
+
+/* === Espace de Travail Principal (Split-View 50/50) === */
+.workspace {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - var(--header-height));
+  overflow: hidden;
+  position: relative;
+}
+
+.pane-editor {
+  width: 50%;
+  min-width: 20%;
+  max-width: 80%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+.md-editor {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 20px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  overflow-y: auto;
+}
+
+.md-editor::placeholder {
+  color: var(--text-secondary);
+}
+
+.md-editor.drag-active {
+  outline: 2px dashed var(--accent-color);
+  outline-offset: -6px;
+  background-color: var(--bg-elevated);
+}
+
+/* === Barre Centrale de Redimensionnement === */
+.pane-resizer {
+  width: 6px;
+  min-width: 6px;
+  height: 100%;
+  background-color: var(--border-color);
+  cursor: col-resize;
+  transition: background-color 0.15s ease;
+  z-index: 50;
+}
+
+.pane-resizer:hover,
+.pane-resizer.is-resizing {
+  background-color: var(--accent-color);
+}
+
+/* === Moitié Droite : Aperçu Iframe === */
+.pane-preview {
+  flex: 1;
+  min-width: 20%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: #ffffff;
+}
+
+body.resizing-active .preview-iframe {
+  pointer-events: none;
+}
+
+/* === Notifications Toast Textuelles (Sans icône ni émoji) === */
+.toast-container {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+
+.toast {
+  padding: 10px 16px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast--error {
+  border-left-color: var(--danger-color);
+}
+
+.toast--success {
+  border-left-color: var(--success-color);
+}
