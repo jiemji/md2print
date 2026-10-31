@@ -93,14 +93,7 @@ async function buildDocxBlocks(cleanMd, docConfig) {
       const st = cfg.style;
       blocks.push(
         new window.docx.Paragraph({
-          children: block.runs.map(
-            (r) =>
-              new window.docx.TextRun({
-                text: r.text,
-                bold: r.format.bold,
-                italics: r.format.italic,
-              })
-          ),
+          children: toDocxRuns(block.runs),
           style: typeof st === 'string' ? st : undefined,
           heading: typeof st === 'string' ? undefined : cfg.fallback,
           spacing: cfg.sp,
@@ -223,6 +216,11 @@ function createDocxTable(rowsData, docConfig) {
                       text: r.text,
                       bold: isH || r.format.bold,
                       italics: r.format.italic,
+                      strike: r.format.strike,
+                      font: r.format.code ? 'Consolas' : undefined,
+                      underline: r.format.underline
+                        ? { type: window.docx.UnderlineType.SINGLE }
+                        : undefined,
                       color,
                     })
                 ),

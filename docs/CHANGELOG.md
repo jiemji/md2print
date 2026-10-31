@@ -4,6 +4,26 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.2.0] - 2026-10-31
+
+### Feature
+- **Persistance haute capacité via `IndexedDB` (`StorageService.js`) avec support complet des images Base64** :
+  - Création du service [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) utilisant la base `IndexedDB` `md2print_db` (stores `app_state` et `local_images`) en remplacement du `localStorage`, permettant de persister sans limite de 5 Mo le brouillon Markdown, l'intégralité des images Base64 associées aux cartouches `[image]` et les préférences d'interface (thème Sombre/Sépia et mode Rapport/Slide).
+  - Sauvegarde transactionnelle atomique immédiate lors de l'insertion d'une image (`insertImageAsBase64`), de l'ouverture ou de la sauvegarde d'un fichier, et sauvegarde débouncée (`60 ms`) lors de la frappe.
+  - Recalcul automatique du compteur d'identifiants `state.imageSeq` (`computeNextImageSeq`) à la restauration pour éviter toute collision `img-N`, et purge automatique des images Base64 supprimées (`pruneUnusedLocalImages`).
+  - Fichiers impactés : [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js), [`js/app.js`](file:///g:/devapps/md2print/js/app.js), [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js).
+- **Unification du parsing inline récursif pour les exports Word (`.docx`) et PowerPoint (`.pptx`)** :
+  - Refonte récursive de `extractInlineStyles` dans [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) pour prendre en charge les styles combinés et imbriqués (`***gras+italique***`, `**gras**`, `__souligné__`, `<u>souligné</u>`, `~~barré~~`, `*italique*`, `_italique_`, `` `code` ``, `[libellé](url)`).
+  - Prise en charge complète du barré (`strike`), du souligné (`underline`) et de la police monospace (`Consolas`) dans les titres et cellules de tableaux Word ([`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js)) ainsi que dans les diapositives PowerPoint ([`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js)).
+- **Validation structurelle à l'import d'un fichier `output_config.json` personnalisé** :
+  - Ajout de `validateOutputConfig` dans [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) vérifiant la présence et le typage des sections `documents` / `templates` avant d'appliquer la configuration dans [`js/app.js`](file:///g:/devapps/md2print/js/app.js).
+
+### Refactor
+- **Extraction du moteur d'édition non-WYSIWYG dans [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js)** :
+  - Isolation complète de la gestion du DOM `contenteditable`, du calcul des offsets de sélection, de l'alignement des tableaux en grille CSS et des objets graphiques `.image-cartouche` dans un module dédié (`877 lignes`), réduisant [`js/app.js`](file:///g:/devapps/md2print/js/app.js) à son rôle d'orchestrateur SPA (`1 047 lignes`).
+- **Fluidité de frappe sur les longs documents (`schedulePreviewUpdate`)** :
+  - Ajout d'un `debounce` de `120 ms` sur la régénération de l'`iframe` lors de la saisie dans `#mdEditor` tout en conservant le formatage syntaxique de l'éditeur synchrone et instantané.
+
 ## [1.1.0] - 2026-10-25
 
 ### Feature

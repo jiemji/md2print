@@ -236,9 +236,11 @@ function pushRuns(runs, baseOpts, textRuns) {
   runs.forEach((run, i) => {
     const opts = {
       ...baseOpts,
+      fontFace: run.format.code ? 'Consolas' : baseOpts.fontFace,
       bold: baseOpts.bold || run.format.bold,
       italic: baseOpts.italic || run.format.italic,
       underline: baseOpts.underline || run.format.underline,
+      strike: baseOpts.strike || run.format.strike,
       breakLine: i === runs.length - 1,
     };
     if (run.format.color) opts.color = run.format.color;

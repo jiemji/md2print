@@ -1,6 +1,6 @@
 # md2print — Documentation Technique de Référence (PROJECT_KNOWLEDGE)
 
-> **Version courante : 1.1.0** --- Mise à jour : 2026-10-25
+> **Version courante : 1.2.0** --- Mise à jour : 2026-10-31
 
 ---
 
@@ -34,12 +34,12 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 │  ┌───────────────────────────────┐   ┌───────────────────────────────┐  │
 │  │ Moitié Gauche : Éditeur (.md) │   │ Moitié Droite : Aperçu Iframe │  │
 │  │ - <div id="mdEditor">         │◄─►│ - Mode Rapport / Mode Slide   │  │
-│  │ - Formatage non-WYSIWYG       │   │ - Sommaire repliable (TOC)    │  │
-│  │ - Cartouches [image] (2 lig.) │   │                               │  │
+│  │ - EditorEngine.js             │   │ - Sommaire repliable (TOC)    │  │
+│  │ - Cartouches [image] (2 lig.) │   │ - Debounce 120 ms             │  │
 │  └───────────────┬───────────────┘   └───────────────▲───────────────┘  │
 │                  │                                   │                  │
 │                  ▼                                   │                  │
-│           Objet `state` ────► `HtmlGenerator.js` ────┘                  │
+│     Objet `state` + localStorage ──► `HtmlGenerator.js`                 │
 │                  │                                                      │
 │                  ├──────────► `HtmlGenerator.js` ──► Export .html       │
 │                  ├──────────► `DocxGenerator.js` ──► Export .docx       │
@@ -51,27 +51,30 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 
 - [`index.html`](file:///g:/devapps/md2print/index.html) : Conteneur principal de la SPA (barre de menu supérieure, éditeur gauche, séparateur central, aperçu `iframe` droit).
 - [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css) : Styles de l'interface, layout Flexbox 50/50 redimensionnable, thèmes Sombre (Bleu foncé et gris) et Clair (Sépia).
-- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, gestion des fichiers/dossiers `.md`, raccourcis clavier, synchronisation du défilement, redimensionnement et déclenchement des exports).
-- [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Fonctions utilitaires (`toSlug`, `escapeHtml`, `extractTitle`, lecture de fichiers, `normalizeMarkdown`, `resolveImagePaths`, conversion d'images Base64).
-- [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Parseur Markdown vers AST structuré pour les moteurs Word et PowerPoint.
+- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, persistance `IndexedDB`, gestion des fichiers/dossiers `.md`, raccourcis clavier, synchronisation du défilement, `debounce` d'aperçu et déclenchement des exports).
+- [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js) : Moteur d'édition `contenteditable="true"` non-WYSIWYG (calcul et restauration des offsets de sélection, objets graphiques `.image-cartouche` de 2 lignes, alignement CSS des colonnes de tableaux, formatage syntaxique en direct).
+- [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) : Service de persistance locale `IndexedDB` (`md2print_db`, stores `app_state` et `local_images`) stockant de manière atomique le brouillon Markdown, les images Base64 et les préférences d'interface.
+- [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Fonctions utilitaires (`toSlug`, `escapeHtml`, `extractTitle`, lecture de fichiers, `normalizeMarkdown`, `resolveImagePaths`, `pruneUnusedLocalImages`, `validateOutputConfig`, conversion d'images Base64).
+- [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Parseur Markdown vers AST structuré avec extraction récursive des styles inline pour les moteurs Word et PowerPoint.
 - [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : Générateur du document `.html` autonome (styles Azur, sommaire repliable, ScrollSpy, modes Rapport et Slide).
 - [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js) : Générateur Word `.docx` avec support des images Base64 et injection XML dans un modèle `.docx`.
 - [`js/PptxGenerator.js`](file:///g:/devapps/md2print/js/PptxGenerator.js) & [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js) : Générateur PowerPoint `.pptx` suivant le découpage par niveaux de titres.
 
 ---
 
-## 3. Gestion de l'État Applicatif (`state`)
+## 3. Gestion de l'État Applicatif (`state`) & Persistance `localStorage`
 
-L'objet singleton `state` dans [`js/app.js`](file:///g:/devapps/md2print/js/app.js) centralise les données en mémoire :
+L'objet singleton `state` dans [`js/app.js`](file:///g:/devapps/md2print/js/app.js) centralise les données en mémoire et se synchronise avec `localStorage` (`md2print_draft_v1` et `md2print_prefs_v1`) :
 
 ```javascript
 const state = {
-  markdown: '',                                   // Contenu brut Markdown
+  markdown: '',                                   // Contenu brut Markdown (avec jetons [image])
   currentFileName: 'Sans titre.md',               // Nom du fichier actif
   isDirty: false,                                 // Indicateur de modifications non sauvegardées (*)
   folderFiles: [],                                // Liste des objets File (.md) du dossier ouvert
   selectedFolderIndex: '',                        // Index sélectionné dans la liste déroulante
   localImages: {},                                // Dictionnaire de correspondance des images Base64
+  imageSeq: 1,                                    // Compteur séquentiel d'identifiants img-X
   currentViewport: 'report',                      // Mode d'affichage : 'report' | 'slide'
   theme: 'dark',                                  // Thème UI : 'dark' | 'sepia'
   outputConfig: null,                             // Configuration JSON pour DOCX / PPTX
@@ -83,20 +86,20 @@ const state = {
 
 ---
 
-## 4. Éditeur Non-WYSIWYG, Cartouches Image et Normalisation Markdown
+## 4. Éditeur Non-WYSIWYG (`EditorEngine.js`), Cartouches Image et Normalisation
 
 1. **Objet Graphique Cartouche `[image]` sur 2 lignes de hauteur (`createCartoucheElement` / `setEditorContent`)** : Toute image déposée ou collée (`Ctrl+V`) dans `#mdEditor` (ou présente en Base64 à l'ouverture d'un fichier `.md`) est stockée dans `state.localImages[id]` et affichée dans l'éditeur sous la forme d'un composant graphique non-éditable (`<span class="image-cartouche" contenteditable="false">[image]</span>`) occupant 2 lignes de hauteur (`height: calc(2 * 1.65em)`). L'utilisateur peut sélectionner cet objet graphique comme du texte (au clic ou par sélection glissée) et appuyer sur `Suppr` (`Delete`) ou `Backspace` pour supprimer l'objet et l'image associée (`handleCartoucheDeletion`).
 2. **Formatage Syntaxique en Direct Non-WYSIWYG (`setEditorContent` / `buildFormattedTextNodes` / `buildTableBlockRowSpans`)** :
    - **Invariant de sélection (`1 caractère = 1 unité`, `1 cartouche = 1 unité`)** : Toutes les balises Markdown restent visibles dans `#mdEditor`, ce qui permet à `getEditorSelectionOffsets()` et `restoreEditorSelectionOffsets()` de préserver la position exacte du curseur lors de la frappe. Un élément `<br data-sentinel="true">` (`ensureTrailingSentinel`) garantit la prise en compte immédiate d'un seul appui sur `Entrée` en fin de document.
    - **Blocs et lignes** : Titres `#` à `#####` (`.md-h1` à `.md-h5`), listes `-`, `*`, `1.` et listes de tâches `- [ ]` / `- [x]` décalées de `5ch` par niveau d'imbrication (`Tab` / `Shift+Tab`), blocs de code ` ``` ... ``` `, citations `> ...`, séparateurs `---` et alignement visuel automatique des colonnes de tableaux `| ... |` en grille via CSS (`min-width` en `ch`).
-   - **Styles inline récursifs** : Code inline (`` `code` ``), liens (`[libellé](url)`), gras (`**texte**`), souligné (`__texte__` et `<u>texte</u>`), barré (`~~texte~~`) et italique (`*texte*` et `_texte_`).
-3. **Résolution Base64 (`resolveImagePaths`)** : Convertit les cartouches `[image]` de 2 lignes ainsi que les références `(data:image/...;chemin)` vers leur syntaxe Markdown Base64 complète (`![alt](data:image/...;base64,...)`) lors de la prévisualisation, de la sauvegarde `.md` et des exports HTML, DOCX et PPTX.
-4. **Normalisation (`normalizeMarkdown`)** : Répare automatiquement les tableaux Markdown dont le nombre de colonnes diffère entre l'en-tête, le séparateur et les lignes de données, garantit les sauts de ligne autour des tableaux et ajoute des espaces insécables devant `€`.
+   - **Styles inline récursifs** : Code inline (`` `code` ``), liens (`[libellé](url)`), gras-italique (`***texte***`), gras (`**texte**`), souligné (`__texte__` et `<u>texte</u>`), barré (`~~texte~~`) et italique (`*texte*` et `_texte_`).
+3. **Résolution Base64 et Nettoyage Mémoire (`resolveImagePaths` / `pruneUnusedLocalImages`)** : Convertit les cartouches `[image]` vers leur syntaxe Markdown Base64 complète (`![alt](data:image/...;base64,...)`) lors de la prévisualisation, de la sauvegarde `.md` et des exports HTML, DOCX et PPTX, tout en purgeant les images Base64 orphelines.
+4. **Normalisation et Validation (`normalizeMarkdown` / `validateOutputConfig`)** : Répare automatiquement les tableaux Markdown, garantit les sauts de ligne autour des tableaux, ajoute des espaces insécables devant `€` et valide la structure des fichiers `output_config.json` personnalisés.
 
 ---
 
 ## 5. Moteurs d'Export
 
 - **Export HTML Autonome (`HtmlGenerator.js`)** : Produit un fichier `.html` unique intégrant la feuille de style CSS (thème Azur clair), le bandeau supérieur (`Sommaire`, titre, date, `Imprimer`), le menu de navigation latéral repliable (`H1`, `H2`, `H3` avec `ScrollSpy`) et le script IIFE gérant les modes `report` et `slide`.
-- **Export Word (`DocxGenerator.js`)** : Construit les paragraphes, titres, listes, tableaux et images (`ImageRun`) via `docx`, puis injecte le corps XML et les relations médias dans `templateBuffer` via `JSZip`.
+- **Export Word (`DocxGenerator.js`)** : Construit les paragraphes, titres, listes, tableaux et images (`ImageRun`) via `docx` (avec styles inline récursifs via `MarkdownParser.js`), puis injecte le corps XML et les relations médias dans `templateBuffer` via `JSZip`.
 - **Export PowerPoint (`PptxGenerator.js` & `PptxSlideBuilders.js`)** : Découpe le document en diapositives (`#` Couverture, `##` Chapitre, `###` Contenu) et génère les textes, listes, tableaux et images Base64 selon les masques définis dans `output_config.json`.

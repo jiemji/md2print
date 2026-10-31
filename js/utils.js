@@ -176,11 +176,17 @@ export const createImageCartouche = (id, alt = 'image') => {
 export const collapseBase64ToCartouches = (markdownText, localImages, nextIdFn) => {
   if (!markdownText) return '';
   return markdownText.replace(
-    /!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9+.-]+;base64,[^)]+)\)/gi,
-    (_match, alt, dataUrl) => {
-      const id = nextIdFn();
-      localImages[id] = dataUrl.trim();
-      return createImageCartouche(id, alt || 'image');
+    /!\[([^\]]*)\]\((data:image\/[^;)]+(?:;[^;)]+)*;base64,[^)]+)\)/gi,
+    (_match, alt, rawDataUrl) => {
+      const cleanDataUrl = rawDataUrl.replace(/\s+/g, '');
+      let existingId = Object.keys(localImages).find(
+        (k) => /^img-\d+$/i.test(k) && localImages[k] === cleanDataUrl
+      );
+      if (!existingId) {
+        existingId = nextIdFn();
+        localImages[existingId] = cleanDataUrl;
+      }
+      return createImageCartouche(existingId, alt || 'image');
     }
   );
 };
@@ -199,7 +205,7 @@ export const resolveImagePaths = (markdownText, localImages = {}) => {
   let resolved = markdownText.replace(
     /\[image\s*:\s*([^\n]*?)\s*\((img-\d+)\)\](?:\r?\n\[binaire base64 masqué\])?/gi,
     (_match, alt, id) => {
-      const dataUrl = localImages[id];
+      const dataUrl = localImages[id] || localImages[id.toLowerCase()];
       if (!dataUrl) return '';
       const cleanAlt = (alt || 'image').trim();
       return `![${cleanAlt}](${dataUrl})`;
@@ -342,4 +348,69 @@ export const normalizeMarkdown = (rawMarkdown) => {
   }
 
   return normalizedLines.join('\n');
+};
+
+/**
+ * Vérifie la conformité structurelle d'un objet de configuration output_config.json.
+ * @param {unknown} configData - Données JSON parsées à valider
+ * @returns {{ valid: boolean, error: string|null }} Résultat de validation
+ */
+export const validateOutputConfig = (configData) => {
+  if (!configData || typeof configData !== 'object' || Array.isArray(configData)) {
+    return {
+      valid: false,
+      error: 'Le fichier JSON doit représenter un objet de configuration.',
+    };
+  }
+
+  if (configData.documents !== undefined && !Array.isArray(configData.documents)) {
+    return {
+      valid: false,
+      error: 'La propriété "documents" doit être un tableau.',
+    };
+  }
+
+  if (configData.templates !== undefined && !Array.isArray(configData.templates)) {
+    return {
+      valid: false,
+      error: 'La propriété "templates" doit être un tableau.',
+    };
+  }
+
+  const hasDocuments = Array.isArray(configData.documents) && configData.documents.length > 0;
+  const hasTemplates = Array.isArray(configData.templates) && configData.templates.length > 0;
+
+  if (!hasDocuments && !hasTemplates) {
+    return {
+      valid: false,
+      error: 'Configuration invalide : aucune section "documents" ou "templates" détectée.',
+    };
+  }
+
+  return { valid: true, error: null };
+};
+
+/**
+ * Nettoie du dictionnaire localImages les identifiants internes (img-X) qui ne sont plus
+ * référencés dans le texte Markdown courant.
+ * @param {string} markdownText - Contenu Markdown courant avec jetons [image]
+ * @param {Record<string, string>} localImages - Dictionnaire en mémoire des images Base64
+ * @returns {Record<string, string>} Dictionnaire nettoyé (muté sur place et retourné)
+ */
+export const pruneUnusedLocalImages = (markdownText = '', localImages = {}) => {
+  const usedIds = new Set();
+  const cartoucheRegex = /\[image\s*:\s*[^\n]*?\((img-\d+)\)\]/gi;
+  let match;
+
+  while ((match = cartoucheRegex.exec(markdownText)) !== null) {
+    usedIds.add(match[1]);
+  }
+
+  for (const key of Object.keys(localImages)) {
+    if (/^img-\d+$/.test(key) && !usedIds.has(key)) {
+      delete localImages[key];
+    }
+  }
+
+  return localImages;
 };

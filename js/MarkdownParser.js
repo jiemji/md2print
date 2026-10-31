@@ -18,53 +18,121 @@ const DEFAULT_FORMAT = Object.freeze({
   code: false,
   color: null,
   background: null,
+  linkUrl: null,
 });
 
 /**
- * Extrait les styles inline d'un texte Markdown et retourne un tableau de runs formatés.
- * Gère : **bold**, *italic*, __underline__, ~~strike~~, `code`
- * @param {string} text
+ * Extrait récursivement les styles inline d'un texte Markdown et retourne un tableau de runs formatés.
+ * Gère : `code`, [libellé](url), ***gras+italique***, **gras**, __souligné__, <u>souligné</u>,
+ * ~~barré~~, *italique*, _italique_ ainsi que leurs imbrications.
+ * @param {string} text - Segment de texte Markdown à analyser
+ * @param {object} [inheritedFormat=DEFAULT_FORMAT] - Format parent hérité lors de l'analyse récursive
  * @returns {Array<{text: string, format: object}>}
  */
-export const extractInlineStyles = (text) => {
+export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
+  const baseFormat = { ...DEFAULT_FORMAT, ...inheritedFormat };
+
   if (!text || text.trim() === '') {
-    return [{ text: text || '', format: { ...DEFAULT_FORMAT } }];
+    return [{ text: text || '', format: baseFormat }];
   }
 
   const runs = [];
-  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(__(.+?)__)|(~~(.+?)~~)|(`(.+?)`)/g;
+  const inlineFormatRegex =
+    /(`[^`\n]+?`)|((?<!\!)\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
 
   let lastIndex = 0;
   let match;
 
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = inlineFormatRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       const before = text.substring(lastIndex, match.index);
       if (before) {
-        runs.push({ text: before, format: { ...DEFAULT_FORMAT } });
+        runs.push({ text: before, format: { ...baseFormat } });
       }
     }
 
-    if (match[2] !== undefined) {
-      runs.push({ text: match[2], format: { ...DEFAULT_FORMAT, bold: true } });
-    } else if (match[4] !== undefined) {
-      runs.push({ text: match[4], format: { ...DEFAULT_FORMAT, italic: true } });
-    } else if (match[6] !== undefined) {
-      runs.push({ text: match[6], format: { ...DEFAULT_FORMAT, underline: true } });
-    } else if (match[8] !== undefined) {
-      runs.push({ text: match[8], format: { ...DEFAULT_FORMAT, strike: true } });
-    } else if (match[10] !== undefined) {
-      runs.push({ text: match[10], format: { ...DEFAULT_FORMAT, code: true } });
+    if (match[1] !== undefined) {
+      // `code inline` (pas d'interprétation récursive à l'intérieur)
+      runs.push({
+        text: match[1].slice(1, -1),
+        format: { ...baseFormat, code: true },
+      });
+    } else if (match[2] !== undefined) {
+      // [libellé](url)
+      runs.push(
+        ...extractInlineStyles(match[3], {
+          ...baseFormat,
+          underline: true,
+          linkUrl: match[4],
+        })
+      );
+    } else if (match[5] !== undefined) {
+      // ***gras et italique***
+      runs.push(
+        ...extractInlineStyles(match[6], {
+          ...baseFormat,
+          bold: true,
+          italic: true,
+        })
+      );
+    } else if (match[7] !== undefined) {
+      // **gras**
+      runs.push(
+        ...extractInlineStyles(match[8], {
+          ...baseFormat,
+          bold: true,
+        })
+      );
+    } else if (match[9] !== undefined) {
+      // __souligné__
+      runs.push(
+        ...extractInlineStyles(match[10], {
+          ...baseFormat,
+          underline: true,
+        })
+      );
+    } else if (match[11] !== undefined) {
+      // ~~barré~~
+      runs.push(
+        ...extractInlineStyles(match[12], {
+          ...baseFormat,
+          strike: true,
+        })
+      );
+    } else if (match[13] !== undefined) {
+      // *italique*
+      runs.push(
+        ...extractInlineStyles(match[14], {
+          ...baseFormat,
+          italic: true,
+        })
+      );
+    } else if (match[15] !== undefined) {
+      // _italique_
+      runs.push(
+        ...extractInlineStyles(match[16], {
+          ...baseFormat,
+          italic: true,
+        })
+      );
+    } else if (match[17] !== undefined) {
+      // <u>souligné</u>
+      runs.push(
+        ...extractInlineStyles(match[18], {
+          ...baseFormat,
+          underline: true,
+        })
+      );
     }
 
     lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
-    runs.push({ text: text.substring(lastIndex), format: { ...DEFAULT_FORMAT } });
+    runs.push({ text: text.substring(lastIndex), format: { ...baseFormat } });
   }
 
-  return runs.length > 0 ? runs : [{ text, format: { ...DEFAULT_FORMAT } }];
+  return runs.length > 0 ? runs : [{ text, format: { ...baseFormat } }];
 };
 
 /**
@@ -127,7 +195,28 @@ const parseTable = (lines, startIndex) => {
 export const parseToAST = (mdText) => {
   if (!mdText) return [];
 
-  const lines = mdText.split('\n');
+  // Isole sur leur propre ligne les images Markdown ![alt](src) éventuellement collées à du texte
+  // (hors blocs de code ```) afin qu'elles soient toujours reconnues comme blocs image par DOCX et PPTX.
+  const rawLines = mdText.split('\n');
+  const lines = [];
+  let inCodeFence = false;
+  for (const rawLine of rawLines) {
+    if (rawLine.trimStart().startsWith('```')) {
+      inCodeFence = !inCodeFence;
+      lines.push(rawLine);
+      continue;
+    }
+    if (!inCodeFence && /!\[[^\]]*\]\([^)]+\)/.test(rawLine) && !rawLine.trim().startsWith('|')) {
+      const splitImg = rawLine
+        .replace(/([^\n])(!\[[^\]]*\]\([^)]+\))/g, '$1\n$2')
+        .replace(/(!\[[^\]]*\]\([^)]+\))([^\n])/g, '$1\n$2')
+        .split('\n');
+      lines.push(...splitImg);
+    } else {
+      lines.push(rawLine);
+    }
+  }
+
   const ast = [];
   let i = 0;
 
