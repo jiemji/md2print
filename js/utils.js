@@ -1,5 +1,8 @@
 /**
- * utils.js — Fonctions utilitaires partagées (fichiers, slugs, normalisation Markdown, images)
+ * @module utils
+ * @description Fonctions utilitaires partagées : manipulation de fichiers, génération de slugs,
+ * normalisation Markdown, gestion et rastérisation d'images/schémas Mermaid,
+ * et résolutions de balises personnalisées (callouts, badges, métriques).
  */
 
 /**
@@ -1074,10 +1077,17 @@ export const CALLOUT_CONFIGS = {
 };
 
 /**
+ * @typedef {object} CalloutInfo
+ * @property {string} kind - Identifiant canonique du type (ex: 'note', 'tip', 'warning', 'danger', 'important')
+ * @property {string} title - Titre affiché (par défaut ou personnalisé)
+ * @property {string} rawType - Type brut en majuscules (ex: 'NOTE', 'AVERTISSEMENT')
+ */
+
+/**
  * Résout le type normalisé et le libellé d'un callout Markdown.
  * @param {string} rawType - Type brut (ex: 'NOTE', 'WARNING', 'ASTUCE')
  * @param {string} [rawTitle] - Titre personnalisé optionnel
- * @returns {{ kind: string, title: string, rawType: string }}
+ * @returns {CalloutInfo}
  */
 export function resolveCallout(rawType, rawTitle) {
   const upper = (rawType || '').trim().toUpperCase();
