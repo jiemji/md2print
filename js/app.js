@@ -43,6 +43,7 @@ import { StyleSettingsManager } from './StyleSettingsManager.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
+import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 
 // --- État Applicatif Singleton ---
 const state = {
@@ -53,6 +54,7 @@ const state = {
   selectedFolderIndex: '',
   localImages: {},
   imageSeq: 1,
+  plannedSlides: null,
   currentViewport: 'report', // 'report' | 'slide'
   theme: 'dark', // 'dark' | 'sepia'
   editorWidthPct: 50,
@@ -683,6 +685,7 @@ function initEventListeners() {
   dom.mdEditor.addEventListener('input', (e) => {
     if (e.isComposing) return;
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    state.plannedSlides = null;
     if (!state.isDirty) {
       state.isDirty = true;
       updateFileNameDisplay();
@@ -738,6 +741,17 @@ function initEventListeners() {
       range.selectNode(cartouche);
       sel.removeAllRanges();
       sel.addRange(range);
+    }
+    if (state.currentViewport === 'slide') {
+      syncSlideToCursor();
+    }
+  });
+
+  dom.mdEditor.addEventListener('keyup', (e) => {
+    if (state.currentViewport === 'slide') {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+        syncSlideToCursor();
+      }
     }
   });
 
@@ -1395,6 +1409,50 @@ async function updatePreview() {
     iframeWin.addEventListener('scroll', () => {
       syncScrollIframeToEditor();
     });
+  } else if (iframeWin && state.currentViewport === 'slide') {
+    updatePlannedSlides();
+    syncSlideToCursor();
+  }
+}
+
+/**
+ * Met à jour la liste des diapositives planifiées à partir du Markdown courant.
+ * @returns {void}
+ */
+function updatePlannedSlides() {
+  state.plannedSlides = planSlides(state.markdown || '', resolveDocumentTitle(), {
+    pptConfig: state.outputConfig,
+    templateId: state.selectedPptTemplate,
+  });
+}
+
+/**
+ * En mode Slide, synchronise la diapositive affichée dans la fenêtre WYSIWYG
+ * avec l'emplacement actuel du curseur dans l'éditeur de texte.
+ * Si le curseur est déjà positionné dans la diapositive active, aucune action n'est effectuée ("sinon il ne se passe rien").
+ * @returns {void}
+ */
+function syncSlideToCursor() {
+  if (state.currentViewport !== 'slide') return;
+
+  const iframeWin = dom.previewIframe?.contentWindow;
+  if (!iframeWin || typeof iframeWin.showSlide !== 'function') return;
+
+  const offsets = getEditorSelectionOffsets(dom.mdEditor);
+  const textBefore = (state.markdown || '').substring(0, offsets?.start || 0);
+  const caretLineIndex = textBefore.split('\n').length - 1;
+
+  if (!state.plannedSlides || state.plannedSlides.length === 0) {
+    updatePlannedSlides();
+  }
+
+  const targetIndex = findSlideIndexForLine(state.plannedSlides, caretLineIndex);
+  const currentInIframe = typeof iframeWin.getCurrentSlideIndex === 'function'
+    ? iframeWin.getCurrentSlideIndex()
+    : -1;
+
+  if (targetIndex !== currentInIframe) {
+    iframeWin.showSlide(targetIndex);
   }
 }
 

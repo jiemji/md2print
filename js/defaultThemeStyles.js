@@ -1374,9 +1374,12 @@ html, body {
 
 .slide-content-inner {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .slide-header {
@@ -1386,6 +1389,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .slide-chapter-tag {
@@ -1406,8 +1410,12 @@ html, body {
 
 .slide-body {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   font-size: var(--slide-font-size-base);
   color: var(--slide-text-body);
+  overflow: hidden;
 }
 
 .slide-body p, .slide-body li {
@@ -1594,6 +1602,32 @@ html, body {
   height: auto;
   display: block;
   margin: 0 auto;
+}
+
+/* ==========================================================================
+   IMAGES DANS LES DIAPOSITIVES (Ajustement strict au cadre 16:9 sans débordement)
+   ========================================================================== */
+.slide-body p:has(img) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.slide img,
+.slide-body img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: auto;
+  border-radius: var(--slide-radius-sm);
 }
 
 /* ==========================================================================

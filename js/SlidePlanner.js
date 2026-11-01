@@ -249,6 +249,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
     slug: toSlug(globalTitle) || 'title',
     blocks: [],
     markdown: '',
+    startLine: 0,
+    endLine: 0,
   });
 
   let currentSection = null;
@@ -263,7 +265,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
     }
   };
 
-  const ensureContentSlide = (title) => {
+  const ensureContentSlide = (title, blockStartLine = null) => {
     if (!currentSlide) {
       const slideTitle = title || currentSection || 'Contenu';
       currentSlide = {
@@ -278,6 +280,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
         slug: toSlug(slideTitle) || `slide-${slides.length + 1}`,
         blocks: [],
         markdown: '',
+        startLine: blockStartLine !== null ? blockStartLine : 0,
+        endLine: blockStartLine !== null ? blockStartLine : 0,
       };
     }
     return currentSlide;
@@ -303,6 +307,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
           slug: toSlug(block.text) || `title-${slides.length + 1}`,
           blocks: [],
           markdown: '',
+          startLine: block.startLine ?? 0,
+          endLine: block.endLine ?? block.startLine ?? 0,
         });
         continue;
       }
@@ -322,6 +328,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
           slug: toSlug(currentSection) || `chapter-${slides.length + 1}`,
           blocks: [],
           markdown: '',
+          startLine: block.startLine ?? 0,
+          endLine: block.endLine ?? block.startLine ?? 0,
         });
         continue;
       }
@@ -339,6 +347,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
         slug: toSlug(block.text) || `slide-${slides.length + 1}`,
         blocks: [],
         markdown: '',
+        startLine: block.startLine ?? 0,
+        endLine: block.endLine ?? block.startLine ?? 0,
       };
       continue;
     }
@@ -350,20 +360,27 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
     }
 
     if (!currentSlide) {
-      ensureContentSlide();
+      ensureContentSlide(null, block.startLine ?? 0);
+    }
+
+    if (currentSlide.startLine === undefined) {
+      currentSlide.startLine = block.startLine ?? 0;
+    }
+    if (block.endLine !== undefined) {
+      currentSlide.endLine = block.endLine;
     }
 
     if (block.type === 'table') {
       if (currentSlide.blocks.length > 2) {
         flushSlide();
-        ensureContentSlide(currentSection ? `${currentSection} - Données` : 'Données');
+        ensureContentSlide(currentSection ? `${currentSection} - Données` : 'Données', block.startLine ?? 0);
       }
       currentSlide.blocks.push(block);
       flushSlide();
     } else if (block.type === 'image' || block.type === 'mermaid') {
       if (currentSlide.blocks.length > 2) {
         flushSlide();
-        ensureContentSlide(currentSection ? `${currentSection} - Schéma` : 'Schéma');
+        ensureContentSlide(currentSection ? `${currentSection} - Schéma` : 'Schéma', block.startLine ?? 0);
       }
       currentSlide.blocks.push(block);
       flushSlide();
@@ -373,7 +390,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
       if (listCount >= 7) {
         const prevTitle = currentSlide.title;
         flushSlide();
-        ensureContentSlide(`${prevTitle} (suite)`);
+        ensureContentSlide(`${prevTitle} (suite)`, block.endLine ?? 0);
       }
     } else if (block.type === 'paragraph') {
       currentSlide.blocks.push(block);
@@ -381,11 +398,56 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
       if (paraCount >= 6) {
         const prevTitle = currentSlide.title;
         flushSlide();
-        ensureContentSlide(`${prevTitle} (suite)`);
+        ensureContentSlide(`${prevTitle} (suite)`, block.endLine ?? 0);
       }
     }
   }
 
   flushSlide();
+
+  // Découpage et continuité des intervalles de lignes pour synchronisation bidirectionnelle
+  const totalDocLines = (cleanMd || '').split('\n').length;
+  for (let sIdx = 0; sIdx < slides.length; sIdx++) {
+    const s = slides[sIdx];
+    if (s.startLine === undefined) {
+      s.startLine = s.blocks?.[0]?.startLine ?? 0;
+    }
+    if (sIdx === 0) {
+      s.startLine = 0;
+    }
+    if (sIdx < slides.length - 1) {
+      const nextSlide = slides[sIdx + 1];
+      const nextStart = nextSlide.startLine !== undefined ? nextSlide.startLine : (nextSlide.blocks?.[0]?.startLine ?? totalDocLines);
+      s.endLine = Math.max(s.startLine, nextStart - 1);
+    } else {
+      s.endLine = Math.max(s.startLine, totalDocLines - 1);
+    }
+  }
+
   return slides;
+}
+
+/**
+ * Trouve l'index de la diapositive correspondant à une ligne donnée dans le texte Markdown.
+ * @param {PlannedSlide[]} slides - Liste des diapositives planifiées
+ * @param {number} lineIndex - Index de la ligne (0-based)
+ * @returns {number} Index de la diapositive (0-based)
+ */
+export function findSlideIndexForLine(slides, lineIndex) {
+  if (!slides || slides.length === 0) return 0;
+  if (lineIndex <= 0) return 0;
+
+  for (let i = 0; i < slides.length; i++) {
+    const s = slides[i];
+    if (lineIndex >= s.startLine && lineIndex <= s.endLine) {
+      return i;
+    }
+  }
+
+  // Si au-delà de la dernière diapositive
+  if (lineIndex > slides[slides.length - 1].endLine) {
+    return slides.length - 1;
+  }
+
+  return 0;
 }

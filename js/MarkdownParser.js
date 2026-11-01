@@ -273,8 +273,18 @@ export const parseToAST = (mdText) => {
   let pendingStart = 0;
   let pendingSize = 0;
   const annotatePendingRaw = () => {
-    if (ast.length > pendingSize) {
-      ast[ast.length - 1].raw = lines.slice(pendingStart, i).join('\n');
+    while (pendingSize < ast.length) {
+      const block = ast[pendingSize];
+      if (block.raw === undefined) {
+        block.raw = lines.slice(pendingStart, i).join('\n');
+      }
+      if (block.startLine === undefined) {
+        block.startLine = pendingStart;
+      }
+      if (block.endLine === undefined) {
+        block.endLine = Math.max(pendingStart, i - 1);
+      }
+      pendingSize++;
     }
   };
 

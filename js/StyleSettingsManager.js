@@ -18,7 +18,14 @@ export const DEFAULT_STYLE_CONFIG = {
     h2: { font: 'Calibri Light', size: '1.35rem', color: '#2F5496' },
     h3: { font: 'Calibri Light', size: '1.18rem', color: '#2F5496' },
     h4: { font: 'Calibri Light', size: '1.05rem', color: '#2F5496' },
-    body: { font: 'Calibri', size: '1rem', color: '#272727', lineHeight: '1.55' },
+    body: {
+      font: 'Calibri',
+      size: '1rem',
+      color: '#272727',
+      lineHeight: '1.55',
+      spacing: '14px',
+      textAlign: 'justify',
+    },
     link: { color: '#0563C1', hoverColor: '#104a8e' },
     metric: {
       font: 'Calibri Light',
@@ -27,12 +34,20 @@ export const DEFAULT_STYLE_CONFIG = {
       accentColor: '#2F5496',
       labelColor: '#595959',
     },
+    chapterTag: { font: 'Calibri Light', size: '0.82rem', color: '#C00000' },
+    badge: { font: 'Calibri', size: '0.75rem' },
+    badgeInfo: { color: '#2F5496', bg: '#f0f4f9', border: '#2F5496' },
+    badgeSuccess: { color: '#3b6321', bg: '#f2f8ee', border: '#70AD47' },
+    badgeWarning: { color: '#a44810', bg: '#fdf4ee', border: '#ED7D31' },
+    badgeDanger: { color: '#C00000', bg: '#fdf0f0', border: '#C00000' },
+    badgeImportant: { color: '#1f568a', bg: '#f1f7fc', border: '#5B9BD5' },
+    badgeNeutral: { color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
     calloutNote: { border: '#2F5496', bg: '#f0f4f9', title: '#1f3b6c' },
     calloutTip: { border: '#70AD47', bg: '#f2f8ee', title: '#4d7a2f' },
     calloutWarning: { border: '#ED7D31', bg: '#fdf4ee', title: '#ad5319' },
     calloutDanger: { border: '#C00000', bg: '#fdf0f0', title: '#910000' },
     calloutImportant: { border: '#5B9BD5', bg: '#f1f7fc', title: '#2b6da8' },
-    quote: { font: 'Calibri', size: '1.05rem', color: '#475569', border: '#2F5496' },
+    quote: { font: 'Calibri', size: '1.05rem', color: '#475569', border: '#2F5496', lineHeight: '1.6' },
     code: {
       font: 'Consolas',
       size: '0.92rem',
@@ -57,7 +72,14 @@ export const DEFAULT_STYLE_CONFIG = {
     h2: { font: 'Aptos Display', size: '1.85rem', color: '#0E2841' },
     h3: { font: 'Aptos Display', size: '1.35rem', color: '#0E2841' },
     h4: { font: 'Aptos Display', size: '1.15rem', color: '#64748b' },
-    body: { font: 'Aptos', size: '1.25rem', color: '#1e293b', lineHeight: '1.6' },
+    body: {
+      font: 'Aptos',
+      size: '1.25rem',
+      color: '#1e293b',
+      lineHeight: '1.6',
+      spacing: '10px',
+      textAlign: 'left',
+    },
     link: { color: '#C41718', hoverColor: '#FBAE40' },
     metric: {
       font: 'Aptos Display',
@@ -66,12 +88,20 @@ export const DEFAULT_STYLE_CONFIG = {
       accentColor: '#C41718',
       labelColor: '#64748b',
     },
+    chapterTag: { font: 'Aptos Display', size: '0.82rem', color: '#C41718' },
+    badge: { font: 'Aptos', size: '0.78rem' },
+    badgeInfo: { color: '#0E2841', bg: '#f1f4f8', border: '#0E2841' },
+    badgeSuccess: { color: '#196B24', bg: '#f0f7f1', border: '#196B24' },
+    badgeWarning: { color: '#ad5319', bg: '#fef3ec', border: '#E97132' },
+    badgeDanger: { color: '#C41718', bg: '#fdf1f1', border: '#C41718' },
+    badgeImportant: { color: '#0F9ED5', bg: '#eef8fc', border: '#0F9ED5' },
+    badgeNeutral: { color: '#1e293b', bg: '#f1f5f9', border: '#cbd5e1' },
     calloutNote: { border: '#0E2841', bg: '#f1f4f8', title: '#0E2841' },
     calloutTip: { border: '#196B24', bg: '#f0f7f1', title: '#196B24' },
     calloutWarning: { border: '#E97132', bg: '#fef3ec', title: '#E97132' },
     calloutDanger: { border: '#C41718', bg: '#fdf1f1', title: '#C41718' },
     calloutImportant: { border: '#0F9ED5', bg: '#eef8fc', title: '#0F9ED5' },
-    quote: { font: 'Aptos', size: '1.25rem', color: '#1e293b', border: '#0E2841' },
+    quote: { font: 'Aptos', size: '1.25rem', color: '#1e293b', border: '#0E2841', lineHeight: '1.6' },
     code: {
       font: 'Consolas',
       size: '1.05rem',
@@ -177,7 +207,21 @@ export function generateThemeCss(mode, config) {
   font-family: '${cfg.body.font}', sans-serif;
   font-size: ${cfg.body.size};
   color: ${cfg.body.color};
-  line-height: ${cfg.body.lineHeight};
+  line-height: ${cfg.body.lineHeight || '1.6'};
+  text-align: ${cfg.body.textAlign || 'left'};
+}
+.slide-body p {
+  margin-bottom: ${cfg.body.spacing || '10px'};
+}
+.slide-body p:has(img) {
+  margin-bottom: 0;
+}
+.slide img, .slide-body img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 .slide-body a {
   color: ${cfg.link.color};
@@ -196,11 +240,51 @@ export function generateThemeCss(mode, config) {
 .slide-body .metric-label {
   color: ${cfg.metric.labelColor};
 }
+.slide-chapter-tag {
+  font-family: '${cfg.chapterTag?.font || cfg.hMain.font}', sans-serif;
+  font-size: ${cfg.chapterTag?.size || '0.82rem'};
+  color: ${cfg.chapterTag?.color || '#C41718'};
+}
+.slide-body .badge {
+  font-family: '${cfg.badge?.font || cfg.body.font}', sans-serif;
+  font-size: ${cfg.badge?.size || '0.78rem'};
+}
+.slide-body .badge-info, .slide-body .badge-note {
+  color: ${cfg.badgeInfo?.color || '#0E2841'};
+  background-color: ${cfg.badgeInfo?.bg || '#f1f4f8'};
+  border: 1px solid ${cfg.badgeInfo?.border || '#0E2841'};
+}
+.slide-body .badge-success, .slide-body .badge-tip, .slide-body .badge-astuce, .slide-body .badge-ok, .slide-body .badge-valide {
+  color: ${cfg.badgeSuccess?.color || '#196B24'};
+  background-color: ${cfg.badgeSuccess?.bg || '#f0f7f1'};
+  border: 1px solid ${cfg.badgeSuccess?.border || '#196B24'};
+}
+.slide-body .badge-warning, .slide-body .badge-warn, .slide-body .badge-avertissement {
+  color: ${cfg.badgeWarning?.color || '#ad5319'};
+  background-color: ${cfg.badgeWarning?.bg || '#fef3ec'};
+  border: 1px solid ${cfg.badgeWarning?.border || '#E97132'};
+}
+.slide-body .badge-danger, .slide-body .badge-caution, .slide-body .badge-attention, .slide-body .badge-critique, .slide-body .badge-error {
+  color: ${cfg.badgeDanger?.color || '#C41718'};
+  background-color: ${cfg.badgeDanger?.bg || '#fdf1f1'};
+  border: 1px solid ${cfg.badgeDanger?.border || '#C41718'};
+}
+.slide-body .badge-important {
+  color: ${cfg.badgeImportant?.color || '#0F9ED5'};
+  background-color: ${cfg.badgeImportant?.bg || '#eef8fc'};
+  border: 1px solid ${cfg.badgeImportant?.border || '#0F9ED5'};
+}
+.slide-body .badge-neutral, .slide-body .badge-neutre, .slide-body .badge-gray, .slide-body .badge-default {
+  color: ${cfg.badgeNeutral?.color || '#1e293b'};
+  background-color: ${cfg.badgeNeutral?.bg || '#f1f5f9'};
+  border: 1px solid ${cfg.badgeNeutral?.border || '#cbd5e1'};
+}
 .slide-body blockquote {
   font-family: '${cfg.quote.font}', sans-serif;
   font-size: ${cfg.quote.size};
   color: ${cfg.quote.color};
   border-left-color: ${cfg.quote.border};
+  line-height: ${cfg.quote.lineHeight || '1.6'};
 }
 .slide-body pre, .slide-body code {
   font-family: '${cfg.code.font}', monospace;
@@ -285,7 +369,11 @@ export function generateThemeCss(mode, config) {
   font-family: '${cfg.body.font}', sans-serif;
   font-size: ${cfg.body.size};
   color: ${cfg.body.color};
-  line-height: ${cfg.body.lineHeight};
+  line-height: ${cfg.body.lineHeight || '1.55'};
+  text-align: ${cfg.body.textAlign || 'justify'};
+}
+.markdown-rendered-content p {
+  margin-bottom: ${cfg.body.spacing || '14px'};
 }
 .markdown-rendered-content a {
   color: ${cfg.link.color};
@@ -303,6 +391,40 @@ export function generateThemeCss(mode, config) {
 }
 .markdown-rendered-content .metric-label {
   color: ${cfg.metric.labelColor};
+}
+.markdown-rendered-content .badge {
+  font-family: '${cfg.badge?.font || cfg.body.font}', sans-serif;
+  font-size: ${cfg.badge?.size || '0.75rem'};
+}
+.markdown-rendered-content .badge-info, .markdown-rendered-content .badge-note {
+  color: ${cfg.badgeInfo?.color || '#2F5496'};
+  background-color: ${cfg.badgeInfo?.bg || '#f0f4f9'};
+  border: 1px solid ${cfg.badgeInfo?.border || '#2F5496'};
+}
+.markdown-rendered-content .badge-success, .markdown-rendered-content .badge-tip, .markdown-rendered-content .badge-astuce, .markdown-rendered-content .badge-ok, .markdown-rendered-content .badge-valide {
+  color: ${cfg.badgeSuccess?.color || '#3b6321'};
+  background-color: ${cfg.badgeSuccess?.bg || '#f2f8ee'};
+  border: 1px solid ${cfg.badgeSuccess?.border || '#70AD47'};
+}
+.markdown-rendered-content .badge-warning, .markdown-rendered-content .badge-warn, .markdown-rendered-content .badge-avertissement {
+  color: ${cfg.badgeWarning?.color || '#a44810'};
+  background-color: ${cfg.badgeWarning?.bg || '#fdf4ee'};
+  border: 1px solid ${cfg.badgeWarning?.border || '#ED7D31'};
+}
+.markdown-rendered-content .badge-danger, .markdown-rendered-content .badge-caution, .markdown-rendered-content .badge-attention, .markdown-rendered-content .badge-critique, .markdown-rendered-content .badge-error {
+  color: ${cfg.badgeDanger?.color || '#C00000'};
+  background-color: ${cfg.badgeDanger?.bg || '#fdf0f0'};
+  border: 1px solid ${cfg.badgeDanger?.border || '#C00000'};
+}
+.markdown-rendered-content .badge-important {
+  color: ${cfg.badgeImportant?.color || '#1f568a'};
+  background-color: ${cfg.badgeImportant?.bg || '#f1f7fc'};
+  border: 1px solid ${cfg.badgeImportant?.border || '#5B9BD5'};
+}
+.markdown-rendered-content .badge-neutral, .markdown-rendered-content .badge-neutre, .markdown-rendered-content .badge-gray, .markdown-rendered-content .badge-default {
+  color: ${cfg.badgeNeutral?.color || '#475569'};
+  background-color: ${cfg.badgeNeutral?.bg || '#f1f5f9'};
+  border: 1px solid ${cfg.badgeNeutral?.border || '#cbd5e1'};
 }
 .markdown-rendered-content .callout-note {
   border-left-color: ${cfg.calloutNote.border};
@@ -344,6 +466,7 @@ export function generateThemeCss(mode, config) {
   font-size: ${cfg.quote.size};
   color: ${cfg.quote.color};
   border-left-color: ${cfg.quote.border};
+  line-height: ${cfg.quote.lineHeight || '1.6'};
 }
 .markdown-rendered-content pre, .markdown-rendered-content code {
   font-family: '${cfg.code.font}', monospace;
@@ -406,7 +529,15 @@ export class StyleSettingsManager {
    */
   setConfig(mode, customConfig) {
     if (this.configs[mode] && customConfig && typeof customConfig === 'object') {
-      this.configs[mode] = { ...this.configs[mode], ...customConfig };
+      const defaults = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[mode]));
+      this.configs[mode] = { ...defaults };
+      for (const [key, val] of Object.entries(customConfig)) {
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          this.configs[mode][key] = { ...(defaults[key] || {}), ...val };
+        } else {
+          this.configs[mode][key] = val;
+        }
+      }
     }
   }
 
@@ -454,7 +585,7 @@ export class StyleSettingsManager {
         </header>
 
         <!-- Grille de travail : Formulaire à gauche / Aperçu à droite -->
-        <div class="style-config-body">
+        <div class="style-config-body" id="styleConfigBody">
           <!-- Colonne Gauche : Formulaire organisé en accordéons/cartes -->
           <div class="style-config-form-pane" id="styleConfigFormPane">
             
@@ -479,6 +610,30 @@ export class StyleSettingsManager {
               </div>
               <div class="config-card-content">
                 ${this.renderTagControlRow('body', 'Paragraphes et listes (p, li)')}
+                <div class="config-row">
+                  <div class="config-label-col">
+                    <span class="config-tag-label">Interligne et Mise en page des Paragraphes</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Interligne</label>
+                      <input type="text" class="text-input size-input" data-bind="body.lineHeight" placeholder="1.55">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Espacement après</label>
+                      <input type="text" class="text-input size-input" data-bind="body.spacing" placeholder="14px">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Alignement</label>
+                      <select class="select-input font-select" data-bind="body.textAlign">
+                        <option value="left">Gauche</option>
+                        <option value="justify">Justifié</option>
+                        <option value="center">Centré</option>
+                        <option value="right">Droite</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
                 <div class="config-row">
                   <div class="config-label-col">
                     <span class="config-tag-label">Liens hypertextes (a)</span>
@@ -545,7 +700,59 @@ export class StyleSettingsManager {
               </div>
             </div>
 
-            <!-- 4. Encarts d'alerte (Callouts) -->
+            <!-- 4. Tags et Badges d'état ([badge:type:texte], Tag de chapitre) -->
+            <div class="config-card">
+              <div class="config-card-header">
+                <span class="config-card-title">Tags et Badges d'état ([badge:type:texte], Tag de chapitre)</span>
+              </div>
+              <div class="config-card-content">
+                <div class="config-row">
+                  <div class="config-label-col">
+                    <span class="config-tag-label">Tag de chapitre (Sur-titre de diapositive)</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Police</label>
+                      ${this.renderFontSelect('chapterTag.font')}
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Taille</label>
+                      <input type="text" class="text-input size-input" data-bind="chapterTag.size" placeholder="0.82rem">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Couleur</label>
+                      <input type="color" class="color-picker-input" data-bind="chapterTag.color">
+                      <input type="text" class="text-input color-hex-input" data-bind="chapterTag.color" spellcheck="false">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="config-row">
+                  <div class="config-label-col">
+                    <span class="config-tag-label">Typographie générale des badges inline</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Police</label>
+                      ${this.renderFontSelect('badge.font')}
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Taille</label>
+                      <input type="text" class="text-input size-input" data-bind="badge.size" placeholder="0.75rem">
+                    </div>
+                  </div>
+                </div>
+
+                ${this.renderBadgeRow('badgeInfo', 'Tag / Badge Info ([badge:info:...])')}
+                ${this.renderBadgeRow('badgeSuccess', 'Tag / Badge Succès / Validé ([badge:success:...])')}
+                ${this.renderBadgeRow('badgeWarning', 'Tag / Badge Avertissement ([badge:warning:...])')}
+                ${this.renderBadgeRow('badgeDanger', 'Tag / Badge Danger / Critique ([badge:danger:...])')}
+                ${this.renderBadgeRow('badgeImportant', 'Tag / Badge Important ([badge:important:...])')}
+                ${this.renderBadgeRow('badgeNeutral', 'Tag / Badge Neutre ([badge:neutral:...])')}
+              </div>
+            </div>
+
+            <!-- 5. Encarts d'alerte (Callouts) -->
             <div class="config-card">
               <div class="config-card-header">
                 <span class="config-card-title">Encarts d'alerte et Recommandations (Callouts)</span>
@@ -577,6 +784,10 @@ export class StyleSettingsManager {
                     <div class="input-inline-group">
                       <label class="input-sublabel">Taille</label>
                       <input type="text" class="text-input size-input" data-bind="quote.size" placeholder="1.05rem">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Interligne</label>
+                      <input type="text" class="text-input size-input" data-bind="quote.lineHeight" placeholder="1.6">
                     </div>
                     <div class="input-inline-group">
                       <label class="input-sublabel">Couleur texte</label>
@@ -721,8 +932,11 @@ export class StyleSettingsManager {
 
           </div>
 
+          <!-- Slider / Séparateur vertical redimensionnable -->
+          <div class="style-config-resizer" id="styleConfigResizer" role="separator" aria-orientation="vertical" title="Glisser pour ajuster la largeur des panneaux"></div>
+
           <!-- Colonne Droite : Aperçu en Direct (Live Preview) -->
-          <div class="style-config-preview-pane">
+          <div class="style-config-preview-pane" id="styleConfigPreviewPane">
             <div class="preview-header-bar">
               <span class="preview-header-title">Aperçu en direct des balises personnalisées</span>
               <span class="preview-header-badge" id="previewModeBadge">Vision Rapport</span>
@@ -797,6 +1011,36 @@ export class StyleSettingsManager {
   }
 
   /**
+   * Génère le HTML pour les réglages d'un badge ou tag inline.
+   */
+  renderBadgeRow(bindKey, labelText) {
+    return `
+      <div class="config-row">
+        <div class="config-label-col">
+          <span class="config-tag-label">${labelText}</span>
+        </div>
+        <div class="config-inputs-col">
+          <div class="input-inline-group">
+            <label class="input-sublabel">Texte</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.color">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.color" spellcheck="false">
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Fond</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.bg">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.bg" spellcheck="false">
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Bordure</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.border">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.border" spellcheck="false">
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
    * Génère un menu déroulant de polices.
    */
   renderFontSelect(bindKey) {
@@ -835,6 +1079,40 @@ export class StyleSettingsManager {
     this.container.querySelector('#btnCloseStyleConfig')?.addEventListener('click', () => {
       this.onClose();
     });
+
+    // Slider vertical : redimensionnement interactif entre panneau de paramètres et aperçu
+    const resizer = this.container.querySelector('#styleConfigResizer');
+    const configBody = this.container.querySelector('#styleConfigBody');
+    const formPane = this.container.querySelector('#styleConfigFormPane');
+
+    if (resizer && configBody && formPane) {
+      let isDragging = false;
+
+      resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        resizer.classList.add('is-resizing');
+        document.body.classList.add('resizing-active');
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const rect = configBody.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const relativeX = e.clientX - rect.left;
+        const pct = Math.min(80, Math.max(25, (relativeX / rect.width) * 100));
+        const roundedPct = Math.round(pct * 10) / 10;
+        formPane.style.width = `${roundedPct}%`;
+        formPane.style.flex = `0 0 ${roundedPct}%`;
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        resizer.classList.remove('is-resizing');
+        document.body.classList.remove('resizing-active');
+      });
+    }
 
     // Synchronisation en temps réel des inputs (color picker, hex text, font, size)
     this.container.addEventListener('input', (e) => {
@@ -952,6 +1230,13 @@ export class StyleSettingsManager {
                 <span class="metric-label">Chiffre d'Affaires (+18%)</span>
               </div>
 
+              <p style="margin: 10px 0;">
+                <span class="badge badge-info">Q4 2026</span>
+                <span class="badge badge-success">Objectif Atteint</span>
+                <span class="badge badge-warning">À surveiller</span>
+                <span class="badge badge-danger">Bloquant</span>
+              </p>
+
               <blockquote>
                 La clarté et la concision garantissent l'impact des présentations de direction.
               </blockquote>
@@ -1001,6 +1286,15 @@ export class StyleSettingsManager {
             <div class="callout-title">Information importante</div>
             <p>La clôture des comptes s'effectue dans le respect des normes comptables établies.</p>
           </div>
+
+          <p style="margin: 12px 0;">
+            <span class="badge badge-info">Information</span>
+            <span class="badge badge-success">Validé</span>
+            <span class="badge badge-warning">En attente</span>
+            <span class="badge badge-danger">Critique</span>
+            <span class="badge badge-important">Priorité Haute</span>
+            <span class="badge badge-neutral">V1.4</span>
+          </p>
 
           <blockquote>
             L'excellence opérationnelle commence par la rigueur documentaire.

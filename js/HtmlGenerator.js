@@ -231,6 +231,12 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     return `<blockquote>${this.parser.parse(token.tokens)}</blockquote>`;
   };
 
+  renderer.image = function ({ href, title, text }) {
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+    const altAttr = text ? ` alt="${escapeHtml(text)}"` : ' alt=""';
+    return `<figure class="slide-image-box"><img src="${escapeHtml(href)}"${altAttr}${titleAttr} class="slide-image" loading="lazy"></figure>`;
+  };
+
   ensureMarkedExtensions();
 
   window.marked.setOptions({
@@ -458,6 +464,14 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
           });
         }
       }
+
+      window.showSlide = showSlide;
+      window.getCurrentSlideIndex = function() {
+        return currentSlideIndex;
+      };
+      window.getTotalSlides = function() {
+        return totalSlides;
+      };
 
       window.prevSlide = function() {
         if (currentSlideIndex > 0) showSlide(currentSlideIndex - 1);
