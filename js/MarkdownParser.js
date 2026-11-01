@@ -220,7 +220,21 @@ export const parseToAST = (mdText) => {
   const ast = [];
   let i = 0;
 
+  // Mémorise pour chaque bloc son Markdown source (propriété raw), afin que l'aperçu HTML
+  // en mode Slide puisse afficher exactement les mêmes blocs que chaque diapositive PowerPoint.
+  let pendingStart = 0;
+  let pendingSize = 0;
+  const annotatePendingRaw = () => {
+    if (ast.length > pendingSize) {
+      ast[ast.length - 1].raw = lines.slice(pendingStart, i).join('\n');
+    }
+  };
+
   while (i < lines.length) {
+    annotatePendingRaw();
+    pendingStart = i;
+    pendingSize = ast.length;
+
     const line = lines[i];
     const trimmed = line.trimEnd();
     const trimmedBoth = line.trim();
@@ -299,20 +313,30 @@ export const parseToAST = (mdText) => {
       continue;
     }
 
-    // --- Bloc de code (```) ---
-    if (trimmed.startsWith('```')) {
+    // --- Bloc de code (```) ou Schéma Mermaid (```mermaid) ---
+    if (trimmed.trimStart().startsWith('```')) {
+      const fenceHeader = trimmed.trimStart().replace(/^`+/, '').trim().toLowerCase();
+      const isMermaid = fenceHeader === 'mermaid' || fenceHeader.startsWith('mermaid ');
       const codeLines = [];
       i++;
-      while (i < lines.length && !lines[i].trimEnd().startsWith('```')) {
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
         codeLines.push(lines[i]);
         i++;
       }
       i++; // Ferme ```
-      ast.push({
-        type: 'paragraph',
-        isCode: true,
-        runs: [{ text: codeLines.join('\n'), format: { ...DEFAULT_FORMAT, code: true } }],
-      });
+      const rawCode = codeLines.join('\n');
+      if (isMermaid) {
+        ast.push({
+          type: 'mermaid',
+          code: rawCode,
+        });
+      } else {
+        ast.push({
+          type: 'paragraph',
+          isCode: true,
+          runs: [{ text: rawCode, format: { ...DEFAULT_FORMAT, code: true } }],
+        });
+      }
       continue;
     }
 
@@ -366,9 +390,17 @@ export const parseToAST = (mdText) => {
         type: 'paragraph',
         runs: extractInlineStyles(fullText),
       });
+    } else {
+      // Garde-fou : ligne non reconnue par les règles précédentes (ex: "-" isolé) traitée comme texte
+      ast.push({
+        type: 'paragraph',
+        runs: extractInlineStyles(lines[i].trim()),
+      });
+      i++;
     }
   }
 
+  annotatePendingRaw();
   return ast;
 };
 

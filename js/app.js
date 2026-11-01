@@ -12,6 +12,7 @@ import {
   resolveImagePaths,
   validateOutputConfig,
   pruneUnusedLocalImages,
+  renderMermaidBlocksMap,
 } from './utils.js';
 import {
   createCartoucheElement,
@@ -587,7 +588,8 @@ function initEventListeners() {
     if (plainText !== undefined) {
       e.preventDefault();
       clearCartoucheSelectionStyles(dom.mdEditor);
-      insertNodeAtEditorCaret(dom.mdEditor, document.createTextNode(plainText));
+      const normalizedPaste = plainText.replace(/\r\n?/g, '\n');
+      insertNodeAtEditorCaret(dom.mdEditor, document.createTextNode(normalizedPaste));
       syncFromEditorDOM();
     }
   });
@@ -885,9 +887,9 @@ function resolveDocumentTitle() {
 
 /**
  * Met à jour immédiatement l'iframe de prévisualisation avec le document HTML autonome.
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function updatePreview() {
+async function updatePreview() {
   if (previewDebounceTimer) {
     clearTimeout(previewDebounceTimer);
     previewDebounceTimer = null;
@@ -910,10 +912,13 @@ function updatePreview() {
     prevScrollRatio = 0;
   }
 
+  const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: resolveDocumentTitle(),
     viewMode: state.currentViewport,
     localImages: state.localImages,
+    mermaidSvgMap,
+    pptConfig: state.outputConfig,
   });
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -959,16 +964,19 @@ function updatePreview() {
 // --- Exports (HTML, DOCX, PPTX) ---
 
 /**
- * F4 — Exporte le document au format HTML autonome (.html) avec CSS et menu de navigation.
- * @returns {void}
+ * F4 — Exporte le document au format HTML autonome (.html) avec CSS, schémas Mermaid vectoriels et menu de navigation.
+ * @returns {Promise<void>}
  */
-function handleExportHtml() {
+async function handleExportHtml() {
   state.markdown = serializeEditorToMarkdown(dom.mdEditor);
   const title = resolveDocumentTitle();
+  const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: title,
     viewMode: state.currentViewport,
     localImages: state.localImages,
+    mermaidSvgMap,
+    pptConfig: state.outputConfig,
   });
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const filename = `${toSlug(title)}.html`;

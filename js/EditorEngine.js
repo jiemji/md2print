@@ -5,7 +5,12 @@
  * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS
  * et le formatage syntaxique en direct.
  */
-import { createImageCartouche, collapseBase64ToCartouches } from './utils.js';
+import {
+  createImageCartouche,
+  collapseBase64ToCartouches,
+  isMermaidHeaderLine,
+  findUnfencedMermaidBlockEnd,
+} from './utils.js';
 
 /**
  * Crée l'élément DOM graphique (cartouche de 2 lignes de hauteur) représentant une image Base64.
@@ -409,9 +414,17 @@ export function isMarkdownTableLine(line) {
 }
 
 /**
+ * Largeur maximale (en caractères ch) d'une colonne de tableau dans l'éditeur non-WYSIWYG.
+ * Au-delà de cette limite, le contenu de la cellule passe automatiquement à la ligne.
+ * @type {number}
+ */
+export const MAX_TABLE_COL_WIDTH_CH = 60;
+
+/**
  * Construit les éléments <span class="md-table-line"> pour un bloc contigu de lignes de tableau
- * en calculant la largeur maximale (en ch) de chaque colonne afin d'aligner visuellement toutes
- * les barres verticales | sans modifier le texte Markdown sous-jacent.
+ * en calculant la largeur maximale (en ch, plafonnée à MAX_TABLE_COL_WIDTH_CH = 60) de chaque colonne
+ * afin d'aligner visuellement toutes les barres verticales | et de renvoyer à la ligne les textes longs
+ * sans modifier le texte Markdown sous-jacent.
  * @param {string[]} tableLines
  * @returns {HTMLSpanElement[]}
  */
@@ -465,8 +478,13 @@ export function buildTableBlockRowSpans(tableLines) {
 
       const cellSpan = document.createElement('span');
       cellSpan.className = 'md-table-cell';
-      const targetWidth = Math.max(1, maxColWidths[colIdx] || 1);
+      const targetWidth = Math.min(
+        MAX_TABLE_COL_WIDTH_CH,
+        Math.max(1, maxColWidths[colIdx] || 1)
+      );
+      cellSpan.style.width = `${targetWidth}ch`;
       cellSpan.style.minWidth = `${targetWidth}ch`;
+      cellSpan.style.maxWidth = `${targetWidth}ch`;
       if (parts[p].length > 0) {
         cellSpan.appendChild(buildLineInlineNodes(parts[p]));
       }
@@ -555,7 +573,7 @@ export function setEditorContent(
   }
 
   const normalizedText = collapseBase64ToCartouches(
-    markdownText,
+    markdownText.replace(/\r\n?/g, '\n'),
     localImages,
     getNextImageIdFn
   ).replace(/\[binaire base64 masqué\]\r?\n?/gi, '');
@@ -563,17 +581,57 @@ export function setEditorContent(
   const lines = normalizedText.split('\n');
   const fragment = document.createDocumentFragment();
   let inCodeBlock = false;
+  let inMermaidBlock = false;
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    // Délimiteur de bloc de code (```)
+    // Délimiteur de bloc de code (```) ou de schéma Mermaid (```mermaid)
     if (line.trimStart().startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        const fenceLang = line.trimStart().replace(/^`+/, '').trim();
+        if (/^mermaid\b/i.test(fenceLang)) {
+          inMermaidBlock = true;
+        } else if (!fenceLang) {
+          let lookahead = i + 1;
+          while (
+            lookahead < lines.length &&
+            !lines[lookahead].trimStart().startsWith('```') &&
+            lines[lookahead].trim() === ''
+          ) {
+            lookahead++;
+          }
+          inMermaidBlock =
+            lookahead < lines.length && isMermaidHeaderLine(lines[lookahead]);
+        } else {
+          inMermaidBlock = false;
+        }
+      } else {
+        const closingMermaid = inMermaidBlock;
+        inCodeBlock = false;
+        inMermaidBlock = false;
+        if (line.length > 0) {
+          const fenceSpan = document.createElement('span');
+          fenceSpan.className = closingMermaid
+            ? 'md-mermaid-fence'
+            : 'md-codeblock-fence';
+          fenceSpan.textContent = line;
+          fragment.appendChild(fenceSpan);
+        }
+        if (i < lines.length - 1) {
+          fragment.appendChild(document.createTextNode('\n'));
+        }
+        i++;
+        continue;
+      }
+
       if (line.length > 0) {
         const fenceSpan = document.createElement('span');
-        fenceSpan.className = 'md-codeblock-fence';
+        fenceSpan.className = inMermaidBlock
+          ? 'md-mermaid-fence'
+          : 'md-codeblock-fence';
         fenceSpan.textContent = line;
         fragment.appendChild(fenceSpan);
       }
@@ -584,11 +642,13 @@ export function setEditorContent(
       continue;
     }
 
-    // Contenu interne d'un bloc de code (pas d'interprétation Markdown)
+    // Contenu interne d'un bloc de code ou d'un schéma Mermaid (pas d'interprétation Markdown)
     if (inCodeBlock) {
       if (line.length > 0) {
         const codeLineSpan = document.createElement('span');
-        codeLineSpan.className = 'md-codeblock-line';
+        codeLineSpan.className = inMermaidBlock
+          ? 'md-mermaid-line'
+          : 'md-codeblock-line';
         codeLineSpan.textContent = line;
         fragment.appendChild(codeLineSpan);
       }
@@ -597,6 +657,27 @@ export function setEditorContent(
       }
       i++;
       continue;
+    }
+
+    // Schéma Mermaid saisi directement sans délimiteurs ``` (ex: graph TB, flowchart LR, sequenceDiagram...)
+    if (isMermaidHeaderLine(line)) {
+      const endMermaidIdx = findUnfencedMermaidBlockEnd(lines, i);
+      if (endMermaidIdx > i) {
+        for (let m = i; m <= endMermaidIdx; m++) {
+          const mLine = lines[m];
+          if (mLine.length > 0) {
+            const mSpan = document.createElement('span');
+            mSpan.className = m === i ? 'md-mermaid-fence' : 'md-mermaid-line';
+            mSpan.textContent = mLine;
+            fragment.appendChild(mSpan);
+          }
+          if (m < lines.length - 1) {
+            fragment.appendChild(document.createTextNode('\n'));
+          }
+        }
+        i = endMermaidIdx + 1;
+        continue;
+      }
     }
 
     // Regroupement et alignement automatique des colonnes pour les blocs de tableaux Markdown

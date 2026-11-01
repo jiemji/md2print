@@ -2,7 +2,11 @@
  * PptxSlideBuilders.js — Constructeurs de diapositives PowerPoint (textes, listes, tableaux, images Base64)
  */
 import { parseToAST } from './MarkdownParser.js';
-import { ensureOfficeCompatibleImage } from './utils.js';
+import {
+  ensureOfficeCompatibleImage,
+  getImageDimensions,
+  renderMermaidToPngDataUrl,
+} from './utils.js';
 
 /**
  * Dessine les éléments du masque (master) sur une diapositive.
@@ -52,7 +56,178 @@ export function drawMasterElements(pptx, slide, elements, placeholders, template
 }
 
 /**
+ * Rendu direct d'une liste de blocs AST pré-découpés sur une diapositive PowerPoint.
+ * @param {object} pptx - Instance PptxGenJS
+ * @param {object} slide - Diapositive cible
+ * @param {Array<object>} blocks - Blocs AST attribués à cette diapositive
+ * @param {{ x: number, y: number, w: number, h: number }} area - Zone de contenu utile
+ * @param {object} template - Configuration du template actif
+ * @param {object} [tableFormat={}] - Formatage des tableaux
+ * @returns {Promise<void>}
+ */
+export async function renderBlocksToPptxSlide(
+  pptx,
+  slide,
+  blocks,
+  area,
+  template,
+  tableFormat = {}
+) {
+  if (!blocks?.length) return;
+  const marginX = area.x;
+  const contentW = area.w;
+  const maxY = area.y + area.h;
+  let currentY = area.y;
+  const theme = template.theme;
+  const fontBody = template.fonts?.body || 'Calibri';
+  let textRuns = [];
+  let textH = 0;
+
+  const flushText = () => {
+    if (textRuns.length > 0) {
+      slide.addText(textRuns, {
+        x: marginX,
+        y: currentY,
+        w: contentW,
+        h: textH,
+        fontFace: fontBody,
+        color: theme?.text || '333333',
+        fontSize: 12,
+        valign: 'top',
+        margin: 0,
+      });
+      currentY += textH;
+      textRuns = [];
+      textH = 0;
+    }
+  };
+
+  for (const block of blocks) {
+    if (block.type === 'table') {
+      flushText();
+      const tH = (block.rows?.length || 1) * 0.4 + 0.2;
+      addPptTable(slide, block.rows, currentY, marginX, contentW, theme, fontBody, tableFormat);
+      currentY += tH;
+    } else if (block.type === 'mermaid') {
+      flushText();
+      const pngDataUrl = await renderMermaidToPngDataUrl(block.code);
+      if (pngDataUrl) {
+        const availH = Math.max(1.8, maxY - currentY - 0.15);
+        const dims = await getImageDimensions(pngDataUrl, contentW * 96, availH * 96);
+        const wIn = dims.width / 96;
+        const hIn = dims.height / 96;
+        const xCentered = marginX + Math.max(0, (contentW - wIn) / 2);
+        slide.addImage({
+          data: pngDataUrl,
+          x: xCentered,
+          y: currentY,
+          w: wIn,
+          h: hIn,
+        });
+        currentY += hIn + 0.2;
+      }
+    } else if (block.type === 'image') {
+      if (block.src && block.src.startsWith('data:image/')) {
+        flushText();
+        const compatSrc = await ensureOfficeCompatibleImage(block.src);
+        const imgH = 2.8;
+        const imgW = 4.6;
+        slide.addImage({
+          data: compatSrc,
+          x: marginX,
+          y: currentY,
+          w: imgW,
+          h: imgH,
+        });
+        currentY += imgH + 0.2;
+      }
+    } else if (block.type === 'separator') {
+      flushText();
+      slide.addShape('rect', {
+        x: marginX,
+        y: currentY + 0.08,
+        w: contentW,
+        h: 0.02,
+        fill: { color: 'CBD5E1' },
+      });
+      currentY += 0.22;
+    } else if (block.type === 'header') {
+      let bOpts = { breakLine: true };
+      let h = 0.3;
+      if (block.level === 3) {
+        bOpts = {
+          fontSize: 18,
+          bold: true,
+          color: theme?.primary || '003366',
+          fontFace: template.fonts?.title || 'Calibri',
+        };
+        h = 0.5;
+      } else if (block.level === 4) {
+        bOpts = {
+          fontSize: 16,
+          bold: true,
+          color: theme?.secondary || '666666',
+          fontFace: template.fonts?.title || 'Calibri',
+        };
+        h = 0.4;
+      } else if (block.level >= 5) {
+        bOpts = {
+          fontSize: 14,
+          underline: true,
+          color: theme?.text || '333333',
+          fontFace: template.fonts?.title || 'Calibri',
+        };
+        h = 0.35;
+      }
+      pushRuns(block.runs, bOpts, textRuns);
+      textH += h;
+    } else if (block.type === 'list_item') {
+      const bOpts = {
+        fontSize: 12,
+        color: theme?.text || '333333',
+        fontFace: fontBody,
+        breakLine: true,
+      };
+      if (block.listType === 'unordered') bOpts.bullet = true;
+      else if (block.listType === 'ordered') bOpts.bullet = { type: 'number' };
+      if (block.level > 0) bOpts.indentLevel = block.level;
+      const totalLen =
+        block.runs?.reduce((a, r) => a + (r.text?.length || 0), 0) ||
+        block.text?.length ||
+        0;
+      const h = 0.3 * Math.max(Math.ceil(totalLen / (contentW * 12)), 1);
+      pushRuns(block.runs, bOpts, textRuns);
+      textH += h;
+    } else if (block.type === 'paragraph') {
+      const bOpts = {
+        fontSize: block.isCode ? 10.5 : 12,
+        italic: Boolean(block.isQuote),
+        color: block.isQuote
+          ? theme?.secondary || '475569'
+          : theme?.text || '333333',
+        fontFace: block.isCode ? 'Consolas' : fontBody,
+        breakLine: true,
+      };
+      const fullBlockText = block.runs
+        ? block.runs.map((r) => r.text).join('')
+        : block.text || '';
+      const explicitLineCount = fullBlockText.split('\n').length;
+      const wrappedLineCount = Math.ceil(fullBlockText.length / (contentW * 12));
+      const h = 0.28 * Math.max(explicitLineCount, wrappedLineCount, 1);
+      if (block.runs && block.runs.length > 0) {
+        pushRuns(block.runs, bOpts, textRuns);
+      } else {
+        textRuns.push({ text: '', options: bOpts });
+      }
+      textH += h;
+    }
+  }
+  flushText();
+}
+
+/**
  * Parse une section Markdown et injecte son contenu sur une ou plusieurs diapositives.
+ * Reste disponible pour la rétrocompatibilité des appels directs.
  * @param {function} createSlideFn - Factory créant une nouvelle diapositive
  * @param {string} mdText - Contenu Markdown de la section
  * @param {{ x: number, y: number, w: number, h: number }} area - Zone de contenu utile
@@ -107,13 +282,36 @@ export async function parseMarkdownToSlide(
   for (const block of ast) {
     if (block.type === 'table') {
       flushText();
-      const tH = block.rows.length * 0.4 + 0.2;
+      const tH = (block.rows?.length || 1) * 0.4 + 0.2;
       if (currentY + tH > maxY && currentY > area.y) {
         slide = null;
         currentY = area.y;
       }
       addPptTable(getSlide(), block.rows, currentY, marginX, contentW, theme, fontBody, tableFormat);
       currentY += tH;
+    } else if (block.type === 'mermaid') {
+      flushText();
+      const pngDataUrl = await renderMermaidToPngDataUrl(block.code);
+      if (pngDataUrl) {
+        const remainingH = maxY - currentY;
+        if (remainingH < 1.8 && currentY > area.y) {
+          slide = null;
+          currentY = area.y;
+        }
+        const availH = Math.max(1.8, maxY - currentY - 0.15);
+        const dims = await getImageDimensions(pngDataUrl, contentW * 96, availH * 96);
+        const wIn = dims.width / 96;
+        const hIn = dims.height / 96;
+        const xCentered = marginX + Math.max(0, (contentW - wIn) / 2);
+        getSlide().addImage({
+          data: pngDataUrl,
+          x: xCentered,
+          y: currentY,
+          w: wIn,
+          h: hIn,
+        });
+        currentY += hIn + 0.2;
+      }
     } else if (block.type === 'image') {
       if (block.src && block.src.startsWith('data:image/')) {
         flushText();
@@ -135,18 +333,9 @@ export async function parseMarkdownToSlide(
       }
     } else if (block.type === 'separator') {
       flushText();
-      if (currentY + 0.25 > maxY && currentY > area.y) {
-        slide = null;
-        currentY = area.y;
-      }
-      getSlide().addShape('rect', {
-        x: marginX,
-        y: currentY + 0.08,
-        w: contentW,
-        h: 0.02,
-        fill: { color: 'CBD5E1' },
-      });
-      currentY += 0.22;
+      slide = null;
+      currentY = area.y;
+      continue;
     } else if (block.type === 'header') {
       if (block.level === 1) {
         flushText();
@@ -209,7 +398,10 @@ export async function parseMarkdownToSlide(
       if (block.listType === 'unordered') bOpts.bullet = true;
       else if (block.listType === 'ordered') bOpts.bullet = { type: 'number' };
       if (block.level > 0) bOpts.indentLevel = block.level;
-      const totalLen = block.runs.reduce((a, r) => a + r.text.length, 0);
+      const totalLen =
+        block.runs?.reduce((a, r) => a + (r.text?.length || 0), 0) ||
+        block.text?.length ||
+        0;
       const h = 0.3 * Math.max(Math.ceil(totalLen / (contentW * 12)), 1);
       if (currentY + textH + h > maxY && (currentY > area.y || textH > 0)) {
         flushText();
@@ -228,7 +420,9 @@ export async function parseMarkdownToSlide(
         fontFace: block.isCode ? 'Consolas' : fontBody,
         breakLine: true,
       };
-      const fullBlockText = block.runs.map((r) => r.text).join('');
+      const fullBlockText = block.runs
+        ? block.runs.map((r) => r.text).join('')
+        : block.text || '';
       const explicitLineCount = fullBlockText.split('\n').length;
       const wrappedLineCount = Math.ceil(fullBlockText.length / (contentW * 12));
       const h = 0.28 * Math.max(explicitLineCount, wrappedLineCount, 1);
@@ -237,8 +431,11 @@ export async function parseMarkdownToSlide(
         slide = null;
         currentY = area.y;
       }
-      if (block.runs.length === 0) textRuns.push({ text: '', options: bOpts });
-      else pushRuns(block.runs, bOpts, textRuns);
+      if (block.runs && block.runs.length > 0) {
+        pushRuns(block.runs, bOpts, textRuns);
+      } else {
+        textRuns.push({ text: '', options: bOpts });
+      }
       textH += h;
     }
   }
@@ -286,7 +483,7 @@ function pushRuns(runs, baseOpts, textRuns) {
  * @returns {void}
  */
 function addPptTable(slide, rows, y, x, w, theme, font, tf = {}) {
-  if (!rows.length) return;
+  if (!rows?.length) return;
   const cc = rows[0].length;
   const fmt = {
     hFill: tf.headerFill || 'E0E0E0',
@@ -301,7 +498,7 @@ function addPptTable(slide, rows, y, x, w, theme, font, tf = {}) {
   const fRows = rows.map((row, ri) => {
     const isH = ri === 0;
     return row.map((cell) => ({
-      text: cell.replace(/<br\s*\/?>/gi, '\n'),
+      text: (cell || '').replace(/<br\s*\/?>/gi, '\n'),
       options: {
         fill: isH ? fmt.hFill : ri % 2 === 0 ? fmt.rFill : fmt.rAlt,
         color: isH ? fmt.hColor : theme?.text || '333333',

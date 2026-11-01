@@ -172,6 +172,29 @@ export const dataUrlToUint8Array = (dataUrl) => {
 };
 
 /**
+ * Réduit des dimensions (en conservant le ratio) pour qu'elles tiennent dans une boîte maximale.
+ * Algorithme partagé par getImageDimensions() et le planificateur de diapositives (SlidePlanner.js).
+ * @param {number} width - Largeur d'origine
+ * @param {number} height - Hauteur d'origine
+ * @param {number} maxWidth - Largeur maximale autorisée
+ * @param {number} maxHeight - Hauteur maximale autorisée
+ * @returns {{ width: number, height: number }}
+ */
+export const fitDimensions = (width, height, maxWidth, maxHeight) => {
+  let w = width || maxWidth;
+  let h = height || maxHeight;
+  if (w > maxWidth) {
+    h = Math.round((h * maxWidth) / w);
+    w = maxWidth;
+  }
+  if (h > maxHeight) {
+    w = Math.round((w * maxHeight) / h);
+    h = maxHeight;
+  }
+  return { width: Math.max(1, w), height: Math.max(1, h) };
+};
+
+/**
  * Calcule les dimensions d'affichage d'une image Base64 en conservant son ratio.
  * @param {string} dataUrl
  * @param {number} maxWidth
@@ -182,17 +205,7 @@ export const getImageDimensions = (dataUrl, maxWidth = 520, maxHeight = 340) =>
   new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      let w = img.naturalWidth || maxWidth;
-      let h = img.naturalHeight || maxHeight;
-      if (w > maxWidth) {
-        h = Math.round((h * maxWidth) / w);
-        w = maxWidth;
-      }
-      if (h > maxHeight) {
-        w = Math.round((w * maxHeight) / h);
-        h = maxHeight;
-      }
-      resolve({ width: Math.max(1, w), height: Math.max(1, h) });
+      resolve(fitDimensions(img.naturalWidth, img.naturalHeight, maxWidth, maxHeight));
     };
     img.onerror = () => resolve({ width: maxWidth, height: Math.round(maxHeight * 0.65) });
     img.src = dataUrl;
@@ -280,6 +293,174 @@ export const resolveImagePaths = (markdownText, localImages = {}) => {
 };
 
 /**
+ * Normalise le code source d'un bloc Mermaid (fins de ligne LF et trim) pour servir de clé de cache fiable.
+ * @param {string} [code='']
+ * @returns {string}
+ */
+export const normalizeMermaidCode = (code = '') =>
+  String(code)
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+/**
+ * Indique si une ligne correspond à l'en-tête de déclaration d'un diagramme Mermaid
+ * (ex: graph TB, flowchart LR, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie...).
+ * @param {string} [line='']
+ * @returns {boolean}
+ */
+export const isMermaidHeaderLine = (line = '') => {
+  const trimmed = line.trim();
+  return /^(?:graph\s+(?:TB|TD|BT|RL|LR)|flowchart\s+(?:TB|TD|BT|RL|LR)|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|pie(?:\s+title\b)?|mindmap|timeline|journey|gitGraph|quadrantChart|xychart-beta)\b/i.test(
+    trimmed
+  );
+};
+
+/**
+ * Indique si une ligne fait partie de la syntaxe interne d'un diagramme Mermaid non délimité par ```.
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isMermaidSyntaxLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  if (
+    /^(?:subgraph|end|style|classDef|class|click|linkStyle|direction|participant|actor|note|loop|alt|else|opt|par|and|rect|activate|deactivate|autonumber|title|section|dateFormat|axisFormat|tickInterval|excludes|includes|todayMarker|state|accTitle|accDescr|%%)\b/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+
+  if (/-->|-\.->|==>|---|--\s|-\.-|\.\.>|o--o|x--x|<-->|:::/i.test(trimmed)) {
+    return true;
+  }
+
+  if (/^[A-Za-z0-9_][\w-]*\s*(?:\[|\(|\{|\>|:)/.test(trimmed)) {
+    return true;
+  }
+
+  if (/^(?: {2,}|\t+)\S/.test(line)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Détermine l'index de la dernière ligne appartenant à un bloc Mermaid non entouré de ```
+ * commençant à l'index startIndex.
+ * @param {string[]} lines - Tableau des lignes du document
+ * @param {number} startIndex - Index de la ligne d'en-tête Mermaid (ex: graph TB)
+ * @returns {number} Index de fin (inclusif) du bloc Mermaid
+ */
+export const findUnfencedMermaidBlockEnd = (lines, startIndex) => {
+  let lastValidIdx = startIndex;
+  let subgraphDepth = 0;
+  let k = startIndex + 1;
+
+  while (k < lines.length) {
+    const rawLine = lines[k];
+    const trimmed = rawLine.trim();
+
+    if (trimmed === '') {
+      k++;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      break;
+    }
+
+    if (subgraphDepth === 0) {
+      if (
+        /^#{1,6}\s+/.test(trimmed) ||
+        /^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed) ||
+        /^>\s?/.test(rawLine) ||
+        /^\|.*\|/.test(trimmed) ||
+        /^(?:[-*+]|\d+[.)])\s+/.test(rawLine)
+      ) {
+        break;
+      }
+    }
+
+    if (subgraphDepth > 0 || isMermaidSyntaxLine(rawLine)) {
+      if (/^(?:subgraph|loop|alt|opt|par|rect)\b/i.test(trimmed)) {
+        subgraphDepth++;
+      } else if (/^end\b/i.test(trimmed)) {
+        subgraphDepth = Math.max(0, subgraphDepth - 1);
+      }
+      lastValidIdx = k;
+      k++;
+      continue;
+    }
+
+    break;
+  }
+
+  return lastValidIdx;
+};
+
+/**
+ * Enveloppe automatiquement dans des balises ```mermaid ... ``` les schémas Mermaid
+ * saisis directement dans le Markdown sans délimiteurs ``` (ou dans un bloc ``` sans langue),
+ * afin qu'ils soient rendus uniformément en HTML, Word et PowerPoint.
+ * @param {string} markdownText
+ * @returns {string}
+ */
+export const wrapUnfencedMermaidBlocks = (markdownText) => {
+  if (!markdownText) return '';
+  const lines = markdownText.replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmedStart = line.trimStart();
+
+    if (trimmedStart.startsWith('```')) {
+      const fenceLang = trimmedStart.replace(/^`+/, '').trim();
+      const blockLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        blockLines.push(lines[i]);
+        i++;
+      }
+      const closingFence = i < lines.length ? lines[i] : '```';
+      if (i < lines.length) i++;
+
+      const firstNonEmpty = blockLines.find((l) => l.trim().length > 0) || '';
+      if (!fenceLang && isMermaidHeaderLine(firstNonEmpty)) {
+        out.push('```mermaid');
+      } else {
+        out.push(line);
+      }
+      out.push(...blockLines);
+      out.push(closingFence);
+      continue;
+    }
+
+    if (isMermaidHeaderLine(line)) {
+      const endIdx = findUnfencedMermaidBlockEnd(lines, i);
+      if (endIdx > i) {
+        out.push('```mermaid');
+        for (let m = i; m <= endIdx; m++) {
+          out.push(lines[m]);
+        }
+        out.push('```');
+        i = endIdx + 1;
+        continue;
+      }
+    }
+
+    out.push(line);
+    i++;
+  }
+
+  return out.join('\n');
+};
+
+/**
  * Normalise et répare automatiquement les tableaux et particularités Markdown.
  * @param {string} rawMarkdown
  * @returns {string}
@@ -287,24 +468,41 @@ export const resolveImagePaths = (markdownText, localImages = {}) => {
 export const normalizeMarkdown = (rawMarkdown) => {
   if (!rawMarkdown) return '';
 
-  // Nettoie les ancres factices devant les titres (ex: [title](link)# Mon Titre)
-  let text = rawMarkdown.replace(/^\[.*?\]\(.*?\)\s*(#+)/gm, '$1');
+  // Encapsule les éventuels schémas Mermaid non délimités par ```mermaid
+  let text = wrapUnfencedMermaidBlocks(rawMarkdown);
 
-  // Espaces insécables devant le symbole €
-  text = text
-    .replace(/(\d+)\s+(\d+)\s+(\d+)\s*€/g, '$1\u00A0$2\u00A0$3\u00A0€')
-    .replace(/(\d+)\s+(\d+)\s*€/g, '$1\u00A0$2\u00A0€')
-    .replace(/(\d+)\s*€/g, '$1\u00A0€');
+  // Nettoie les ancres factices devant les titres (ex: [title](link)# Mon Titre)
+  text = text.replace(/^\[.*?\]\(.*?\)\s*(#+)/gm, '$1');
 
   const lines = text.split('\n');
   const normalizedLines = [];
+  let inCodeFence = false;
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
 
-    if (trimmed.includes('|') && !trimmed.startsWith('```') && i + 1 < lines.length) {
+    if (trimmed.startsWith('```')) {
+      inCodeFence = !inCodeFence;
+      normalizedLines.push(line);
+      i++;
+      continue;
+    }
+
+    if (inCodeFence) {
+      normalizedLines.push(line);
+      i++;
+      continue;
+    }
+
+    // Espaces insécables devant le symbole € hors blocs de code
+    const formattedLine = line
+      .replace(/(\d+)\s+(\d+)\s+(\d+)\s*€/g, '$1\u00A0$2\u00A0$3\u00A0€')
+      .replace(/(\d+)\s+(\d+)\s*€/g, '$1\u00A0$2\u00A0€')
+      .replace(/(\d+)\s*€/g, '$1\u00A0€');
+
+    if (trimmed.includes('|') && i + 1 < lines.length) {
       const nextLine = lines[i + 1].trim();
       const isDelimiterCandidate =
         /^\|?(\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?$/.test(nextLine) ||
@@ -387,7 +585,7 @@ export const normalizeMarkdown = (rawMarkdown) => {
       }
     }
 
-    normalizedLines.push(line);
+    normalizedLines.push(formattedLine);
     i++;
   }
 
@@ -457,4 +655,398 @@ export const pruneUnusedLocalImages = (markdownText = '', localImages = {}) => {
   }
 
   return localImages;
+};
+
+let mermaidInitialized = false;
+let mermaidIdSeq = 1;
+const mermaidSvgCache = new Map();
+
+/**
+ * Initialise la bibliothèque locale window.mermaid si disponible.
+ * @returns {boolean}
+ */
+function ensureMermaidInitialized() {
+  if (typeof window === 'undefined' || !window.mermaid) return false;
+  if (!mermaidInitialized) {
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      theme: 'default',
+      fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      flowchart: {
+        htmlLabels: true,
+        useMaxWidth: true,
+        curve: 'basis',
+        padding: 15,
+      },
+      sequence: {
+        useMaxWidth: true,
+      },
+    });
+    mermaidInitialized = true;
+  }
+  return true;
+}
+
+/**
+ * Convertit un bloc de code Mermaid en chaîne SVG via window.mermaid.render().
+ * Utilise un conteneur hors-écran sur fond clair pour garantir des mesures DOM exactes
+ * quel que soit le thème actif (Sombre ou Sépia), ainsi qu'un cache en mémoire.
+ * @param {string} code - Code source du schéma Mermaid
+ * @returns {Promise<string|null>} Balisage <svg> ou null si la syntaxe est incomplète/invalide
+ */
+export const renderMermaidToSvg = async (code) => {
+  const trimmedCode = normalizeMermaidCode(code);
+  if (!trimmedCode || !ensureMermaidInitialized()) return null;
+
+  if (mermaidSvgCache.has(trimmedCode)) {
+    return mermaidSvgCache.get(trimmedCode);
+  }
+
+  const renderId = `md2print-mmd-${mermaidIdSeq++}`;
+  let hostEl = null;
+  try {
+    if (typeof document !== 'undefined' && document.body) {
+      hostEl = document.createElement('div');
+      hostEl.id = `host-${renderId}`;
+      hostEl.style.cssText =
+        'position:fixed;left:-9999px;top:0;width:1600px;background:#ffffff;color:#0f172a;font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:14px;line-height:1.4;opacity:0;pointer-events:none;z-index:-1;';
+      document.body.appendChild(hostEl);
+    }
+
+    const result = await window.mermaid.render(renderId, trimmedCode, hostEl || undefined);
+    const svg = result?.svg || null;
+    if (svg) {
+      if (mermaidSvgCache.size >= 60) {
+        const firstKey = mermaidSvgCache.keys().next().value;
+        mermaidSvgCache.delete(firstKey);
+      }
+      mermaidSvgCache.set(trimmedCode, svg);
+    }
+    return svg;
+  } catch {
+    return null;
+  } finally {
+    if (typeof document !== 'undefined') {
+      hostEl?.remove();
+      document.getElementById(renderId)?.remove();
+      document.getElementById(`d${renderId}`)?.remove();
+      document.getElementById(`i${renderId}`)?.remove();
+    }
+  }
+};
+
+/**
+ * Pré-calcule le rendu SVG de tous les blocs Mermaid (délimités par ```mermaid ou directs)
+ * présents dans un texte Markdown.
+ * @param {string} markdownText - Texte Markdown brut ou normalisé
+ * @returns {Promise<Record<string, string>>} Dictionnaire { [codeMermaidNormalized]: svgMarkup }
+ */
+export const renderMermaidBlocksMap = async (markdownText) => {
+  const map = {};
+  if (!markdownText) return map;
+
+  const wrappedMarkdown = wrapUnfencedMermaidBlocks(markdownText);
+  if (!/```+\s*mermaid\b/i.test(wrappedMarkdown)) return map;
+
+  const lines = wrappedMarkdown.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const trimmed = lines[i].trimStart();
+    if (/^```+\s*mermaid\b/i.test(trimmed)) {
+      const blockLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        blockLines.push(lines[i]);
+        i++;
+      }
+      i++;
+      const blockCode = normalizeMermaidCode(blockLines.join('\n'));
+      if (blockCode && !map[blockCode]) {
+        const svg = await renderMermaidToSvg(blockCode);
+        if (svg) {
+          map[blockCode] = svg;
+        }
+      }
+      continue;
+    }
+    i++;
+  }
+  return map;
+};
+
+/**
+ * Dessine un rectangle aux coins arrondis dans un contexte Canvas 2D.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @param {number} r
+ * @returns {void}
+ */
+function traceRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+/**
+ * Remplace les éventuels <foreignObject> d'un élément SVG par des éléments <text> / <tspan> SVG purs
+ * (en préservant les sauts de ligne <br/>) pour garantir l'absence de restriction SecurityError
+ * lors de la rastérisation Canvas vers PNG pour Word et PowerPoint.
+ * @param {SVGElement} svgEl
+ * @returns {void}
+ */
+function convertForeignObjectsToSvgText(svgEl) {
+  const foreignObjects = Array.from(svgEl.querySelectorAll('foreignObject, foreignobject'));
+  foreignObjects.forEach((fo) => {
+    const clone = fo.cloneNode(true);
+    clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+    const rawLines = (clone.textContent || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    const w = parseFloat(fo.getAttribute('width') || '120') || 120;
+    const h = parseFloat(fo.getAttribute('height') || '24') || 24;
+    const x = parseFloat(fo.getAttribute('x') || '0') || 0;
+    const y = parseFloat(fo.getAttribute('y') || '0') || 0;
+
+    const textEl = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const centerX = x + w / 2;
+    const lineHeight = 16;
+    const totalTextH = Math.max(0, (rawLines.length - 1) * lineHeight);
+    const startY = y + h / 2 - totalTextH / 2 + 4.5;
+
+    textEl.setAttribute('text-anchor', 'middle');
+    textEl.setAttribute('fill', '#0f172a');
+    textEl.setAttribute('font-family', 'Segoe UI, Arial, sans-serif');
+    textEl.setAttribute('font-size', '13');
+
+    if (rawLines.length <= 1) {
+      textEl.setAttribute('x', String(centerX));
+      textEl.setAttribute('y', String(startY));
+      textEl.textContent = rawLines[0] || '';
+    } else {
+      rawLines.forEach((lineStr, idx) => {
+        const tspan = svgEl.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        tspan.setAttribute('x', String(centerX));
+        tspan.setAttribute('y', String(startY + idx * lineHeight));
+        tspan.textContent = lineStr;
+        textEl.appendChild(tspan);
+      });
+    }
+    fo.replaceWith(textEl);
+  });
+}
+
+/**
+ * Géométrie du cadre ombré dessiné autour des schémas Mermaid lors de la rastérisation PNG.
+ * Partagée avec le planificateur de diapositives pour un calcul de hauteur identique HTML / PPTX.
+ * @type {Readonly<{ padX: number, padY: number, shadowPad: number, scale: number, minW: number, minH: number }>}
+ */
+export const MERMAID_FRAME = Object.freeze({
+  padX: 28,
+  padY: 22,
+  shadowPad: 12,
+  scale: 2,
+  minW: 220,
+  minH: 110,
+});
+
+/**
+ * Lit la taille intrinsèque (viewBox ou width/height) d'un élément <svg> Mermaid ou d'une chaîne SVG,
+ * bornée aux dimensions minimales du cadre.
+ * Compatible avec les navigateurs et Node.js.
+ * @param {SVGElement|string} svgElOrString
+ * @returns {{ diagramW: number, diagramH: number }}
+ */
+export function readSvgDiagramSize(svgElOrString) {
+  let vbWidth = 680;
+  let vbHeight = 380;
+  if (!svgElOrString) {
+    return {
+      diagramW: MERMAID_FRAME.minW,
+      diagramH: MERMAID_FRAME.minH,
+    };
+  }
+
+  if (typeof svgElOrString === 'string') {
+    if (typeof DOMParser !== 'undefined') {
+      try {
+        const doc = new DOMParser().parseFromString(svgElOrString, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (svgEl) return readSvgDiagramSize(svgEl);
+      } catch {
+        // Fallback regex ci-dessous
+      }
+    }
+    const vbMatch = svgElOrString.match(/viewBox=["']([^"']+)["']/i);
+    if (vbMatch) {
+      const parts = vbMatch[1].trim().split(/[\s,]+/).map(Number);
+      if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+        vbWidth = parts[2];
+        vbHeight = parts[3];
+      }
+    } else {
+      const wMatch = svgElOrString.match(/\bwidth=["']([0-9.]+)(?:px)?["']/i);
+      const hMatch = svgElOrString.match(/\bheight=["']([0-9.]+)(?:px)?["']/i);
+      if (wMatch && hMatch) {
+        vbWidth = parseFloat(wMatch[1]);
+        vbHeight = parseFloat(hMatch[1]);
+      }
+    }
+    return {
+      diagramW: Math.max(MERMAID_FRAME.minW, Math.ceil(vbWidth)),
+      diagramH: Math.max(MERMAID_FRAME.minH, Math.ceil(vbHeight)),
+    };
+  }
+
+  const svgEl = svgElOrString;
+  const viewBoxAttr = svgEl?.getAttribute?.('viewBox');
+  if (viewBoxAttr) {
+    const parts = viewBoxAttr
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number);
+    if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+      vbWidth = parts[2];
+      vbHeight = parts[3];
+    }
+  } else if (svgEl?.getAttribute) {
+    const wAttr = parseFloat(svgEl.getAttribute('width') || '');
+    const hAttr = parseFloat(svgEl.getAttribute('height') || '');
+    if (wAttr > 0 && hAttr > 0) {
+      vbWidth = wAttr;
+      vbHeight = hAttr;
+    }
+  }
+  return {
+    diagramW: Math.max(MERMAID_FRAME.minW, Math.ceil(vbWidth)),
+    diagramH: Math.max(MERMAID_FRAME.minH, Math.ceil(vbHeight)),
+  };
+}
+
+/**
+ * Retourne la taille en pixels (échelle 2x) de l'image PNG encadrée qui sera produite
+ * par renderMermaidToPngDataUrl(), sans rastériser le schéma.
+ * @param {string} code - Code source du schéma Mermaid
+ * @returns {Promise<{ width: number, height: number } | null>} Taille ou null si le schéma est invalide
+ */
+export const getMermaidFramedSize = async (code) => {
+  const svgMarkup = await renderMermaidToSvg(code);
+  if (!svgMarkup) return null;
+  const svgEl = new DOMParser()
+    .parseFromString(svgMarkup, 'image/svg+xml')
+    .querySelector('svg');
+  if (!svgEl) return null;
+  const { diagramW, diagramH } = readSvgDiagramSize(svgEl);
+  const { padX, padY, shadowPad, scale } = MERMAID_FRAME;
+  return {
+    width: (diagramW + padX * 2 + shadowPad * 2) * scale,
+    height: (diagramH + padY * 2 + shadowPad * 2) * scale,
+  };
+};
+
+/**
+ * Rastérise un schéma Mermaid sous forme d'image PNG haute résolution (2x)
+ * intégrée dans un cadre au fond légèrement plus foncé avec bordure et léger ombrage,
+ * prête à être insérée dans les exports Word (.docx) et PowerPoint (.pptx).
+ * @param {string} code - Code source du schéma Mermaid
+ * @returns {Promise<string|null>} Data URL image/png ou null en cas d'erreur
+ */
+export const renderMermaidToPngDataUrl = async (code) => {
+  const svgMarkup = await renderMermaidToSvg(code);
+  if (!svgMarkup) return null;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl) return null;
+
+  const { diagramW, diagramH } = readSvgDiagramSize(svgEl);
+  svgEl.setAttribute('width', String(diagramW));
+  svgEl.setAttribute('height', String(diagramH));
+  svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svgEl.style.maxWidth = 'none';
+
+  const drawFramedDiagram = (svgElement) =>
+    new Promise((resolve) => {
+      const serializer = new XMLSerializer();
+      const serialized = serializer.serializeToString(svgElement);
+      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`;
+
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = 2;
+          const padX = 28;
+          const padY = 22;
+          const shadowPad = 12;
+          const cardW = diagramW + padX * 2;
+          const cardH = diagramH + padY * 2;
+          const totalW = cardW + shadowPad * 2;
+          const totalH = cardH + shadowPad * 2;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = totalW * scale;
+          canvas.height = totalH * scale;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(null);
+            return;
+          }
+
+          ctx.scale(scale, scale);
+
+          // Ombrage doux et fond de cadre légèrement plus foncé (#e6eef8)
+          ctx.save();
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.11)';
+          ctx.shadowBlur = 12;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4;
+          traceRoundedRect(ctx, shadowPad, shadowPad, cardW, cardH, 10);
+          ctx.fillStyle = '#e6eef8';
+          ctx.fill();
+          ctx.restore();
+
+          // Bordure du cadre
+          ctx.save();
+          traceRoundedRect(ctx, shadowPad, shadowPad, cardW, cardH, 10);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.restore();
+
+          // Barre latérale d'accentuation gauche (style carte)
+          ctx.save();
+          traceRoundedRect(ctx, shadowPad, shadowPad, cardW, cardH, 10);
+          ctx.clip();
+          ctx.fillStyle = '#1e40af';
+          ctx.fillRect(shadowPad, shadowPad, 5, cardH);
+          ctx.restore();
+
+          // Dessin du schéma Mermaid centré dans le cadre
+          ctx.drawImage(img, shadowPad + padX, shadowPad + padY, diagramW, diagramH);
+          resolve(canvas.toDataURL('image/png'));
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = svgDataUrl;
+    });
+
+  let pngUrl = await drawFramedDiagram(svgEl);
+  if (!pngUrl) {
+    convertForeignObjectsToSvgText(svgEl);
+    pngUrl = await drawFramedDiagram(svgEl);
+  }
+  return pngUrl;
 };

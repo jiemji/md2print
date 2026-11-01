@@ -3,7 +3,14 @@
  * Intègre CSS (thème Azur classique), Sommaire latéral repliable avec ScrollSpy,
  * et support des modes Rapport continu et Slide interactif (100 % textuel, sans icône ni émoji).
  */
-import { toSlug, escapeHtml, normalizeMarkdown, resolveImagePaths } from './utils.js';
+import {
+  toSlug,
+  escapeHtml,
+  normalizeMarkdown,
+  resolveImagePaths,
+  normalizeMermaidCode,
+} from './utils.js';
+import { planSlides } from './SlidePlanner.js';
 
 /**
  * Extrait la table des matières (H1, H2, H3) du texte Markdown normalisé.
@@ -44,11 +51,12 @@ export const extractTOC = (normalizedMarkdown) => {
 };
 
 /**
- * Convertit le Markdown normalisé en HTML via Marked.js et Highlight.js.
+ * Convertit le Markdown normalisé en HTML via Marked.js, Highlight.js et Mermaid.js.
  * @param {string} cleanMarkdown
+ * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
  * @returns {string}
  */
-const parseMarkdownToHTML = (cleanMarkdown) => {
+const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
     return '<p>Erreur : La bibliothèque Marked.js n\'est pas chargée.</p>';
   }
@@ -84,8 +92,18 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
     return `<strong>${inner}</strong>`;
   };
 
-  // Rendu sobre des blocs de code avec coloration syntaxique, sans en-tête ni bouton Copier
+  // Rendu des schémas Mermaid dans un cadre ombré et des blocs de code avec coloration syntaxique
   renderer.code = ({ text, lang }) => {
+    const cleanLang = (lang || '').trim().toLowerCase();
+    if (cleanLang === 'mermaid') {
+      const trimmedCode = normalizeMermaidCode(text);
+      const svgMarkup = mermaidSvgMap[trimmedCode];
+      if (svgMarkup) {
+        return `<figure class="mermaid-card"><div class="mermaid-diagram">${svgMarkup}</div></figure>`;
+      }
+      return `<figure class="mermaid-card mermaid-card--pending"><pre class="mermaid-source"><code>${escapeHtml(text)}</code></pre></figure>`;
+    }
+
     const hasHljs = typeof window.hljs !== 'undefined';
     const validLang = hasHljs && lang && window.hljs.getLanguage(lang) ? lang : '';
     let highlighted = '';
@@ -163,6 +181,9 @@ const parseMarkdownToHTML = (cleanMarkdown) => {
  * @param {string} [options.docTitle] - Titre du document
  * @param {string} [options.viewMode='report'] - Mode d'affichage ('report' | 'slide')
  * @param {Record<string, string>} [options.localImages={}] - Dictionnaire d'images Base64
+ * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
+ * @param {object} [options.pptConfig] - Configuration PPTX issue de output_config.json
+ * @param {string} [options.templateId='default'] - Identifiant du template PPTX
  * @returns {string} Code HTML autonome complet
  */
 export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
@@ -170,13 +191,73 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     docTitle = 'Document',
     viewMode = 'report',
     localImages = {},
+    mermaidSvgMap = {},
+    pptConfig = null,
+    templateId = 'default',
   } = options;
 
   const resolvedMarkdown = resolveImagePaths(rawMarkdown || '', localImages);
   const cleanMarkdown = normalizeMarkdown(resolvedMarkdown);
   const tocList = extractTOC(cleanMarkdown);
-  const parsedContent = parseMarkdownToHTML(cleanMarkdown);
+  const parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
   const formattedDate = new Date().toLocaleDateString('fr-FR');
+
+  // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
+  const plannedSlides = planSlides(cleanMarkdown, docTitle, {
+    pptConfig,
+    templateId,
+    mermaidSvgMap,
+    date: formattedDate,
+  });
+
+  const slidesHTML = plannedSlides
+    .map((slide, idx) => {
+      const activeClass = idx === 0 ? 'active' : '';
+      if (slide.type === 'title') {
+        return `
+          <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+            <div class="slide-inner slide-title-inner">
+              <div class="slide-title-card">
+                <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
+                <div class="slide-title-meta">
+                  <span class="slide-title-date">${escapeHtml(slide.date)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      if (slide.type === 'chapter') {
+        return `
+          <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+            <div class="slide-inner slide-chapter-inner">
+              <div class="slide-chapter-card">
+                <span class="slide-chapter-badge">Chapitre</span>
+                <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
+                <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      const slideContentHtml = parseMarkdownToHTML(slide.markdown, mermaidSvgMap);
+      const showChapterTag = slide.chapter && slide.chapter !== slide.title;
+      return `
+        <div class="slide slide-content ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+          <div class="slide-inner slide-content-inner">
+            <header class="slide-header">
+              ${showChapterTag ? `<span class="slide-chapter-tag">${escapeHtml(slide.chapter)}</span>` : ''}
+              <h2 class="slide-header-title">${escapeHtml(slide.title)}</h2>
+            </header>
+            <div class="slide-body">
+              ${slideContentHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('\n');
 
   let tocItemsHTML = '';
   if (tocList.length === 0) {
@@ -546,6 +627,48 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       display: block;
     }
 
+    /* === Cadre des Schémas Mermaid (Fond légèrement plus foncé + léger ombrage) === */
+    .mermaid-card {
+      margin: 24px 0;
+      padding: 22px 26px;
+      background: linear-gradient(180deg, #e9f0f8 0%, #e1eaf5 100%);
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid var(--primary);
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    .mermaid-diagram {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .mermaid-diagram svg {
+      max-width: 100%;
+      height: auto !important;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .mermaid-card--pending {
+      align-items: stretch;
+    }
+
+    .mermaid-source {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: 0.86rem;
+      color: var(--text-main);
+      white-space: pre-wrap;
+    }
+
     /* === Tableaux === */
     .table-responsive-wrapper {
       width: 100%;
@@ -665,7 +788,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       display: none;
       width: 100%;
       height: calc(100vh - var(--header-height));
-      padding: 40px 80px 72px;
+      padding: 40px 60px 80px;
       overflow-y: auto;
       font-size: var(--slide-font-size);
     }
@@ -675,37 +798,169 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       flex-direction: column;
     }
 
-    .slide.slide-h2 {
+    .slide-inner {
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Diapositive de titre / couverture */
+    .slide.slide-title {
       justify-content: center;
       align-items: center;
       text-align: center;
     }
 
-    .slide.slide-h2 .slide-inner {
-      max-width: 920px;
-      width: 100%;
+    .slide-title-inner {
+      max-width: 900px;
       margin: auto;
     }
 
-    .slide.slide-h3 {
-      justify-content: flex-start;
-      align-items: flex-start;
-      text-align: left;
+    .slide-title-card {
+      padding: 56px 48px;
+      background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+      border: 1px solid var(--border-color);
+      border-top: 6px solid var(--primary);
+      border-radius: var(--radius-md);
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
     }
 
-    .slide.slide-h3 .slide-inner {
-      max-width: 1040px;
+    .slide-main-title {
+      font-size: 2.6rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 20px;
+      line-height: 1.25;
+    }
+
+    .slide-title-meta {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Diapositive d'inter-titre / chapitre */
+    .slide.slide-chapter {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .slide-chapter-inner {
+      max-width: 860px;
+      margin: auto;
+    }
+
+    .slide-chapter-card {
+      padding: 48px 40px;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border: 1px solid #bfdbfe;
+      border-left: 6px solid var(--primary);
+      border-radius: var(--radius-md);
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+    }
+
+    .slide-chapter-badge {
+      display: inline-block;
+      text-transform: uppercase;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      background: #ffffff;
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      border: 1px solid #bfdbfe;
+    }
+
+    .slide-chapter-title {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.3;
+      margin-bottom: 14px;
+    }
+
+    .slide-chapter-date {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+
+    /* Diapositive de contenu */
+    .slide.slide-content {
+      justify-content: flex-start;
+      align-items: stretch;
+    }
+
+    .slide-content-inner {
+      max-width: 1100px;
       width: 100%;
       margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
 
-    .slide p, .slide li {
-      font-size: 1.35rem;
-      line-height: 1.6;
+    .slide-header {
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+      border-bottom: 2px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
-    .slide .doc-table th, .slide .doc-table td {
-      font-size: 1rem;
+    .slide-chapter-tag {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+    }
+
+    .slide-header-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.3;
+    }
+
+    .slide-body {
+      flex: 1;
+    }
+
+    .slide-body p, .slide-body li {
+      font-size: 1.25rem;
+      line-height: 1.65;
+      margin-bottom: 12px;
+    }
+
+    .slide-body h3 {
+      font-size: 1.4rem;
+      margin-top: 18px;
+      margin-bottom: 10px;
+      color: var(--primary);
+    }
+
+    .slide-body h4 {
+      font-size: 1.2rem;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+    }
+
+    .slide-body .table-responsive-wrapper {
+      margin: 16px 0;
+    }
+
+    .slide-body .doc-table th, .slide-body .doc-table td {
+      font-size: 0.95rem;
+      padding: 8px 12px;
+    }
+
+    .slide-body .mermaid-card {
+      margin: 18px 0;
+      padding: 16px 20px;
     }
 
     body[data-view-mode="slide"] .slide-controls {
@@ -721,6 +976,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       border: 1px solid var(--border-color);
       padding: 6px 12px;
       border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
     }
 
     .slide-counter {
@@ -747,6 +1003,14 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       }
       .slide-container {
         display: none !important;
+      }
+      .mermaid-card {
+        background: #e6eef8 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-left: 4px solid var(--primary) !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
     }
   `;
@@ -827,60 +1091,15 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       };
 
       function initSlideMode() {
-        if (document.body.getAttribute('data-view-mode') !== 'slide') return;
-        const content = document.querySelector('.markdown-rendered-content');
-        const container = document.getElementById('slideContainer');
-        if (!content || !container) return;
-
-        container.innerHTML = '';
-        const children = Array.from(content.children);
-        if (children.length === 0) return;
-
-        const slides = [];
-        let currentElements = [];
-        let currentLevel = 2;
-        let currentSlug = '';
-
-        function flushSlide() {
-          if (currentElements.length === 0) return;
-          const slide = document.createElement('div');
-          slide.className = 'slide ' + (currentLevel === 3 ? 'slide-h3' : 'slide-h2');
-          if (currentSlug) slide.dataset.slug = currentSlug;
-
-          const inner = document.createElement('div');
-          inner.className = 'slide-inner';
-          currentElements.forEach((el) => inner.appendChild(el.cloneNode(true)));
-          slide.appendChild(inner);
-          slides.push(slide);
-          currentElements = [];
-        }
-
-        children.forEach((child) => {
-          const tag = child.tagName;
-          if (tag === 'H1' || tag === 'H2') {
-            flushSlide();
-            currentLevel = 2;
-            currentSlug = child.id || '';
-            currentElements.push(child);
-          } else if (tag === 'H3') {
-            flushSlide();
-            currentLevel = 3;
-            currentSlug = child.id || '';
-            currentElements.push(child);
-          } else {
-            currentElements.push(child);
-          }
-        });
-        flushSlide();
-
-        slides.forEach((slide, idx) => {
-          if (idx === 0) slide.classList.add('active');
-          container.appendChild(slide);
-        });
-
+        const slides = document.querySelectorAll('.slide');
         totalSlides = slides.length;
         currentSlideIndex = 0;
-        updateSlideControls();
+
+        if (totalSlides > 0) {
+          showSlide(0);
+        } else {
+          updateSlideControls();
+        }
 
         document.addEventListener('keydown', (e) => {
           if (document.body.getAttribute('data-view-mode') !== 'slide') return;
@@ -976,7 +1195,9 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       <article class="markdown-rendered-content">
         ${parsedContent}
       </article>
-      <div class="slide-container" id="slideContainer"></div>
+      <div class="slide-container" id="slideContainer">
+        ${slidesHTML}
+      </div>
     </main>
   </div>
 

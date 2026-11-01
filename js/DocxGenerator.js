@@ -9,6 +9,7 @@ import {
   ensureOfficeCompatibleImage,
   dataUrlToUint8Array,
   getImageDimensions,
+  renderMermaidToPngDataUrl,
 } from './utils.js';
 
 /**
@@ -100,6 +101,50 @@ async function buildDocxBlocks(cleanMd, docConfig) {
           spacing: cfg.sp,
         })
       );
+    } else if (block.type === 'mermaid') {
+      const pngDataUrl = await renderMermaidToPngDataUrl(block.code);
+      const parsedImg = pngDataUrl ? dataUrlToUint8Array(pngDataUrl) : null;
+      if (parsedImg) {
+        const dims = await getImageDimensions(pngDataUrl, 540, 380);
+        blocks.push(
+          new window.docx.Paragraph({
+            alignment: window.docx.AlignmentType.CENTER,
+            children: [
+              new window.docx.ImageRun({
+                data: parsedImg.bytes,
+                transformation: { width: dims.width, height: dims.height },
+                type: 'png',
+              }),
+            ],
+            spacing: { before: 180, after: 180 },
+          })
+        );
+      } else {
+        const codeBorder = {
+          style: window.docx.BorderStyle.SINGLE,
+          size: 4,
+          color: 'CBD5E1',
+          space: 4,
+        };
+        blocks.push(
+          new window.docx.Paragraph({
+            children: toDocxRuns([{ text: block.code || '', format: { code: true } }], {
+              code: true,
+              size: 19,
+              color: '1E293B',
+            }),
+            shading: { fill: 'F1F5F9' },
+            border: {
+              top: codeBorder,
+              bottom: codeBorder,
+              left: { ...codeBorder, size: 12, color: '2563EB' },
+              right: codeBorder,
+            },
+            indent: { left: 240, right: 240 },
+            spacing: { before: 160, after: 160 },
+          })
+        );
+      }
     } else if (block.type === 'image') {
       const compatSrc = await ensureOfficeCompatibleImage(block.src);
       const parsedImg = dataUrlToUint8Array(compatSrc);

@@ -18,6 +18,10 @@
   --accent-text: #ffffff;
   --danger-color: #ef4444;
   --success-color: #10b981;
+  --mermaid-editor-fg: #5eead4;
+  --mermaid-editor-fence: #2dd4bf;
+  --mermaid-editor-bg: rgba(45, 212, 191, 0.09);
+  --mermaid-editor-border: #14b8a6;
   --header-height: 52px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: Consolas, "JetBrains Mono", "Courier New", monospace;
@@ -38,6 +42,10 @@
   --accent-text: #ffffff;
   --danger-color: #b91c1c;
   --success-color: #15803d;
+  --mermaid-editor-fg: #0f766e;
+  --mermaid-editor-fence: #0d9488;
+  --mermaid-editor-bg: rgba(13, 148, 136, 0.11);
+  --mermaid-editor-border: #0d9488;
 }
 
 *,
@@ -441,7 +449,7 @@ body {
   opacity: 0.85;
 }
 
-/* === Formatage des Blocs de Code (``` ... ```), Citations (> ...) et Séparateurs (---) === */
+/* === Formatage des Blocs de Code (``` ... ```), Schémas Mermaid (```mermaid), Citations (> ...) et Séparateurs (---) === */
 .md-codeblock-fence {
   background-color: var(--bg-secondary);
   color: var(--accent-color);
@@ -455,6 +463,23 @@ body {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   border-left: 3px solid var(--accent-color);
+  padding-left: 1ch;
+  padding-right: 1ch;
+}
+
+.md-mermaid-fence {
+  background-color: var(--mermaid-editor-bg);
+  color: var(--mermaid-editor-fence);
+  font-weight: 700;
+  border-left: 3px solid var(--mermaid-editor-border);
+  padding-left: 1ch;
+  padding-right: 1ch;
+}
+
+.md-mermaid-line {
+  background-color: var(--mermaid-editor-bg);
+  color: var(--mermaid-editor-fg);
+  border-left: 3px solid var(--mermaid-editor-border);
   padding-left: 1ch;
   padding-right: 1ch;
 }
@@ -505,13 +530,23 @@ body {
   white-space: pre;
 }
 
-.md-table-prefix,
+.md-table-prefix {
+  display: inline-block;
+  vertical-align: top;
+}
+
 .md-table-cell {
   display: inline-block;
-  vertical-align: baseline;
+  vertical-align: top;
+  max-width: 60ch;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .md-table-pipe {
+  display: inline-block;
+  vertical-align: top;
   color: var(--accent-color);
   font-weight: 700;
 }
