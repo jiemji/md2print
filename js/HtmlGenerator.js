@@ -237,6 +237,18 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     return `<figure class="slide-image-box"><img src="${escapeHtml(href)}"${altAttr}${titleAttr} class="slide-image" loading="lazy"></figure>`;
   };
 
+  renderer.paragraph = function ({ tokens, text }) {
+    if (
+      tokens &&
+      tokens.length > 0 &&
+      tokens.every((tok) => tok.type === 'image' || (tok.type === 'text' && !tok.text.trim()))
+    ) {
+      return this.parser.parseInline(tokens);
+    }
+    const inner = this.parser && tokens ? this.parser.parseInline(tokens) : text;
+    return `<p>${inner}</p>\n`;
+  };
+
   ensureMarkedExtensions();
 
   window.marked.setOptions({
@@ -399,6 +411,83 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     isSlide
       ? (slideCss || DEFAULT_SLIDE_CSS)
       : (reportCss || DEFAULT_REPORT_CSS);
+
+  const slideContainmentCSS = isSlide
+    ? `
+/* === Confinement impératif 16:9 et intégration proportionnelle des images === */
+.slide {
+  overflow: hidden !important;
+}
+.slide-content-inner {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+.slide-header {
+  flex-shrink: 0 !important;
+}
+.slide-body {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+.slide-image-box,
+.slide-body figure,
+.slide-body p:has(img) {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-height: 100% !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.slide-image,
+.slide-image-box img,
+.slide-body img,
+.slide img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+  margin: auto !important;
+  box-sizing: border-box !important;
+}
+`
+    : `
+/* === Rendu propre des images en vision Rapport === */
+.slide-image-box, figure {
+  margin: 16px auto;
+  text-align: center;
+  max-width: 100%;
+}
+.slide-image, .slide-image-box img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--report-radius-sm, 6px);
+  border: 1px solid var(--report-border-color, #e2e8f0);
+  margin: 0 auto;
+  display: block;
+}
+`;
 
   const documentJS = `
     (function() {
@@ -569,7 +658,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(docTitle || 'Document')}</title>
-  <style id="documentStyle">${activeCSS}</style>
+  <style id="documentStyle">${activeCSS}\n${slideContainmentCSS}</style>
 </head>
 <body data-view-mode="${escapeHtml(viewMode)}">
   <header class="top-banner">

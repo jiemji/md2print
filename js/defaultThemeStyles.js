@@ -784,6 +784,15 @@ a:hover {
   color: var(--report-color-link-hover);
 }
 
+.slide-image-box,
+figure {
+  margin: 16px auto;
+  text-align: center;
+  max-width: 100%;
+}
+
+.slide-image,
+.slide-image-box img,
 img {
   max-width: 100%;
   height: auto;
@@ -1200,7 +1209,7 @@ html, body {
   background: var(--slide-canvas-bg);
   border-radius: var(--slide-radius);
   box-shadow: var(--slide-shadow);
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
   animation: slideFadeIn 0.25s ease-out;
 }
@@ -1607,17 +1616,28 @@ html, body {
 /* ==========================================================================
    IMAGES DANS LES DIAPOSITIVES (Ajustement strict au cadre 16:9 sans débordement)
    ========================================================================== */
+.slide-image-box,
+.slide-body figure,
 .slide-body p:has(img) {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
+  max-height: 100%;
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   margin: 0;
+  padding: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
+.slide-image,
+.slide-image-box img,
 .slide img,
 .slide-body img {
   max-width: 100%;
@@ -1628,6 +1648,7 @@ html, body {
   display: block;
   margin: auto;
   border-radius: var(--slide-radius-sm);
+  box-sizing: border-box;
 }
 
 /* ==========================================================================

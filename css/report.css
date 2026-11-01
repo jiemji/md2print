@@ -775,6 +775,15 @@ a:hover {
   color: var(--report-color-link-hover);
 }
 
+.slide-image-box,
+figure {
+  margin: 16px auto;
+  text-align: center;
+  max-width: 100%;
+}
+
+.slide-image,
+.slide-image-box img,
 img {
   max-width: 100%;
   height: auto;
