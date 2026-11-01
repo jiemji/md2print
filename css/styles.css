@@ -614,6 +614,249 @@ body {
   box-decoration-break: clone;
 }
 
+/* === Formatage des Alertes / Callouts (> [!NOTE], > [!TIP], etc.) dans l'Éditeur === */
+.md-quote-line.md-callout-header {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.md-quote-line.md-callout-note,
+.md-quote-line.md-callout-info {
+  border-left-color: #38bdf8;
+  color: #7dd3fc;
+}
+
+.md-quote-line.md-callout-tip,
+.md-quote-line.md-callout-astuce,
+.md-quote-line.md-callout-success {
+  border-left-color: #4ade80;
+  color: #86efac;
+}
+
+.md-quote-line.md-callout-important {
+  border-left-color: #a78bfa;
+  color: #c4b5fd;
+}
+
+.md-quote-line.md-callout-warning,
+.md-quote-line.md-callout-avertissement,
+.md-quote-line.md-callout-warn {
+  border-left-color: #fbbf24;
+  color: #fde68a;
+}
+
+.md-quote-line.md-callout-danger,
+.md-quote-line.md-callout-caution,
+.md-quote-line.md-callout-attention,
+.md-quote-line.md-callout-critique {
+  border-left-color: #f87171;
+  color: #fca5a5;
+}
+
+/* Thème Sépia pour les Callouts dans l'Éditeur */
+[data-theme="sepia"] .md-quote-line.md-callout-note,
+[data-theme="sepia"] .md-quote-line.md-callout-info {
+  border-left-color: #0284c7;
+  color: #0369a1;
+}
+
+[data-theme="sepia"] .md-quote-line.md-callout-tip,
+[data-theme="sepia"] .md-quote-line.md-callout-astuce,
+[data-theme="sepia"] .md-quote-line.md-callout-success {
+  border-left-color: #16a34a;
+  color: #15803d;
+}
+
+[data-theme="sepia"] .md-quote-line.md-callout-important {
+  border-left-color: #7c3aed;
+  color: #6d28d9;
+}
+
+[data-theme="sepia"] .md-quote-line.md-callout-warning,
+[data-theme="sepia"] .md-quote-line.md-callout-avertissement,
+[data-theme="sepia"] .md-quote-line.md-callout-warn {
+  border-left-color: #d97706;
+  color: #b45309;
+}
+
+[data-theme="sepia"] .md-quote-line.md-callout-danger,
+[data-theme="sepia"] .md-quote-line.md-callout-caution,
+[data-theme="sepia"] .md-quote-line.md-callout-attention,
+[data-theme="sepia"] .md-quote-line.md-callout-critique {
+  border-left-color: #dc2626;
+  color: #b91c1c;
+}
+
+/* === Formatage des Badges Inline ([badge:type:texte]) dans l'Éditeur === */
+.md-badge {
+  display: inline;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.md-badge-info,
+.md-badge-note {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+}
+
+.md-badge-success,
+.md-badge-tip,
+.md-badge-astuce {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+}
+
+.md-badge-warning,
+.md-badge-warn,
+.md-badge-avertissement {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.md-badge-danger,
+.md-badge-caution,
+.md-badge-attention {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.md-badge-important {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.12);
+  color: #c4b5fd;
+}
+
+.md-badge-neutral {
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+/* Thème Sépia pour les Badges */
+[data-theme="sepia"] .md-badge-info,
+[data-theme="sepia"] .md-badge-note {
+  border-color: rgba(2, 132, 199, 0.4);
+  background: rgba(2, 132, 199, 0.1);
+  color: #0369a1;
+}
+
+[data-theme="sepia"] .md-badge-success,
+[data-theme="sepia"] .md-badge-tip,
+[data-theme="sepia"] .md-badge-astuce {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+[data-theme="sepia"] .md-badge-warning,
+[data-theme="sepia"] .md-badge-warn,
+[data-theme="sepia"] .md-badge-avertissement {
+  border-color: rgba(217, 119, 6, 0.45);
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+[data-theme="sepia"] .md-badge-danger,
+[data-theme="sepia"] .md-badge-caution,
+[data-theme="sepia"] .md-badge-attention {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+[data-theme="sepia"] .md-badge-important {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(124, 58, 237, 0.1);
+  color: #6d28d9;
+}
+
+/* === Formatage des Cartouches Métriques / Chiffres ([chiffre:valeur:libellé]) dans l'Éditeur === */
+.md-metric {
+  display: inline;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+}
+
+.md-metric.metric-card-success {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(74, 222, 128, 0.12);
+  color: #86efac;
+}
+
+.md-metric.metric-card-danger {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.md-metric.metric-card-warning {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+}
+
+.md-metric.metric-card-important {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.12);
+  color: #c4b5fd;
+}
+
+.md-metric.metric-card-info,
+.md-metric.metric-card-default {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+}
+
+/* Thème Sépia pour les métriques dans l'éditeur */
+[data-theme="sepia"] .md-metric {
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+}
+
+[data-theme="sepia"] .md-metric.metric-card-success {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+[data-theme="sepia"] .md-metric.metric-card-danger {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+[data-theme="sepia"] .md-metric.metric-card-warning {
+  border-color: rgba(217, 119, 6, 0.45);
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+[data-theme="sepia"] .md-metric.metric-card-important {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(124, 58, 237, 0.1);
+  color: #6d28d9;
+}
+
+[data-theme="sepia"] .md-metric.metric-card-info,
+[data-theme="sepia"] .md-metric.metric-card-default {
+  border-color: rgba(2, 132, 199, 0.4);
+  background: rgba(2, 132, 199, 0.1);
+  color: #0369a1;
+}
+
 .md-hr-line {
   display: inline-block;
   width: 100%;

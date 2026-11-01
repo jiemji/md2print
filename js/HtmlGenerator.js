@@ -9,8 +9,77 @@ import {
   normalizeMarkdown,
   resolveImagePaths,
   normalizeMermaidCode,
+  resolveCallout,
+  resolveBadgeClass,
+  parseMetricTag,
+  resolveMetricClass,
 } from './utils.js';
 import { planSlides } from './SlidePlanner.js';
+
+let markedExtensionsInitialized = false;
+
+/**
+ * Enregistre les extensions personnalisées de Marked.js (badges [badge:...] et chiffres [chiffre:...]).
+ */
+function ensureMarkedExtensions() {
+  if (markedExtensionsInitialized || typeof window.marked === 'undefined') return;
+  window.marked.use({
+    extensions: [
+      {
+        name: 'badge',
+        level: 'inline',
+        start(src) {
+          return src.indexOf('[badge:');
+        },
+        tokenizer(src) {
+          const match = /^\[badge:(?:([a-zA-Z0-9_-]+):)?([^\]\n]+)\]/.exec(src);
+          if (match) {
+            return {
+              type: 'badge',
+              raw: match[0],
+              badgeType: (match[1] || 'neutral').toLowerCase(),
+              text: match[2].trim(),
+            };
+          }
+        },
+        renderer(token) {
+          const badgeClass = resolveBadgeClass(token.badgeType);
+          return `<span class="badge ${badgeClass}">${escapeHtml(token.text)}</span>`;
+        },
+      },
+      {
+        name: 'metric',
+        level: 'inline',
+        start(src) {
+          const match = src.match(/\[(chiffre|metric|stat|kpi):/i);
+          return match ? match.index : -1;
+        },
+        tokenizer(src) {
+          const match =
+            /^\[(chiffre|metric|stat|kpi):([^:\]\n]+)(?::([^:\]\n]+))?(?::([^\]\n]+))?\]/i.exec(src);
+          if (match) {
+            const parsed = parseMetricTag(match[2], match[3], match[4]);
+            return {
+              type: 'metric',
+              raw: match[0],
+              val: parsed.val,
+              label: parsed.label,
+              variant: parsed.variant,
+            };
+          }
+        },
+        renderer(token) {
+          const variantClass = resolveMetricClass(token.variant);
+          const labelHtml = token.label
+            ? `<span class="metric-label">${escapeHtml(token.label)}</span>`
+            : '';
+          return `<span class="metric-card ${variantClass}"><span class="metric-value">${escapeHtml(token.val)}</span>${labelHtml}</span>`;
+        },
+      },
+    ],
+  });
+  markedExtensionsInitialized = true;
+}
 
 /**
  * Extrait la table des matières (H1, H2, H3) du texte Markdown normalisé.
@@ -131,6 +200,32 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
     return `<li>${formattedText}</li>`;
   };
+
+  // Traitement spécifique des alertes / callouts GitHub (> [!NOTE], > [!TIP], etc.)
+  renderer.blockquote = function (token) {
+    if (token.tokens && token.tokens.length > 0 && token.tokens[0].type === 'paragraph') {
+      const match = token.tokens[0].text.match(
+        /^\[!([a-zA-Z0-9_-]+)\](?:[^\S\r\n]*([^\r\n]*))?(?:\r?\n([\s\S]*))?$/
+      );
+      if (match) {
+        const rawType = match[1];
+        const customTitle = (match[2] || '').trim();
+        const rest = match[3] || '';
+        const callout = resolveCallout(rawType, customTitle);
+        let bodyHtml = '';
+        if (rest.trim()) {
+          bodyHtml += `<p>${window.marked.parseInline(rest)}</p>`;
+        }
+        if (token.tokens.length > 1) {
+          bodyHtml += this.parser.parse(token.tokens.slice(1));
+        }
+        return `<aside class="callout callout-${callout.kind}"><div class="callout-header"><span class="callout-title">${escapeHtml(callout.title)}</span></div><div class="callout-body">${bodyHtml}</div></aside>`;
+      }
+    }
+    return `<blockquote>${this.parser.parse(token.tokens)}</blockquote>`;
+  };
+
+  ensureMarkedExtensions();
 
   window.marked.setOptions({
     renderer,
@@ -604,6 +699,234 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 
     blockquote p:last-child {
       margin-bottom: 0;
+    }
+
+    /* === Callouts / Alertes GitHub-style (> [!NOTE], > [!TIP], etc.) === */
+    .callout {
+      margin: 20px 0;
+      padding: 14px 18px;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      border-left: 4px solid var(--callout-border, #0284c7);
+      background: var(--callout-bg, rgba(2, 132, 199, 0.07));
+      color: var(--text-main);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .callout-header {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--callout-title, #0369a1);
+      margin-bottom: 8px;
+      user-select: none;
+    }
+
+    .callout-body {
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .callout-body > :first-child {
+      margin-top: 0;
+    }
+
+    .callout-body > :last-child {
+      margin-bottom: 0;
+    }
+
+    .callout-note,
+    .callout-info {
+      --callout-border: #0284c7;
+      --callout-bg: rgba(2, 132, 199, 0.07);
+      --callout-title: #0369a1;
+    }
+
+    .callout-tip,
+    .callout-astuce,
+    .callout-success {
+      --callout-border: #16a34a;
+      --callout-bg: rgba(22, 163, 74, 0.07);
+      --callout-title: #15803d;
+    }
+
+    .callout-important {
+      --callout-border: #7c3aed;
+      --callout-bg: rgba(124, 58, 237, 0.07);
+      --callout-title: #6d28d9;
+    }
+
+    .callout-warning,
+    .callout-avertissement,
+    .callout-warn {
+      --callout-border: #d97706;
+      --callout-bg: rgba(217, 119, 6, 0.08);
+      --callout-title: #b45309;
+    }
+
+    .callout-danger,
+    .callout-caution,
+    .callout-attention,
+    .callout-critique {
+      --callout-border: #dc2626;
+      --callout-bg: rgba(220, 38, 38, 0.07);
+      --callout-title: #b91c1c;
+    }
+
+    /* === Badges / Étiquettes inline ([badge:type:texte]) === */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      line-height: 1.2;
+      padding: 0.2em 0.65em;
+      border-radius: 9999px;
+      vertical-align: baseline;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      margin: 0 0.25em;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .badge-info,
+    .badge-note {
+      background: rgba(2, 132, 199, 0.12);
+      color: #0369a1;
+      border: 1px solid rgba(2, 132, 199, 0.35);
+    }
+
+    .badge-success,
+    .badge-tip,
+    .badge-astuce,
+    .badge-ok,
+    .badge-valide {
+      background: rgba(22, 163, 74, 0.12);
+      color: #15803d;
+      border: 1px solid rgba(22, 163, 74, 0.35);
+    }
+
+    .badge-warning,
+    .badge-warn,
+    .badge-avertissement {
+      background: rgba(217, 119, 6, 0.14);
+      color: #b45309;
+      border: 1px solid rgba(217, 119, 6, 0.4);
+    }
+
+    .badge-danger,
+    .badge-caution,
+    .badge-attention,
+    .badge-critique,
+    .badge-error {
+      background: rgba(220, 38, 38, 0.12);
+      color: #b91c1c;
+      border: 1px solid rgba(220, 38, 38, 0.35);
+    }
+
+    .badge-important,
+    .badge-purple,
+    .badge-violet {
+      background: rgba(124, 58, 237, 0.12);
+      color: #6d28d9;
+      border: 1px solid rgba(124, 58, 237, 0.35);
+    }
+
+    .badge-neutral,
+    .badge-neutre,
+    .badge-gray,
+    .badge-default {
+      background: rgba(100, 116, 139, 0.12);
+      color: #475569;
+      border: 1px solid rgba(100, 116, 139, 0.35);
+    }
+
+    /* === Cartouches de Données / Métriques / Chiffres ([chiffre:valeur:libellé]) === */
+    .metric-card {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      margin: 16px 14px 16px 0;
+      padding: 22px 32px;
+      min-width: 190px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid #cbd5e1;
+      border-top: 5px solid var(--metric-accent, #0284c7);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      text-align: center;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+
+    .metric-value {
+      font-size: clamp(3.2rem, 5rem, 5.5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: var(--metric-val-color, #0369a1);
+      font-family: var(--font-sans);
+    }
+
+    .metric-label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted, #64748b);
+      margin-top: 10px;
+      max-width: 260px;
+      line-height: 1.35;
+    }
+
+    .metric-card-default,
+    .metric-card-info {
+      --metric-accent: #0284c7;
+      --metric-val-color: #0369a1;
+      background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%);
+      border-color: #bae6fd;
+    }
+
+    .metric-card-success {
+      --metric-accent: #16a34a;
+      --metric-val-color: #15803d;
+      background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%);
+      border-color: #bbf7d0;
+    }
+
+    .metric-card-danger {
+      --metric-accent: #dc2626;
+      --metric-val-color: #b91c1c;
+      background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+      border-color: #fecaca;
+    }
+
+    .metric-card-warning {
+      --metric-accent: #d97706;
+      --metric-val-color: #b45309;
+      background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+      border-color: #fde68a;
+    }
+
+    .metric-card-important {
+      --metric-accent: #7c3aed;
+      --metric-val-color: #6d28d9;
+      background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
+      border-color: #e9d5ff;
+    }
+
+    .metric-card-neutral {
+      --metric-accent: #64748b;
+      --metric-val-color: #334155;
+      background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+      border-color: #cbd5e1;
     }
 
     hr {

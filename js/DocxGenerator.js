@@ -223,15 +223,27 @@ async function buildDocxBlocks(cleanMd, docConfig) {
         })
       );
     } else if (block.type === 'paragraph' && block.isQuote) {
+      const calloutColorMap = {
+        note: '0284C7',
+        info: '0284C7',
+        tip: '16A34A',
+        important: '7C3AED',
+        warning: 'D97706',
+        danger: 'DC2626',
+      };
+      const borderColor = block.callout
+        ? calloutColorMap[block.callout.kind] || '0284C7'
+        : '2563EB';
+
       blocks.push(
         new window.docx.Paragraph({
-          children: toDocxRuns(block.runs, { italic: true, color: '334155' }),
+          children: toDocxRuns(block.runs, { italic: !block.callout, color: '334155' }),
           shading: { fill: 'F8FAFC' },
           border: {
             left: {
               style: window.docx.BorderStyle.SINGLE,
-              size: 16,
-              color: '2563EB',
+              size: block.callout ? 24 : 16,
+              color: borderColor,
               space: 8,
             },
           },
@@ -273,7 +285,7 @@ function toDocxRuns(runs, extraFormat = {}) {
           italics: extraFormat.italic || r.format.italic,
           strike: r.format.strike,
           font: extraFormat.code || r.format.code ? 'Consolas' : undefined,
-          size: extraFormat.size || undefined,
+          size: extraFormat.size || (r.format.metric ? 64 : undefined),
           underline: r.format.underline
             ? { type: window.docx.UnderlineType.SINGLE }
             : undefined,

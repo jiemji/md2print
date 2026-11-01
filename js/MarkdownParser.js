@@ -10,6 +10,13 @@
  *   { type: 'separator' }
  */
 
+import {
+  resolveCallout,
+  resolveBadgeClass,
+  parseMetricTag,
+  resolveMetricClass,
+} from './utils.js';
+
 const DEFAULT_FORMAT = Object.freeze({
   bold: false,
   italic: false,
@@ -38,7 +45,7 @@ export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
 
   const runs = [];
   const inlineFormatRegex =
-    /(`[^`\n]+?`)|((?<!\!)\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
+    /(`[^`\n]+?`)|((?<!\!)\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)|(\[badge:(?:([a-zA-Z0-9_-]+):)?([^\]\n]+)\])|(\[(chiffre|metric|stat|kpi):([^:\]\n]+)(?::([^:\]\n]+))?(?::([^\]\n]+))?\])/g;
 
   let lastIndex = 0;
   let match;
@@ -123,6 +130,43 @@ export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
           underline: true,
         })
       );
+    } else if (match[19] !== undefined) {
+      // [badge:type:texte] ou [badge:texte]
+      const rawType = (match[20] || 'neutral').toLowerCase();
+      const badgeText = match[21].trim();
+      runs.push({
+        text: `[ ${badgeText} ]`,
+        format: {
+          ...baseFormat,
+          bold: true,
+          badge: true,
+          badgeType: rawType,
+        },
+      });
+    } else if (match[22] !== undefined) {
+      // [chiffre:valeur:libellé:variante]
+      const parsed = parseMetricTag(match[24], match[25], match[26]);
+      runs.push({
+        text: parsed.val,
+        format: {
+          ...baseFormat,
+          bold: true,
+          metric: true,
+          metricVal: parsed.val,
+          metricLabel: parsed.label,
+          metricVariant: parsed.variant,
+        },
+      });
+      if (parsed.label) {
+        runs.push({
+          text: `\n${parsed.label}`,
+          format: {
+            ...baseFormat,
+            italic: true,
+            color: '64748B',
+          },
+        });
+      }
     }
 
     lastIndex = match.index + match[0].length;
@@ -347,19 +391,46 @@ export const parseToAST = (mdText) => {
       continue;
     }
 
-    // --- Citation (> ...) ---
+    // --- Citation (> ...) ou Alerte / Callout (> [!NOTE] ...) ---
     if (trimmedBoth.startsWith('>')) {
       const quoteLines = [];
+      const rawQuoteLines = [];
       while (i < lines.length && lines[i].trim().startsWith('>')) {
+        rawQuoteLines.push(lines[i]);
         quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
         i++;
       }
-      const quoteText = quoteLines.join('\n');
-      ast.push({
-        type: 'paragraph',
-        isQuote: true,
-        runs: extractInlineStyles(quoteText),
-      });
+      const rawBlock = rawQuoteLines.join('\n');
+      const firstLine = quoteLines[0] || '';
+      const calloutMatch = firstLine.match(
+        /^\[!([a-zA-Z0-9_-]+)\](?:[^\S\r\n]*([^\r\n]*))?$/
+      );
+      if (calloutMatch) {
+        const rawType = calloutMatch[1];
+        const rawTitle = calloutMatch[2];
+        const callout = resolveCallout(rawType, rawTitle);
+        const contentLines = quoteLines.slice(1);
+        const quoteText = contentLines.join('\n');
+        const runs = [
+          { text: `${callout.title}\n`, format: { bold: true } },
+          ...(quoteText.trim() ? extractInlineStyles(quoteText) : []),
+        ];
+        ast.push({
+          type: 'paragraph',
+          isQuote: true,
+          callout,
+          runs,
+          raw: rawBlock,
+        });
+      } else {
+        const quoteText = quoteLines.join('\n');
+        ast.push({
+          type: 'paragraph',
+          isQuote: true,
+          runs: extractInlineStyles(quoteText),
+          raw: rawBlock,
+        });
+      }
       continue;
     }
 
