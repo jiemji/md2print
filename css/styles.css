@@ -231,6 +231,19 @@ body {
   color: var(--accent-text);
 }
 
+#btnToggleSyncScroll {
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+#btnToggleSyncScroll.btn-inactive {
+  opacity: 0.7;
+  color: var(--text-secondary);
+  border-style: dashed;
+}
+
 /* === Menus Déroulants (Configuration & Exporter) === */
 .dropdown {
   position: relative;

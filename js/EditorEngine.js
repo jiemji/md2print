@@ -16,6 +16,7 @@ import {
   resolveBadgeClass,
   parseMetricTag,
   resolveMetricClass,
+  toSlug,
 } from './utils.js';
 
 /**
@@ -885,6 +886,9 @@ export function setEditorContent(
         const level = headingMatch[1].length;
         const headingSpan = document.createElement('span');
         headingSpan.className = `md-heading-line md-h${level}`;
+        const headingText = line.replace(/^#{1,6}\s+/, '').trim();
+        headingSpan.dataset.headingText = headingText;
+        headingSpan.dataset.slug = toSlug(headingText);
         headingSpan.appendChild(buildLineInlineNodes(line));
         fragment.appendChild(headingSpan);
       } else if (quoteMatch) {

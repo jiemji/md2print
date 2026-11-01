@@ -88,6 +88,7 @@ export async function savePreferences(prefs) {
         currentViewport: prefs.currentViewport,
         editorWidthPct:
           typeof prefs.editorWidthPct === 'number' ? prefs.editorWidthPct : 50,
+        syncScroll: typeof prefs.syncScroll === 'boolean' ? prefs.syncScroll : true,
         updatedAt: Date.now(),
       });
       tx.oncomplete = () => resolve();
@@ -150,7 +151,32 @@ export async function saveCustomTemplate({ templateBuffer, templateFileName }) {
 }
 
 /**
- * Supprime la configuration JSON et le modèle Word personnalisés de IndexedDB.
+ * Sauvegarde un modèle PowerPoint (.potx) personnalisé (ArrayBuffer) dans IndexedDB.
+ * @param {{ pptTemplateBuffer: ArrayBuffer, pptTemplateFileName: string }} pptTemplatePayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomPptTemplate({ pptTemplateBuffer, pptTemplateFileName }) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_ppt_template',
+        pptTemplateBuffer,
+        pptTemplateFileName,
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Supprime la configuration JSON, le modèle Word et le modèle PowerPoint personnalisés de IndexedDB.
  * @returns {Promise<void>}
  */
 export async function clearCustomConfigAndTemplate() {
@@ -161,6 +187,7 @@ export async function clearCustomConfigAndTemplate() {
       const store = tx.objectStore(STORE_STATE);
       store.delete('custom_config');
       store.delete('custom_template');
+      store.delete('custom_ppt_template');
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -260,7 +287,8 @@ export async function clearDraftState() {
  *   draft: object|null,
  *   localImages: Record<string, string>,
  *   customConfig: object|null,
- *   customTemplate: object|null
+ *   customTemplate: object|null,
+ *   customPptTemplate: object|null
  * }>}
  */
 export async function loadStoredState() {
@@ -275,6 +303,7 @@ export async function loadStoredState() {
       const draftReq = stateStore.get('draft');
       const customConfigReq = stateStore.get('custom_config');
       const customTemplateReq = stateStore.get('custom_template');
+      const customPptTemplateReq = stateStore.get('custom_ppt_template');
       const imagesReq = imagesStore.getAll();
 
       tx.oncomplete = () => {
@@ -298,6 +327,7 @@ export async function loadStoredState() {
           localImages,
           customConfig: customConfigReq.result || null,
           customTemplate: customTemplateReq.result || null,
+          customPptTemplate: customPptTemplateReq.result || null,
         });
       };
 
@@ -311,6 +341,7 @@ export async function loadStoredState() {
       localImages: {},
       customConfig: null,
       customTemplate: null,
+      customPptTemplate: null,
     };
   }
 }

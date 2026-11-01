@@ -37,12 +37,13 @@
         <span class="current-filename" id="currentFileName">Sans titre.md</span>
       </div>
 
-      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) -->
+      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) et Défilement synchronisé -->
       <div class="header-group header-center">
         <div class="view-switcher">
           <button type="button" class="view-btn active" data-view="report" id="btnViewReport">Rapport</button>
           <button type="button" class="view-btn" data-view="slide" id="btnViewSlide">Slide</button>
         </div>
+        <button type="button" class="btn" id="btnToggleSyncScroll" title="Activer ou désactiver le défilement lié entre l'éditeur et l'aperçu (Raccourci : F8)">Défilement lié : Activé</button>
       </div>
 
       <!-- Zone Droite : Configuration, Export et Thème -->
@@ -56,10 +57,12 @@
             </div>
             <button type="button" class="dropdown-item" id="btnLoadConfigJson">Charger configuration (.json)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplateDocx">Charger modèle Word (.docx)</button>
+            <button type="button" class="dropdown-item" id="btnLoadTemplatePptx">Charger modèle PowerPoint (.potx)</button>
             <button type="button" class="dropdown-item" id="btnResetConfig">Réinitialiser par défaut</button>
           </div>
           <input type="file" id="configJsonInput" class="hidden-input" accept=".json">
           <input type="file" id="templateDocxInput" class="hidden-input" accept=".docx,.dotx">
+          <input type="file" id="templatePptxInput" class="hidden-input" accept=".potx">
         </div>
 
         <!-- Menu déroulant Exporter -->

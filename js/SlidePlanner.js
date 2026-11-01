@@ -1,7 +1,7 @@
 /**
  * SlidePlanner.js — Planificateur unifié de diapositives pour md2print.
  * Partage les règles exactes de découpage en diapositives (titre, inter-titres,
- * pagination par dépassement de hauteur) entre la sortie HTML et la sortie PPTX.
+ * séparateurs --- et pagination de contenu) entre la sortie HTML et la sortie PPTX.
  */
 import { parseToAST } from './MarkdownParser.js';
 import {
@@ -191,239 +191,197 @@ export function blockToMarkdown(block) {
  */
 
 /**
- * Découpe un document Markdown en diapositives selon les règles strictes de PowerPoint.
- * Génère exactement la même séquence de diapositives pour la sortie HTML et PPTX.
+ * Découpe un document Markdown en diapositives selon les règles unifiées de synchronisation
+ * avec le moteur de présentation PowerPoint (.potx) {@link module:PptxTemplateEngine}.
+ *
+ * Règles partagées :
+ *  - Niveau 1 (#) ou document global : Couverture (type 'title')
+ *  - Niveau 2 (##) : Intercalaire de chapitre (type 'chapter')
+ *  - Niveau 3+ (###..) : Diapositive de contenu (type 'content')
+ *  - Séparateur horizontal (---) : Force la création d'une nouvelle diapositive
+ *  - Tableaux, images et diagrammes Mermaid : Isolés sur une diapositive dédiée si nécessaire
+ *  - Dépassement : Pagination en "(suite)" dès que 7 puces ou 6 paragraphes sont atteints
+ *
+ * @function planSlides
  * @param {string} mdText - Texte Markdown normalisé
  * @param {string} [docTitle='Document'] - Titre du document
  * @param {object} [options={}] - Options de planification
- * @param {object} [options.pptConfig] - Configuration output_config.json
- * @param {string} [options.templateId='default'] - Identifiant du template
- * @param {object} [options.template] - Template résolu directement
- * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des SVG Mermaid
- * @param {string} [options.date] - Date personnalisée
  * @returns {PlannedSlide[]} Liste des diapositives planifiées
  */
 export function planSlides(mdText, docTitle = 'Document', options = {}) {
   const cleanMd = mdText || '';
-  const template = options.template || resolvePptTemplate(options.pptConfig, options.templateId);
-  const masterKeys = Object.keys(template?.masters || {});
-  const chapterMasterKey = findMaster(masterKeys, ['CHAPITRE', 'CHAPTER', 'SECTION']);
-  const hasChapterMaster = Boolean(chapterMasterKey);
-
-  const area = getEffectiveContentArea(template);
-  const contentW = area.w;
-  const maxY = area.y + area.h;
   const formattedDate = options.date || new Date().toLocaleDateString('fr-FR');
-  const resolvedTitle = docTitle || 'Document';
+  const ast = parseToAST(cleanMd);
 
   /** @type {PlannedSlide[]} */
   const slides = [];
 
-  // Diapositive 1 : Couverture / Titre
+  let globalTitle = docTitle || 'Document';
+  let astStartIndex = 0;
+
+  // 1. Détection du titre global (#)
+  if (ast.length > 0 && ast[0].type === 'header' && ast[0].level === 1) {
+    globalTitle = ast[0].text;
+    astStartIndex = 1;
+  }
+
+  // Passer les éventuelles métadonnées du premier bloc
+  while (astStartIndex < ast.length) {
+    const block = ast[astStartIndex];
+    if (block.type === 'header') break;
+    astStartIndex++;
+  }
+
+  // Diapositive 1 : Couverture (type 'title')
   slides.push({
-    id: `slide-${slides.length + 1}`,
-    slideNumber: slides.length + 1,
+    id: `slide-1`,
+    slideNumber: 1,
     type: 'title',
-    title: resolvedTitle,
+    title: globalTitle,
     chapter: '',
     date: formattedDate,
     sectionIndex: -1,
     slideIndex: 0,
-    slug: toSlug(resolvedTitle) || 'title',
+    slug: toSlug(globalTitle) || 'title',
     blocks: [],
     markdown: '',
   });
 
-  const sections = splitMdBySections(cleanMd);
+  let currentSection = null;
+  let sectionIndex = 0;
+  let currentSlide = null;
 
-  for (let sIdx = 0; sIdx < sections.length; sIdx++) {
-    const section = sections[sIdx];
+  const flushSlide = () => {
+    if (currentSlide && currentSlide.blocks.length > 0) {
+      currentSlide.markdown = currentSlide.blocks.map(blockToMarkdown).join('\n\n').trim();
+      slides.push(currentSlide);
+      currentSlide = null;
+    }
+  };
 
-    // Diapositive d'inter-titre (Chapitre) si un master de chapitre est défini
-    if (hasChapterMaster) {
-      slides.push({
+  const ensureContentSlide = (title) => {
+    if (!currentSlide) {
+      const slideTitle = title || currentSection || 'Contenu';
+      currentSlide = {
         id: `slide-${slides.length + 1}`,
         slideNumber: slides.length + 1,
-        type: 'chapter',
-        title: section.title,
-        chapter: section.title,
+        type: 'content',
+        title: slideTitle,
+        chapter: currentSection || globalTitle,
         date: formattedDate,
-        sectionIndex: sIdx,
+        sectionIndex,
         slideIndex: slides.length,
-        slug: toSlug(section.title) || `section-${sIdx + 1}`,
+        slug: toSlug(slideTitle) || `slide-${slides.length + 1}`,
         blocks: [],
         markdown: '',
-      });
+      };
     }
+    return currentSlide;
+  };
 
-    // Découpage du contenu de la section en diapositives avec gestion du dépassement
-    const ast = parseToAST(section.content);
-    let activeTitle = section.title;
-    /** @type {PlannedSlide|null} */
-    let currentSlide = null;
-    let currentY = area.y;
-    let textH = 0;
+  for (let i = astStartIndex; i < ast.length; i++) {
+    const block = ast[i];
 
-    const finalizeCurrentSlide = () => {
-      if (currentSlide) {
-        if (currentSlide.blocks.length > 0) {
-          currentSlide.markdown = currentSlide.blocks.map(blockToMarkdown).join('\n\n').trim();
-          slides.push(currentSlide);
-        }
-        currentSlide = null;
-      }
-    };
+    if (block.type === 'header') {
+      flushSlide();
 
-    const ensureContentSlide = (titleToUse = activeTitle) => {
-      if (!currentSlide) {
-        currentSlide = {
+      if (block.level === 1) {
+        // Nouveau titre principal de niveau 1
+        slides.push({
           id: `slide-${slides.length + 1}`,
           slideNumber: slides.length + 1,
-          type: 'content',
-          title: titleToUse,
-          chapter: section.title,
+          type: 'title',
+          title: block.text,
+          chapter: '',
           date: formattedDate,
-          sectionIndex: sIdx,
+          sectionIndex: ++sectionIndex,
           slideIndex: slides.length,
-          slug: toSlug(titleToUse) || `slide-${slides.length + 1}`,
+          slug: toSlug(block.text) || `title-${slides.length + 1}`,
           blocks: [],
           markdown: '',
-        };
-      }
-      return currentSlide;
-    };
-
-    for (const block of ast) {
-      if (block.type === 'table') {
-        currentY += textH;
-        textH = 0;
-        const tH = (block.rows?.length || 1) * 0.4 + 0.2;
-        if (currentY + tH > maxY && currentY > area.y) {
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        ensureContentSlide().blocks.push(block);
-        currentY += tH;
-      } else if (block.type === 'mermaid') {
-        currentY += textH;
-        textH = 0;
-        const remainingH = maxY - currentY;
-        if (remainingH < 1.8 && currentY > area.y) {
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        const availH = Math.max(1.8, maxY - currentY - 0.15);
-        let mH = 2.2;
-        const normalizedCode = normalizeMermaidCode(block.code);
-        const svgMarkup = options.mermaidSvgMap?.[normalizedCode];
-        if (svgMarkup) {
-          const dims = readSvgDiagramSize(svgMarkup);
-          if (dims && dims.width > 0 && dims.height > 0) {
-            const fit = fitDimensions(dims.width / 96, dims.height / 96, contentW, availH);
-            mH = fit.height;
-          }
-        }
-        ensureContentSlide().blocks.push(block);
-        currentY += mH + 0.2;
-      } else if (block.type === 'image') {
-        currentY += textH;
-        textH = 0;
-        const imgH = 2.8;
-        if (currentY + imgH > maxY && currentY > area.y) {
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        ensureContentSlide().blocks.push(block);
-        currentY += imgH + 0.2;
-      } else if (block.type === 'separator') {
-        // Un séparateur "---" force la création d'une nouvelle diapositive pour le contenu qui suit
-        currentY += textH;
-        textH = 0;
-        finalizeCurrentSlide();
-        currentY = area.y;
+        });
         continue;
-      } else if (block.type === 'header') {
-        if (block.level === 1) {
-          currentY += textH;
-          textH = 0;
-          finalizeCurrentSlide();
-          activeTitle = block.text;
-          slides.push({
-            id: `slide-${slides.length + 1}`,
-            slideNumber: slides.length + 1,
-            type: 'chapter',
-            title: activeTitle,
-            chapter: activeTitle,
-            date: formattedDate,
-            sectionIndex: sIdx,
-            slideIndex: slides.length,
-            slug: toSlug(activeTitle) || `chapter-${slides.length + 1}`,
-            blocks: [],
-            markdown: '',
-          });
-          currentY = area.y;
-          continue;
-        }
-        if (block.level === 2) {
-          currentY += textH;
-          textH = 0;
-          activeTitle = block.text;
-          if (currentSlide !== null || currentY > area.y) {
-            finalizeCurrentSlide();
-            currentY = area.y;
-          }
-          continue;
-        }
-
-        let h = 0.3;
-        if (block.level === 3) h = 0.5;
-        else if (block.level === 4) h = 0.4;
-        else if (block.level >= 5) h = 0.35;
-
-        if (currentY + textH + h > maxY && (currentY > area.y || textH > 0)) {
-          currentY += textH;
-          textH = 0;
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        ensureContentSlide().blocks.push(block);
-        textH += h;
-      } else if (block.type === 'list_item') {
-        const totalLen =
-          block.runs?.reduce((acc, r) => acc + (r.text?.length || 0), 0) ||
-          block.text?.length ||
-          0;
-        const h = 0.3 * Math.max(Math.ceil(totalLen / (contentW * 12)), 1);
-        if (currentY + textH + h > maxY && (currentY > area.y || textH > 0)) {
-          currentY += textH;
-          textH = 0;
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        ensureContentSlide().blocks.push(block);
-        textH += h;
-      } else if (block.type === 'paragraph') {
-        const fullBlockText = block.runs
-          ? block.runs.map((r) => r.text).join('')
-          : block.text || '';
-        const explicitLineCount = fullBlockText.split('\n').length;
-        const wrappedLineCount = Math.ceil(fullBlockText.length / (contentW * 12));
-        const h = 0.28 * Math.max(explicitLineCount, wrappedLineCount, 1);
-        if (currentY + textH + h > maxY && (currentY > area.y || textH > 0)) {
-          currentY += textH;
-          textH = 0;
-          finalizeCurrentSlide();
-          currentY = area.y;
-        }
-        ensureContentSlide().blocks.push(block);
-        textH += h;
       }
+
+      if (block.level === 2) {
+        // Titre de section / chapitre
+        currentSection = block.text;
+        slides.push({
+          id: `slide-${slides.length + 1}`,
+          slideNumber: slides.length + 1,
+          type: 'chapter',
+          title: currentSection,
+          chapter: currentSection,
+          date: formattedDate,
+          sectionIndex: ++sectionIndex,
+          slideIndex: slides.length,
+          slug: toSlug(currentSection) || `chapter-${slides.length + 1}`,
+          blocks: [],
+          markdown: '',
+        });
+        continue;
+      }
+
+      // Niveau 3 ou supérieur (###, etc.)
+      currentSlide = {
+        id: `slide-${slides.length + 1}`,
+        slideNumber: slides.length + 1,
+        type: 'content',
+        title: block.text,
+        chapter: currentSection || globalTitle,
+        date: formattedDate,
+        sectionIndex,
+        slideIndex: slides.length,
+        slug: toSlug(block.text) || `slide-${slides.length + 1}`,
+        blocks: [],
+        markdown: '',
+      };
+      continue;
     }
 
-    currentY += textH;
-    textH = 0;
-    finalizeCurrentSlide();
+    if (block.type === 'separator') {
+      // Délimiteur explicite de diapositive (---)
+      flushSlide();
+      continue;
+    }
+
+    if (!currentSlide) {
+      ensureContentSlide();
+    }
+
+    if (block.type === 'table') {
+      if (currentSlide.blocks.length > 2) {
+        flushSlide();
+        ensureContentSlide(currentSection ? `${currentSection} - Données` : 'Données');
+      }
+      currentSlide.blocks.push(block);
+      flushSlide();
+    } else if (block.type === 'image' || block.type === 'mermaid') {
+      if (currentSlide.blocks.length > 2) {
+        flushSlide();
+        ensureContentSlide(currentSection ? `${currentSection} - Schéma` : 'Schéma');
+      }
+      currentSlide.blocks.push(block);
+      flushSlide();
+    } else if (block.type === 'list_item') {
+      currentSlide.blocks.push(block);
+      const listCount = currentSlide.blocks.filter((b) => b.type === 'list_item').length;
+      if (listCount >= 7) {
+        const prevTitle = currentSlide.title;
+        flushSlide();
+        ensureContentSlide(`${prevTitle} (suite)`);
+      }
+    } else if (block.type === 'paragraph') {
+      currentSlide.blocks.push(block);
+      const paraCount = currentSlide.blocks.filter((b) => b.type === 'paragraph').length;
+      if (paraCount >= 6) {
+        const prevTitle = currentSlide.title;
+        flushSlide();
+        ensureContentSlide(`${prevTitle} (suite)`);
+      }
+    }
   }
 
+  flushSlide();
   return slides;
 }

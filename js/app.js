@@ -30,6 +30,7 @@ import {
   savePreferences,
   saveCustomConfig,
   saveCustomTemplate,
+  saveCustomPptTemplate,
   clearCustomConfigAndTemplate,
   saveDraftState,
   clearDraftState,
@@ -55,6 +56,9 @@ const state = {
   configFileName: 'output_config.json (défaut)',
   templateBuffer: null,
   templateFileName: 'Modele_word.docx (défaut)',
+  pptTemplateBuffer: null,
+  pptTemplateFileName: 'Modele_presentation.potx (défaut)',
+  syncScroll: true,
 };
 
 // --- Cache des Références DOM ---
@@ -76,6 +80,7 @@ const initDomRefs = () => {
 
   dom.btnViewReport = document.getElementById('btnViewReport');
   dom.btnViewSlide = document.getElementById('btnViewSlide');
+  dom.btnToggleSyncScroll = document.getElementById('btnToggleSyncScroll');
 
   dom.dropdownConfig = document.getElementById('dropdownConfig');
   dom.btnToggleConfig = document.getElementById('btnToggleConfig');
@@ -84,6 +89,8 @@ const initDomRefs = () => {
   dom.configJsonInput = document.getElementById('configJsonInput');
   dom.btnLoadTemplateDocx = document.getElementById('btnLoadTemplateDocx');
   dom.templateDocxInput = document.getElementById('templateDocxInput');
+  dom.btnLoadTemplatePptx = document.getElementById('btnLoadTemplatePptx');
+  dom.templatePptxInput = document.getElementById('templatePptxInput');
   dom.btnResetConfig = document.getElementById('btnResetConfig');
 
   dom.dropdownExport = document.getElementById('dropdownExport');
@@ -165,6 +172,7 @@ async function persistPreferencesNow() {
     theme: state.theme,
     currentViewport: state.currentViewport,
     editorWidthPct: state.editorWidthPct,
+    syncScroll: state.syncScroll,
   });
 }
 
@@ -208,7 +216,8 @@ function scheduleDraftSave(delay = 60) {
  * @returns {Promise<void>}
  */
 async function restoreFromIndexedDB() {
-  const { prefs, draft, localImages, customConfig, customTemplate } = await loadStoredState();
+  const { prefs, draft, localImages, customConfig, customTemplate, customPptTemplate } =
+    await loadStoredState();
 
   if (prefs) {
     if (prefs.theme === 'dark' || prefs.theme === 'sepia') {
@@ -234,7 +243,12 @@ async function restoreFromIndexedDB() {
         dom.paneEditor.style.width = `${state.editorWidthPct}%`;
       }
     }
+    if (typeof prefs.syncScroll === 'boolean') {
+      state.syncScroll = prefs.syncScroll;
+    }
   }
+
+  updateSyncScrollUI();
 
   if (customConfig?.outputConfig && typeof customConfig.outputConfig === 'object') {
     state.outputConfig = customConfig.outputConfig;
@@ -243,7 +257,12 @@ async function restoreFromIndexedDB() {
 
   if (customTemplate?.templateBuffer instanceof ArrayBuffer) {
     state.templateBuffer = customTemplate.templateBuffer;
-    state.templateFileName = customTemplate.templateFileName || 'Modèle personnalisé';
+    state.templateFileName = customTemplate.templateFileName || 'Modèle Word personnalisé';
+  }
+
+  if (customPptTemplate?.pptTemplateBuffer instanceof ArrayBuffer) {
+    state.pptTemplateBuffer = customPptTemplate.pptTemplateBuffer;
+    state.pptTemplateFileName = customPptTemplate.pptTemplateFileName || 'Modèle PPT personnalisé';
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -296,7 +315,25 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
         state.templateFileName = `${tplPath.split('/').pop()} (défaut)`;
       }
     } catch {
-      state.templateFileName = 'Aucun modèle chargé';
+      state.templateFileName = 'Aucun modèle Word chargé';
+    }
+  }
+
+  if (forceReset || !state.pptTemplateBuffer) {
+    try {
+      const pw = state.outputConfig?.powerpoint;
+      const defPpt =
+        pw?.templates?.find((t) => t.id === (pw.default || 'standard')) || pw?.templates?.[0];
+      const pptPath = defPpt?.path || 'templates/Modele_presentation.potx';
+      const resPpt = await fetch(pptPath);
+      if (resPpt.ok) {
+        state.pptTemplateBuffer = await resPpt.arrayBuffer();
+        state.pptTemplateFileName = `${pptPath.split('/').pop()} (défaut)`;
+      } else {
+        state.pptTemplateFileName = 'Aucun modèle PPT chargé';
+      }
+    } catch {
+      state.pptTemplateFileName = 'Modèle PPT par défaut introuvable';
     }
   }
 
@@ -309,7 +346,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
  */
 function updateConfigStatusUI() {
   if (!dom.configStatusText) return;
-  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle : ${escapeHtml(state.templateFileName)}`;
+  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}`;
 }
 
 /**
@@ -321,6 +358,52 @@ function updateFileNameDisplay() {
   const suffix = state.isDirty ? ' *' : '';
   dom.currentFileName.textContent = `${state.currentFileName}${suffix}`;
   dom.currentFileName.classList.toggle('is-dirty', state.isDirty);
+}
+
+/**
+ * Met à jour le libellé et l'état visuel du bouton de défilement lié.
+ * @returns {void}
+ */
+function updateSyncScrollUI() {
+  if (!dom.btnToggleSyncScroll) return;
+  if (state.syncScroll) {
+    dom.btnToggleSyncScroll.textContent = 'Défilement lié : Activé';
+    dom.btnToggleSyncScroll.classList.remove('btn-inactive');
+    dom.btnToggleSyncScroll.classList.add('btn-active');
+  } else {
+    dom.btnToggleSyncScroll.textContent = 'Défilement lié : Désactivé';
+    dom.btnToggleSyncScroll.classList.remove('btn-active');
+    dom.btnToggleSyncScroll.classList.add('btn-inactive');
+  }
+}
+
+/**
+ * Active ou désactive le défilement synchronisé entre l'éditeur et l'aperçu.
+ * @returns {void}
+ */
+function toggleSyncScroll() {
+  state.syncScroll = !state.syncScroll;
+  updateSyncScrollUI();
+  persistPreferencesNow();
+  if (state.syncScroll) {
+    showToast('Défilement lié activé (Aperçu -> Éditeur)');
+    syncScrollIframeToEditor();
+  } else {
+    showToast('Défilement lié désactivé (défilement libre)');
+  }
+}
+
+/**
+ * Détecte si l'utilisateur a saisi un bloc Mermaid brut fermé (```mermaid ... ```) non encore converti en cartouche.
+ * @returns {void}
+ */
+function checkForUnfencedCartouches() {
+  const text = state.markdown || '';
+  const mermaidMatches = text.match(/```mermaid[\s\S]*?```/gi) || [];
+  const existingCartouches = dom.mdEditor.querySelectorAll('.mermaid-cartouche').length;
+  if (mermaidMatches.length > existingCartouches) {
+    syncFromEditorDOM();
+  }
 }
 
 /**
@@ -360,8 +443,8 @@ function syncFromEditorDOM() {
     );
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
   }
-  schedulePreviewUpdate(120);
-  scheduleDraftSave(60);
+  schedulePreviewUpdate(400);
+  scheduleDraftSave(1500);
 }
 
 // --- Attachement des Événements ---
@@ -445,32 +528,46 @@ function initEventListeners() {
     handleSaveMarkdown();
   });
 
-  // Raccourci global Ctrl+S / Cmd+S
+  // Raccourci global Ctrl+S / Cmd+S et F8 (Bascule Défilement lié)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       handleSaveMarkdown();
+    } else if (e.key === 'F8') {
+      e.preventDefault();
+      toggleSyncScroll();
     }
   });
 
-  // F2 — Éditeur de texte standard avec objets graphiques (.image-cartouche et .mermaid-cartouche)
+  // F2 — Éditeur de texte standard (Saisie 100% fluide sans destruction/reconstruction du DOM)
   dom.mdEditor.addEventListener('input', (e) => {
     if (e.isComposing) return;
-    if (e.target?.classList?.contains('mermaid-code-textarea')) {
-      state.markdown = serializeEditorToMarkdown(dom.mdEditor);
-      if (!state.isDirty) {
-        state.isDirty = true;
-        updateFileNameDisplay();
-      }
-      schedulePreviewUpdate(120);
-      scheduleDraftSave(60);
-      return;
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    if (!state.isDirty) {
+      state.isDirty = true;
+      updateFileNameDisplay();
     }
-    syncFromEditorDOM();
+    if (e.data === '`' || e.data === '\n') {
+      checkForUnfencedCartouches();
+    }
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
   });
 
   dom.mdEditor.addEventListener('compositionend', () => {
-    syncFromEditorDOM();
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    if (!state.isDirty) {
+      state.isDirty = true;
+      updateFileNameDisplay();
+    }
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
+  });
+
+  // Sauvegarde immédiate lors de la perte de focus
+  dom.mdEditor.addEventListener('blur', () => {
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    persistDraftNow();
   });
 
   // Événement personnalisé émis lors de la frappe ou indentation dans un textarea Mermaid
@@ -480,8 +577,8 @@ function initEventListeners() {
       state.isDirty = true;
       updateFileNameDisplay();
     }
-    schedulePreviewUpdate(120);
-    scheduleDraftSave(60);
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
   });
 
   // Clic sur une cartouche graphique [image] ou [mermaid] -> sélectionne l'objet graphique comme du texte
@@ -639,26 +736,9 @@ function initEventListeners() {
     }
   });
 
-  // Synchronisation du défilement (Éditeur -> Iframe)
-  dom.mdEditor.addEventListener('scroll', () => {
-    if (isSyncingFromIframe || state.currentViewport !== 'report') return;
-    const iframeWin = dom.previewIframe.contentWindow;
-    const iframeDoc = dom.previewIframe.contentDocument;
-    if (!iframeWin || !iframeDoc?.documentElement) return;
-
-    const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
-    if (maxEditorScroll <= 0) return;
-
-    const ratio = dom.mdEditor.scrollTop / maxEditorScroll;
-    const maxIframeScroll =
-      iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
-
-    isSyncingFromEditor = true;
-    iframeWin.scrollTo(0, ratio * Math.max(0, maxIframeScroll));
-    clearTimeout(editorScrollTimer);
-    editorScrollTimer = setTimeout(() => {
-      isSyncingFromEditor = false;
-    }, 60);
+  // Bascule du défilement lié (Bouton dans l'en-tête ou touche F8)
+  dom.btnToggleSyncScroll?.addEventListener('click', () => {
+    toggleSyncScroll();
   });
 
   // F3 / F4 — Sélecteur de Vue (Rapport / Slide)
@@ -735,10 +815,32 @@ function initEventListeners() {
     }
   });
 
+  dom.btnLoadTemplatePptx?.addEventListener('click', () => {
+    dom.templatePptxInput.value = '';
+    dom.templatePptxInput.click();
+  });
+
+  dom.templatePptxInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      state.pptTemplateBuffer = await readFileAsArrayBuffer(file);
+      state.pptTemplateFileName = file.name;
+      await saveCustomPptTemplate({
+        pptTemplateBuffer: state.pptTemplateBuffer,
+        pptTemplateFileName: state.pptTemplateFileName,
+      });
+      updateConfigStatusUI();
+      showToast(`Modèle PowerPoint chargé : ${file.name}`, 'success');
+    } catch (err) {
+      showToast(`Erreur modèle PowerPoint : ${err.message}`, 'error');
+    }
+  });
+
   dom.btnResetConfig?.addEventListener('click', async () => {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
-    showToast('Configuration et modèle Word réinitialisés par défaut');
+    showToast('Configuration et modèles réinitialisés par défaut');
   });
 
   // Actions d'export (HTML, DOCX, PPTX)
@@ -883,20 +985,152 @@ async function insertImageAsBase64(file, customAlt) {
   }
 }
 
-// --- Gestion de l'Aperçu Iframe, Debounce & Scroll Sync ---
+// --- Gestion de l'Aperçu Iframe, Debounce & Défilement Synchronisé ---
 
-let isSyncingFromEditor = false;
-let isSyncingFromIframe = false;
-let editorScrollTimer = null;
-let iframeScrollTimer = null;
+let isSyncingScroll = false;
+let syncScrollTimer = null;
 let previewDebounceTimer = null;
 
 /**
- * Planifie la mise à jour de l'iframe d'aperçu avec un debounce pour préserver la fluidité de frappe.
- * @param {number} [delay=120] - Délai en millisecondes avant régénération de l'iframe
+ * Calcule la position de défilement cible en interpolant les segments délimités par les titres (headings).
+ * En l'absence de titres, se replie de manière fluide sur un ratio proportionnel classique.
+ *
+ * @param {number} currentPos - Position de défilement actuelle (en pixels)
+ * @param {number} maxSource - Défilement maximal possible dans le conteneur source
+ * @param {number} maxTarget - Défilement maximal possible dans le conteneur cible
+ * @param {'editorToIframe'|'iframeToEditor'} direction - Sens de calcul
+ * @returns {number} Position de défilement calculée (arrondie à l'entier le plus proche)
+ */
+function computeSyncedScrollPosition(currentPos, maxSource, maxTarget, direction) {
+  if (currentPos <= 0 || maxSource <= 0) return 0;
+  if (currentPos >= maxSource) return maxTarget;
+
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  if (!iframeDoc || !iframeWin) {
+    return Math.round((currentPos / maxSource) * maxTarget);
+  }
+
+  const editorHeadings = Array.from(dom.mdEditor.querySelectorAll('.md-heading-line'));
+  const iframeHeadings = Array.from(iframeDoc.querySelectorAll('.doc-heading'));
+
+  if (editorHeadings.length === 0 || iframeHeadings.length === 0) {
+    return Math.round((currentPos / maxSource) * maxTarget);
+  }
+
+  const anchorCount = Math.min(editorHeadings.length, iframeHeadings.length);
+  const anchors = [{ source: 0, target: 0 }];
+
+  const editorRect = dom.mdEditor.getBoundingClientRect();
+  const iframeScrollY = iframeWin.scrollY || iframeWin.pageYOffset || 0;
+
+  for (let i = 0; i < anchorCount; i++) {
+    const eTop =
+      editorHeadings[i].getBoundingClientRect().top - editorRect.top + dom.mdEditor.scrollTop;
+    const iTop = iframeHeadings[i].getBoundingClientRect().top + iframeScrollY;
+
+    const sourceY = direction === 'editorToIframe' ? eTop : iTop;
+    const targetY = direction === 'editorToIframe' ? iTop : eTop;
+
+    const prev = anchors[anchors.length - 1];
+    if (sourceY > prev.source && targetY > prev.target) {
+      anchors.push({ source: sourceY, target: targetY });
+    }
+  }
+
+  // Borne terminale
+  const last = anchors[anchors.length - 1];
+  if (maxSource > last.source && maxTarget > last.target) {
+    anchors.push({ source: maxSource, target: maxTarget });
+  } else {
+    anchors.push({
+      source: Math.max(maxSource, last.source + 1),
+      target: Math.max(maxTarget, last.target + 1),
+    });
+  }
+
+  // Recherche du segment [k, k+1] englobant la position source
+  for (let k = 0; k < anchors.length - 1; k++) {
+    const p1 = anchors[k];
+    const p2 = anchors[k + 1];
+
+    if (currentPos >= p1.source && currentPos <= p2.source) {
+      const segSpan = p2.source - p1.source;
+      if (segSpan <= 0) return Math.round(p1.target);
+      const ratio = (currentPos - p1.source) / segSpan;
+      return Math.round(p1.target + ratio * (p2.target - p1.target));
+    }
+  }
+
+  return Math.round((currentPos / maxSource) * maxTarget);
+}
+
+/**
+ * Synchronise le défilement de l'iframe à partir de la position courante de l'éditeur.
  * @returns {void}
  */
-function schedulePreviewUpdate(delay = 120) {
+function syncScrollEditorToIframe() {
+  if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  if (!iframeWin || !iframeDoc?.documentElement) return;
+
+  const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
+  const maxIframeScroll =
+    iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
+  if (maxEditorScroll <= 0 || maxIframeScroll <= 0) return;
+
+  const targetY = computeSyncedScrollPosition(
+    dom.mdEditor.scrollTop,
+    maxEditorScroll,
+    maxIframeScroll,
+    'editorToIframe'
+  );
+
+  isSyncingScroll = true;
+  iframeWin.scrollTo(0, targetY);
+  clearTimeout(syncScrollTimer);
+  syncScrollTimer = setTimeout(() => {
+    isSyncingScroll = false;
+  }, 60);
+}
+
+/**
+ * Synchronise le défilement de l'éditeur à partir de la position courante de l'iframe.
+ * @returns {void}
+ */
+function syncScrollIframeToEditor() {
+  if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  if (!iframeWin || !iframeDoc?.documentElement) return;
+
+  const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
+  const maxIframeScroll =
+    iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
+  if (maxEditorScroll <= 0 || maxIframeScroll <= 0) return;
+
+  const targetY = computeSyncedScrollPosition(
+    iframeWin.scrollY || iframeWin.pageYOffset || 0,
+    maxIframeScroll,
+    maxEditorScroll,
+    'iframeToEditor'
+  );
+
+  isSyncingScroll = true;
+  dom.mdEditor.scrollTop = targetY;
+  clearTimeout(syncScrollTimer);
+  syncScrollTimer = setTimeout(() => {
+    isSyncingScroll = false;
+  }, 60);
+}
+
+/**
+ * Planifie la mise à jour de l'iframe d'aperçu avec un debounce optimisé pour préserver la fluidité de frappe.
+ * @param {number} [delay=400] - Délai en millisecondes avant régénération de l'iframe
+ * @returns {void}
+ */
+function schedulePreviewUpdate(delay = 400) {
   if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(() => {
     previewDebounceTimer = null;
@@ -943,18 +1177,11 @@ async function updatePreview() {
   const iframe = dom.previewIframe;
   if (!iframe) return;
 
-  let prevScrollRatio = 0;
+  let prevIframeScroll = 0;
   try {
-    const prevDoc = iframe.contentDocument;
-    if (prevDoc?.documentElement) {
-      const maxPrev =
-        prevDoc.documentElement.scrollHeight - prevDoc.documentElement.clientHeight;
-      if (maxPrev > 0) {
-        prevScrollRatio = (iframe.contentWindow?.scrollY || 0) / maxPrev;
-      }
-    }
+    prevIframeScroll = iframe.contentWindow?.scrollY || 0;
   } catch {
-    prevScrollRatio = 0;
+    prevIframeScroll = 0;
   }
 
   const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
@@ -975,33 +1202,13 @@ async function updatePreview() {
 
   const iframeWin = iframe.contentWindow;
   if (iframeWin && state.currentViewport === 'report') {
-    setTimeout(() => {
-      const newDoc = iframe.contentDocument;
-      if (newDoc?.documentElement && prevScrollRatio > 0) {
-        const maxNew =
-          newDoc.documentElement.scrollHeight - newDoc.documentElement.clientHeight;
-        iframeWin.scrollTo(0, prevScrollRatio * Math.max(0, maxNew));
-      }
-    }, 0);
+    if (prevIframeScroll > 0) {
+      iframeWin.scrollTo(0, prevIframeScroll);
+    }
 
+    // Le défilement de la fenêtre WYSIWYG entraîne la fenêtre non-WYSIWYG (l'éditeur)
     iframeWin.addEventListener('scroll', () => {
-      if (isSyncingFromEditor || state.currentViewport !== 'report') return;
-      const curDoc = iframe.contentDocument;
-      if (!curDoc?.documentElement) return;
-
-      const maxIframeScroll =
-        curDoc.documentElement.scrollHeight - curDoc.documentElement.clientHeight;
-      if (maxIframeScroll <= 0) return;
-
-      const ratio = iframeWin.scrollY / maxIframeScroll;
-      const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
-
-      isSyncingFromIframe = true;
-      dom.mdEditor.scrollTop = ratio * Math.max(0, maxEditorScroll);
-      clearTimeout(iframeScrollTimer);
-      iframeScrollTimer = setTimeout(() => {
-        isSyncingFromIframe = false;
-      }, 60);
+      syncScrollIframeToEditor();
     });
   }
 }
@@ -1072,16 +1279,16 @@ async function handleExportPptx() {
   }
 
   const title = resolveDocumentTitle();
-  const pptConfig = state.outputConfig || { templates: [] };
   showToast('Génération de la présentation PowerPoint (.pptx) en cours...');
 
   try {
     const blob = await generatePptx(
       state.markdown,
       title,
-      pptConfig,
-      'default',
-      state.localImages
+      state.pptTemplateBuffer,
+      state.outputConfig,
+      (msg) => showToast(msg, 'info'),
+      { localImages: state.localImages }
     );
     const filename = `${toSlug(title)}.pptx`;
     downloadBlob(blob, filename);
