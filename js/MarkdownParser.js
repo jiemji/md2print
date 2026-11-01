@@ -1,13 +1,16 @@
 /**
- * MarkdownParser.js — Parseur Markdown vers AST structuré (pour DOCX et PPTX)
+ * @module MarkdownParser
+ * @description Parseur Markdown vers AST structuré et analyseur récursif de styles inline (pour DOCX et PPTX).
  *
- * Produit un tableau de blocs :
- *   { type: 'header', level, text, runs }
- *   { type: 'paragraph', runs, isCode, isQuote }
- *   { type: 'list_item', listType, level, text, runs }
- *   { type: 'table', rows: string[][] }
- *   { type: 'image', alt: string, src: string }
- *   { type: 'separator' }
+ * Produit un tableau de blocs typés :
+ * - { type: 'header', level, text, runs, raw }
+ * - { type: 'paragraph', runs, isCode, isQuote, callout, raw }
+ * - { type: 'list_item', listType, level, text, runs, raw }
+ * - { type: 'table', rows: string[][], raw }
+ * - { type: 'image', alt: string, src: string, raw }
+ * - { type: 'mermaid', code: string, raw }
+ * - { type: 'separator', raw }
+ * @requires utils
  */
 
 import {
@@ -31,7 +34,8 @@ const DEFAULT_FORMAT = Object.freeze({
 /**
  * Extrait récursivement les styles inline d'un texte Markdown et retourne un tableau de runs formatés.
  * Gère : `code`, [libellé](url), ***gras+italique***, **gras**, __souligné__, <u>souligné</u>,
- * ~~barré~~, *italique*, _italique_ ainsi que leurs imbrications.
+ * ~~barré~~, *italique*, _italique_, badges inline ([badge:type:texte]),
+ * métriques/chiffres ([chiffre:valeur:libellé]) ainsi que leurs imbrications.
  * @param {string} text - Segment de texte Markdown à analyser
  * @param {object} [inheritedFormat=DEFAULT_FORMAT] - Format parent hérité lors de l'analyse récursive
  * @returns {Array<{text: string, format: object}>}

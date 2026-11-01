@@ -1,7 +1,12 @@
 /**
- * HtmlGenerator.js — Génération du document HTML autonome (et de l'aperçu iframe)
- * Intègre CSS (thème Azur classique), Sommaire latéral repliable avec ScrollSpy,
- * et support des modes Rapport continu et Slide interactif (100 % textuel, sans icône ni émoji).
+ * @module HtmlGenerator
+ * @description Génération du document HTML autonome et du flux de prévisualisation iframe.
+ * Intègre le CSS (thème Azur classique), le sommaire latéral repliable avec ScrollSpy,
+ * les schémas Mermaid vectoriels, les alertes/callouts GitHub, les badges inline,
+ * les cartouches de données/métriques agrandies (5x), et le support des modes
+ * Rapport continu et Diaporama interactif.
+ * @requires utils
+ * @requires SlidePlanner
  */
 import {
   toSlug,

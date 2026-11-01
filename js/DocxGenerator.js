@@ -1,5 +1,11 @@
 /**
- * DocxGenerator.js — Génération Word (.docx) depuis Markdown avec support des images Base64 et injection dans un template
+ * @module DocxGenerator
+ * @description Génération Word (.docx) côté client depuis le Markdown normalisé.
+ * Supporte les images Base64, les schémas Mermaid rastérisés en PNG haute résolution 2x,
+ * les alertes/callouts avec bordure colorée, les blocs de code, citations, tableaux,
+ * et l'injection OpenXML dans un modèle personnalisé via JSZip.
+ * @requires MarkdownParser
+ * @requires utils
  */
 import { parseToAST, extractInlineStyles } from './MarkdownParser.js';
 import {

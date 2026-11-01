@@ -1,9 +1,12 @@
 /**
- * EditorEngine.js — Moteur de l'éditeur Markdown non-WYSIWYG (contenteditable="true")
- * Gère les objets graphiques .image-cartouche (2 lignes de hauteur), la préservation
+ * @module EditorEngine
+ * @description Moteur de l'éditeur Markdown non-WYSIWYG (contenteditable="true").
+ * Gère les objets graphiques .image-cartouche et .mermaid-cartouche, la préservation
  * exacte des offsets de sélection (1 caractère = 1 unité, 1 cartouche = 1 unité),
- * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS
- * et le formatage syntaxique en direct.
+ * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS,
+ * le retour à la ligne des colonnes de plus de 60 caractères, et le formatage syntaxique
+ * en direct (titres, citations, callouts, listes, inline, badges et métriques).
+ * @requires utils
  */
 import {
   createImageCartouche,
@@ -387,9 +390,11 @@ export function restoreEditorSelectionOffsets(editorEl, offsets) {
  * - Souligné (__...__ ou <u>...</u>)
  * - Barré (~~...~~)
  * - Italique (*...* ou _..._)
+ * - Badges inline ([badge:type:texte])
+ * - Cartouches de données / métriques ([chiffre:valeur:libellé])
  * tout en conservant l'ensemble des délimiteurs visibles.
  * L'invariant de longueur (1 caractère = 1 unité de sélection) est intégralement préservé.
- * @param {string} text
+ * @param {string} text - Segment de texte brut
  * @returns {DocumentFragment}
  */
 export function buildFormattedTextNodes(text) {

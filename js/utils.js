@@ -1207,6 +1207,13 @@ export const METRIC_VARIANT_MAP = {
 };
 
 /**
+ * @typedef {object} MetricTagInfo
+ * @property {string} val - Valeur principale du chiffre ou pourcentage (ex: '98%', '1,2 M€')
+ * @property {string} label - Libellé explicatif optionnel
+ * @property {string} variant - Variante de style (ex: 'success', 'danger', 'info', 'warning', 'default')
+ */
+
+/**
  * Analyse et extrait la valeur, le libellé et la variante d'une balise chiffre/métrique.
  * Supporte les formats :
  * - [chiffre:valeur:libellé:variante]
@@ -1217,7 +1224,7 @@ export const METRIC_VARIANT_MAP = {
  * @param {string} valStr - Valeur brute (ex: '98%', '1,2 M€', '+42%')
  * @param {string} [part2] - Deuxième composante (libellé ou variante)
  * @param {string} [part3] - Troisième composante (variante)
- * @returns {{ val: string, label: string, variant: string }}
+ * @returns {MetricTagInfo}
  */
 export function parseMetricTag(valStr, part2, part3) {
   const val = (valStr || '').trim();
