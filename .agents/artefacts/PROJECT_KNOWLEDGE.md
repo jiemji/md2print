@@ -1,6 +1,6 @@
 # md2print — Documentation Technique de Référence (PROJECT_KNOWLEDGE)
 
-> **Version courante : 1.2.0** --- Mise à jour : 2026-10-31
+> **Version courante : 1.3.0** --- Mise à jour : 2026-11-01
 
 ---
 
@@ -13,6 +13,7 @@
 | **IndexedDB** | API native du navigateur encapsulée dans [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) | Persistance locale haute capacité du brouillon, des images Base64, des préférences UI et des modèles personnalisés |
 | **Marked.js** | `vendor/marked.min.js` | Parser Markdown vers HTML avec renderers personnalisés |
 | **Highlight.js** | `vendor/highlight.min.js` | Coloration syntaxique des blocs de code dans l'aperçu et l'export HTML |
+| **Mermaid.js** | `vendor/mermaid.min.js` | Moteur de rendu vectoriel (SVG) pour les schémas diagrammatiques (flux, architecture, séquences, états, classes) côté client |
 | **docx** | `vendor/docx.umd.js` | Génération de documents Microsoft Word (`.docx`) côté client |
 | **PptxGenJS** | `vendor/pptxgen.bundle.js` | Génération de présentations Microsoft PowerPoint (`.pptx`) côté client |
 | **JSZip** | `vendor/jszip.min.js` | Manipulation d'archives OpenXML pour l'injection dans le modèle Word `.docx` |
@@ -36,11 +37,15 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 │  │ Moitié Gauche : Éditeur (.md) │   │ Moitié Droite : Aperçu Iframe │  │
 │  │ - <div id="mdEditor">         │◄─►│ - Mode Rapport / Mode Slide   │  │
 │  │ - EditorEngine.js             │   │ - Sommaire repliable (TOC)    │  │
-│  │ - Cartouches [image] (2 lig.) │   │ - Debounce 120 ms             │  │
+│  │ - Cartouches [image] (2 lig.) │   │ - Schémas Mermaid vectoriels  │  │
+│  │ - Cartouches [mermaid] (▼/▲)  │   │ - Debounce 120 ms             │  │
 │  └───────────────┬───────────────┘   └───────────────▲───────────────┘  │
 │                  │                                   │                  │
 │                  ▼                                   │                  │
-│    Objet `state` + StorageService (IndexedDB) ──► `HtmlGenerator.js`    │
+│    Objet `state` + StorageService (IndexedDB) ──► `SlidePlanner.js`     │
+│                  │                                   │                  │
+│                  │                                   ├──► `HtmlGen.js`  │
+│                  │                                   └──► `PptxGen.js`  │
 │                  │                                                      │
 │                  ├──────────► `HtmlGenerator.js` ──► Export .html       │
 │                  ├──────────► `DocxGenerator.js` ──► Export .docx       │
@@ -51,15 +56,16 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 ### Fichiers Clés
 
 - [`index.html`](file:///g:/devapps/md2print/index.html) : Conteneur principal de la SPA (barre de menu supérieure, éditeur gauche, séparateur central, aperçu `iframe` droit).
-- [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css) : Styles de l'interface, layout Flexbox 50/50 redimensionnable, thèmes Sombre (Bleu foncé et gris) et Clair (Sépia).
-- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, persistance `IndexedDB`, gestion des fichiers/dossiers `.md`, raccourcis clavier, synchronisation du défilement, `debounce` d'aperçu et déclenchement des exports).
-- [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js) : Moteur d'édition `contenteditable="true"` non-WYSIWYG (calcul et restauration des offsets de sélection, objets graphiques `.image-cartouche` de 2 lignes, alignement CSS des colonnes de tableaux, formatage syntaxique en direct).
+- [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css) : Styles de l'interface, layout Flexbox 50/50 redimensionnable, thèmes Sombre et Clair (Sépia), objets graphiques `.image-cartouche` et `.mermaid-cartouche` (modes replié/déplié).
+- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, persistance `IndexedDB`, gestion des fichiers/dossiers `.md`, raccourcis clavier, sélection des cartouches, synchronisation du défilement, `debounce` d'aperçu et déclenchement des exports).
+- [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js) : Moteur d'édition `contenteditable="true"` non-WYSIWYG (calcul et restauration des offsets de sélection, cartouches graphiques `.image-cartouche` et `.mermaid-cartouche` avec éditeur intégré et toggle `▼`/`▲`, suppression unifiée `Suppr`/`Backspace`, alignement CSS des colonnes de tableaux plafonné à 60 caractères, formatage syntaxique en direct).
+- [`js/SlidePlanner.js`](file:///g:/devapps/md2print/js/SlidePlanner.js) : Planificateur unifié de diapositives partagé par l'export PowerPoint (`.pptx`) et le mode Diaporama HTML (calcul prédictif de hauteur selon `area.y + area.h`, couverture, inter-titres, saut de diapositive forcé par `---`, répartition 1-pour-1 des blocs).
 - [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) : Service de persistance locale `IndexedDB` (`md2print_db`, stores `app_state` et `local_images`) stockant de manière atomique le brouillon Markdown, les images Base64, les préférences d'interface (`theme`, `viewport`, `editorWidthPct`) ainsi que les fichiers `output_config.json` et `Modele_word.docx` personnalisés.
-- [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Fonctions utilitaires (`toSlug`, `escapeHtml`, `extractTitle`, lecture de fichiers, `normalizeMarkdown`, `resolveImagePaths`, `pruneUnusedLocalImages`, `validateOutputConfig`, `ensureOfficeCompatibleImage`, conversion d'images Base64).
-- [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Parseur Markdown vers AST structuré avec extraction récursive des styles inline pour les moteurs Word et PowerPoint.
-- [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : Générateur du document `.html` autonome (styles Azur, sommaire repliable, ScrollSpy, modes Rapport et Slide).
-- [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js) : Générateur Word `.docx` avec support des images Base64 (incluant conversion automatique SVG/WebP en PNG), des blocs de code, citations, séparateurs et injection XML dans un modèle `.docx`.
-- [`js/PptxGenerator.js`](file:///g:/devapps/md2print/js/PptxGenerator.js) & [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js) : Générateur PowerPoint `.pptx` suivant le découpage par niveaux de titres avec habillage des blocs de code, citations, tableaux et images Base64.
+- [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Fonctions utilitaires (`toSlug`, `escapeHtml`, `extractTitle`, lecture de fichiers, `normalizeMarkdown`, `resolveImagePaths`, `pruneUnusedLocalImages`, `validateOutputConfig`, `ensureOfficeCompatibleImage`, `renderMermaidBlocksMap`, `renderMermaidToPngDataUrl`, `readSvgDiagramSize`, `fitDimensions`).
+- [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Parseur Markdown vers AST structuré avec mémorisation de la propriété `raw` par bloc et extraction récursive des styles inline pour les moteurs Word et PowerPoint.
+- [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : Générateur du document `.html` autonome (styles Azur, cadre ombré pour schémas Mermaid, sommaire repliable, ScrollSpy, modes Rapport et Diaporama alimenté par `SlidePlanner`).
+- [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js) : Générateur Word `.docx` avec support des images Base64, des diagrammes Mermaid (rastérisés en PNG haute résolution 2x), des blocs de code, citations, séparateurs et injection XML dans un modèle `.docx`.
+- [`js/PptxGenerator.js`](file:///g:/devapps/md2print/js/PptxGenerator.js) & [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js) : Générateur PowerPoint `.pptx` piloté par `SlidePlanner` avec rendu des masques de titre/chapitre/contenu, blocs de code, citations, séparateurs, tableaux, schémas Mermaid encadrés et images Base64.
 
 ---
 

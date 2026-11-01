@@ -16,6 +16,7 @@ import {
 } from './utils.js';
 import {
   createCartoucheElement,
+  createMermaidCartoucheElement,
   serializeEditorToMarkdown,
   getEditorSelectionOffsets,
   restoreEditorSelectionOffsets,
@@ -342,7 +343,11 @@ function syncFromEditorDOM() {
     state.isDirty = true;
     updateFileNameDisplay();
   }
-  if (rawFromDom.length === 0 && !dom.mdEditor.querySelector('.image-cartouche')) {
+  if (
+    rawFromDom.length === 0 &&
+    !dom.mdEditor.querySelector('.image-cartouche') &&
+    !dom.mdEditor.querySelector('.mermaid-cartouche')
+  ) {
     state.markdown = '';
     dom.mdEditor.innerHTML = '';
   } else {
@@ -448,9 +453,19 @@ function initEventListeners() {
     }
   });
 
-  // F2 — Éditeur de texte standard avec objets graphiques .image-cartouche et balises # à ##### (Moitié gauche)
+  // F2 — Éditeur de texte standard avec objets graphiques (.image-cartouche et .mermaid-cartouche)
   dom.mdEditor.addEventListener('input', (e) => {
     if (e.isComposing) return;
+    if (e.target?.classList?.contains('mermaid-code-textarea')) {
+      state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+      if (!state.isDirty) {
+        state.isDirty = true;
+        updateFileNameDisplay();
+      }
+      schedulePreviewUpdate(120);
+      scheduleDraftSave(60);
+      return;
+    }
     syncFromEditorDOM();
   });
 
@@ -458,9 +473,26 @@ function initEventListeners() {
     syncFromEditorDOM();
   });
 
-  // Clic sur une cartouche graphique [image] -> sélectionne l'objet graphique comme du texte
+  // Événement personnalisé émis lors de la frappe ou indentation dans un textarea Mermaid
+  dom.mdEditor.addEventListener('cartouche-input', () => {
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    if (!state.isDirty) {
+      state.isDirty = true;
+      updateFileNameDisplay();
+    }
+    schedulePreviewUpdate(120);
+    scheduleDraftSave(60);
+  });
+
+  // Clic sur une cartouche graphique [image] ou [mermaid] -> sélectionne l'objet graphique comme du texte
   dom.mdEditor.addEventListener('click', (e) => {
-    const cartouche = e.target.closest('.image-cartouche');
+    if (
+      e.target.closest('.mermaid-code-textarea') ||
+      e.target.closest('.mermaid-cartouche-toggle')
+    ) {
+      return;
+    }
+    const cartouche = e.target.closest('.image-cartouche, .mermaid-cartouche');
     clearCartoucheSelectionStyles(dom.mdEditor);
     if (cartouche) {
       cartouche.classList.add('is-selected');
@@ -476,10 +508,23 @@ function initEventListeners() {
     updateCartoucheSelectionHighlight(dom.mdEditor);
   });
 
-  // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Tab (2 espaces) et Enter (\n)
+  // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Ctrl+M (schéma Mermaid), Tab et Enter
   dom.mdEditor.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' || e.key === 'Delete') {
       if (handleCartoucheDeletion(dom.mdEditor, e, syncFromEditorDOM)) return;
+    }
+
+    // Ctrl+M / Cmd+M : Insérer un schéma Mermaid sous forme de cartouche dépliée
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      const sampleCode = 'graph TB\n    A[Début] --> B[Étape 1]\n    B --> C[Fin]';
+      const cartoucheEl = createMermaidCartoucheElement(sampleCode, { isExpanded: true });
+      insertNodeAtEditorCaret(dom.mdEditor, cartoucheEl);
+      syncFromEditorDOM();
+      updatePreview();
+      persistDraftNow();
+      showToast('Schéma Mermaid inséré', 'success');
+      return;
     }
 
     if (e.key === 'Tab') {

@@ -4,6 +4,40 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.3.0] - 2026-11-01
+
+### Feature
+- **Cartouches graphiques interactives pour les schémas Mermaid (`.mermaid-cartouche`) dans l'éditeur** :
+  - Transformation de tout schéma Mermaid dans l'éditeur non-WYSIWYG en une cartouche compacte verte avec bordure `--success-color` (#10b981), badge `[mermaid]` et flèche basse `▼`.
+  - Dépliage / repliage au clic sur la flèche ou l'en-tête de la cartouche, avec bascule vers une flèche haute `▲`.
+  - Intégration d'un éditeur `<textarea class="mermaid-code-textarea">` monospace avec prise en charge de la touche <kbd>Tab</kbd> (indentation de 4 espaces), rafraîchissement temps réel de la prévisualisation et persistance dans IndexedDB.
+  - Suppression unifiée (repliée ou dépliée) avec les touches <kbd>Suppr</kbd> ou <kbd>Retour arrière</kbd> au clic ou lorsque le curseur est adjacent (`handleCartoucheDeletion`).
+  - Raccourci clavier <kbd>Ctrl</kbd> + <kbd>M</kbd> pour insérer une nouvelle cartouche Mermaid dépliée au niveau du curseur.
+  - Fichiers impactés : [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js), [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css), [`js/app.js`](file:///g:/devapps/md2print/js/app.js).
+- **Rendu vectoriel et export complet des schémas Mermaid (HTML, Word, PowerPoint)** :
+  - Intégration de la bibliothèque locale `vendor/mermaid.min.js` avec initialisation sans appel réseau (`securityLevel: 'loose'`).
+  - Rendu HTML dans un cadre stylé (`.mermaid-card`) avec fond bleuté, bordure gauche primaire et léger ombrage.
+  - Rastérisation haute résolution (PNG 2x) pour inclusion native dans les exports Word (`.docx`) et PowerPoint (`.pptx`).
+  - Prise en charge des diagrammes sans clôture Markdown explicite (`graph TB...`), des labels multilignes `<br/>`, des nœuds stylés et des sous-graphes complexes.
+  - Fichiers impactés : [`index.html`](file:///g:/devapps/md2print/index.html), [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js), [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js), [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js), [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js).
+- **Planification unifiée des diapositives (`SlidePlanner.js`) entre la sortie HTML et PowerPoint (.pptx)** :
+  - Création du module [`js/SlidePlanner.js`](file:///g:/devapps/md2print/js/SlidePlanner.js) centralisant l'algorithme de partitionnement des diapositives : diapositive de couverture (titre + date), diapositives d'inter-titres par chapitre et diapositives de contenu.
+  - Pagination prédictive partagée selon la zone de contenu utile (`area.y + area.h`) garantissant un nombre total de diapositives (`1 / N`), des typologies et des allocations de blocs strictement identiques entre l'aperçu/export HTML et l'export PPTX.
+  - Prise en compte de la hauteur des tableaux, diagrammes Mermaid, images, séparateurs, sous-titres, listes et paragraphes.
+  - Fichiers impactés : [`js/SlidePlanner.js`](file:///g:/devapps/md2print/js/SlidePlanner.js), [`js/PptxGenerator.js`](file:///g:/devapps/md2print/js/PptxGenerator.js), [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js), [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js), [`js/app.js`](file:///g:/devapps/md2print/js/app.js).
+- **Règle de saut de diapositive forcé par le séparateur horizontal (`---`)** :
+  - Tout séparateur horizontal Markdown `---` (ou `***`, `___`) déclenche immédiatement la finalisation de la diapositive courante et le démarrage d'une nouvelle diapositive pour le contenu suivant, tant en HTML qu'en PPTX.
+  - Fichiers impactés : [`js/SlidePlanner.js`](file:///g:/devapps/md2print/js/SlidePlanner.js), [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js).
+- **Renvoi à la ligne des colonnes de tableaux trop longues dans l'éditeur non-WYSIWYG** :
+  - Plafonnement de la largeur maximale des colonnes à 60 caractères (`TABLE_MAX_COL_WIDTH = 60`) avec découpage automatique des cellules longues (`<br>`) pour préserver la lisibilité de la grille de tableau dans l'éditeur sans déborder de l'écran.
+  - Fichiers impactés : [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js).
+
+### Fix
+- **Rastérisation Canvas des diagrammes Mermaid avec balises HTML imbriquées** :
+  - Conversion automatique des balises `<foreignObject>` SVG en éléments textuels `<text>` / `<tspan>` natifs lors de l'export PNG pour contourner les restrictions de sécurité du navigateur lors du dessin sur `<canvas>`.
+  - Normalisation des fins de lignes Windows (`\r\n` -> `\n`) dans le cache de rendu des diagrammes Mermaid.
+  - Fichiers impactés : [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js).
+
 ## [1.2.0] - 2026-10-31
 
 ### Feature
