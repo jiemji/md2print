@@ -1,9 +1,10 @@
 /**
- * StorageService.js — Service de persistance locale basé sur IndexedDB
+ * @module StorageService
+ * @description Service de persistance locale basé sur IndexedDB pour md2print.
  * Gère le stockage asynchrone haute capacité du brouillon Markdown,
  * du dictionnaire d'images Base64 (sans la limite de 5 Mo du localStorage),
- * des préférences d'interface (thème, mode Rapport/Slide, largeur du séparateur)
- * et des fichiers de configuration / modèle Word personnalisés.
+ * des préférences d'interface (thème, mode Rapport/Slide, défilement lié, largeur du séparateur)
+ * et des fichiers de configuration / modèles d'entreprise personnalisés (Word .docx et PowerPoint .potx).
  */
 
 const DB_NAME = 'md2print_db';

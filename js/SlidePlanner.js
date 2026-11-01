@@ -1,7 +1,11 @@
 /**
- * SlidePlanner.js — Planificateur unifié de diapositives pour md2print.
+ * @module SlidePlanner
+ * @description Planificateur unifié de diapositives pour md2print.
  * Partage les règles exactes de découpage en diapositives (titre, inter-titres,
  * séparateurs --- et pagination de contenu) entre la sortie HTML et la sortie PPTX.
+ *
+ * @requires ./MarkdownParser.js
+ * @requires ./utils.js
  */
 import { parseToAST } from './MarkdownParser.js';
 import {

@@ -6,7 +6,7 @@
  * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS,
  * le retour à la ligne des colonnes de plus de 60 caractères, et le formatage syntaxique
  * en direct (titres, citations, callouts, listes, inline, badges et métriques).
- * @requires utils
+ * @requires ./utils.js
  */
 import {
   createImageCartouche,
