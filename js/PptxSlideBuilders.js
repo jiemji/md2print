@@ -2,6 +2,7 @@
  * PptxSlideBuilders.js — Constructeurs de diapositives PowerPoint (textes, listes, tableaux, images Base64)
  */
 import { parseToAST } from './MarkdownParser.js';
+import { ensureOfficeCompatibleImage } from './utils.js';
 
 /**
  * Dessine les éléments du masque (master) sur une diapositive.
@@ -58,9 +59,9 @@ export function drawMasterElements(pptx, slide, elements, placeholders, template
  * @param {object} template - Configuration du template actif
  * @param {object} [tableFormat={}] - Formatage des tableaux
  * @param {string|null} [initialTitle=null] - Titre initial de la section
- * @returns {void}
+ * @returns {Promise<void>}
  */
-export function parseMarkdownToSlide(
+export async function parseMarkdownToSlide(
   createSlideFn,
   mdText,
   area,
@@ -116,6 +117,7 @@ export function parseMarkdownToSlide(
     } else if (block.type === 'image') {
       if (block.src && block.src.startsWith('data:image/')) {
         flushText();
+        const compatSrc = await ensureOfficeCompatibleImage(block.src);
         const imgH = 2.8;
         const imgW = 4.6;
         if (currentY + imgH > maxY && currentY > area.y) {
@@ -123,7 +125,7 @@ export function parseMarkdownToSlide(
           currentY = area.y;
         }
         getSlide().addImage({
-          data: block.src,
+          data: compatSrc,
           x: marginX,
           y: currentY,
           w: imgW,
@@ -131,6 +133,20 @@ export function parseMarkdownToSlide(
         });
         currentY += imgH + 0.2;
       }
+    } else if (block.type === 'separator') {
+      flushText();
+      if (currentY + 0.25 > maxY && currentY > area.y) {
+        slide = null;
+        currentY = area.y;
+      }
+      getSlide().addShape('rect', {
+        x: marginX,
+        y: currentY + 0.08,
+        w: contentW,
+        h: 0.02,
+        fill: { color: 'CBD5E1' },
+      });
+      currentY += 0.22;
     } else if (block.type === 'header') {
       if (block.level === 1) {
         flushText();
@@ -204,13 +220,18 @@ export function parseMarkdownToSlide(
       textH += h;
     } else if (block.type === 'paragraph') {
       const bOpts = {
-        fontSize: 12,
-        color: theme?.text || '333333',
+        fontSize: block.isCode ? 10.5 : 12,
+        italic: Boolean(block.isQuote),
+        color: block.isQuote
+          ? theme?.secondary || '475569'
+          : theme?.text || '333333',
         fontFace: block.isCode ? 'Consolas' : fontBody,
         breakLine: true,
       };
-      const totalLen = block.runs.reduce((a, r) => a + r.text.length, 0);
-      const h = 0.3 * Math.max(Math.ceil(totalLen / (contentW * 12)), 1);
+      const fullBlockText = block.runs.map((r) => r.text).join('');
+      const explicitLineCount = fullBlockText.split('\n').length;
+      const wrappedLineCount = Math.ceil(fullBlockText.length / (contentW * 12));
+      const h = 0.28 * Math.max(explicitLineCount, wrappedLineCount, 1);
       if (currentY + textH + h > maxY && (currentY > area.y || textH > 0)) {
         flushText();
         slide = null;

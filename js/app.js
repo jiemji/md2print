@@ -26,6 +26,9 @@ import {
 } from './EditorEngine.js';
 import {
   savePreferences,
+  saveCustomConfig,
+  saveCustomTemplate,
+  clearCustomConfigAndTemplate,
   saveDraftState,
   clearDraftState,
   loadStoredState,
@@ -45,6 +48,7 @@ const state = {
   imageSeq: 1,
   currentViewport: 'report', // 'report' | 'slide'
   theme: 'dark', // 'dark' | 'sepia'
+  editorWidthPct: 50,
   outputConfig: null,
   configFileName: 'output_config.json (défaut)',
   templateBuffer: null,
@@ -78,6 +82,7 @@ const initDomRefs = () => {
   dom.configJsonInput = document.getElementById('configJsonInput');
   dom.btnLoadTemplateDocx = document.getElementById('btnLoadTemplateDocx');
   dom.templateDocxInput = document.getElementById('templateDocxInput');
+  dom.btnResetConfig = document.getElementById('btnResetConfig');
 
   dom.dropdownExport = document.getElementById('dropdownExport');
   dom.btnToggleExport = document.getElementById('btnToggleExport');
@@ -150,13 +155,14 @@ function computeNextImageSeq(markdownText = '', localImages = {}, savedSeq = 1) 
 let draftSaveTimer = null;
 
 /**
- * Sauvegarde les préférences d'affichage (thème et mode Rapport/Slide) dans IndexedDB.
+ * Sauvegarde les préférences d'affichage (thème, mode Rapport/Slide et largeur de l'éditeur) dans IndexedDB.
  * @returns {Promise<void>}
  */
 async function persistPreferencesNow() {
   await savePreferences({
     theme: state.theme,
     currentViewport: state.currentViewport,
+    editorWidthPct: state.editorWidthPct,
   });
 }
 
@@ -195,12 +201,12 @@ function scheduleDraftSave(delay = 60) {
 }
 
 /**
- * Restaure les préférences d'interface, le brouillon Markdown et les images Base64
- * depuis IndexedDB au démarrage de l'application.
+ * Restaure les préférences d'interface, le brouillon Markdown, les images Base64
+ * et les fichiers de configuration/modèle personnalisés depuis IndexedDB au démarrage.
  * @returns {Promise<void>}
  */
 async function restoreFromIndexedDB() {
-  const { prefs, draft, localImages } = await loadStoredState();
+  const { prefs, draft, localImages, customConfig, customTemplate } = await loadStoredState();
 
   if (prefs) {
     if (prefs.theme === 'dark' || prefs.theme === 'sepia') {
@@ -216,6 +222,26 @@ async function restoreFromIndexedDB() {
       dom.btnViewReport?.classList.toggle('active', state.currentViewport === 'report');
       dom.btnViewSlide?.classList.toggle('active', state.currentViewport === 'slide');
     }
+    if (
+      typeof prefs.editorWidthPct === 'number' &&
+      prefs.editorWidthPct >= 20 &&
+      prefs.editorWidthPct <= 80
+    ) {
+      state.editorWidthPct = prefs.editorWidthPct;
+      if (dom.paneEditor) {
+        dom.paneEditor.style.width = `${state.editorWidthPct}%`;
+      }
+    }
+  }
+
+  if (customConfig?.outputConfig && typeof customConfig.outputConfig === 'object') {
+    state.outputConfig = customConfig.outputConfig;
+    state.configFileName = customConfig.configFileName || 'Configuration personnalisée';
+  }
+
+  if (customTemplate?.templateBuffer instanceof ArrayBuffer) {
+    state.templateBuffer = customTemplate.templateBuffer;
+    state.templateFileName = customTemplate.templateFileName || 'Modèle personnalisé';
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -241,29 +267,35 @@ async function restoreFromIndexedDB() {
 }
 
 /**
- * Charge automatiquement config/output_config.json et templates/Modele_word.docx au démarrage.
+ * Charge automatiquement config/output_config.json et templates/Modele_word.docx
+ * si aucun fichier personnalisé n'a été restauré depuis IndexedDB (ou si forceReset = true).
+ * @param {boolean} [forceReset=false] - Si true, écrase toute configuration personnalisée
  * @returns {Promise<void>}
  */
-async function loadDefaultConfigAndTemplate() {
-  try {
-    const resConfig = await fetch('config/output_config.json');
-    if (resConfig.ok) {
-      state.outputConfig = await resConfig.json();
-      state.configFileName = 'output_config.json (défaut)';
+async function loadDefaultConfigAndTemplate(forceReset = false) {
+  if (forceReset || !state.outputConfig) {
+    try {
+      const resConfig = await fetch('config/output_config.json');
+      if (resConfig.ok) {
+        state.outputConfig = await resConfig.json();
+        state.configFileName = 'output_config.json (défaut)';
+      }
+    } catch {
+      state.configFileName = 'Configuration interne';
     }
-  } catch {
-    state.configFileName = 'Configuration interne';
   }
 
-  try {
-    const tplPath = state.outputConfig?.documents?.[0]?.path || 'templates/Modele_word.docx';
-    const resTpl = await fetch(tplPath);
-    if (resTpl.ok) {
-      state.templateBuffer = await resTpl.arrayBuffer();
-      state.templateFileName = `${tplPath.split('/').pop()} (défaut)`;
+  if (forceReset || !state.templateBuffer) {
+    try {
+      const tplPath = state.outputConfig?.documents?.[0]?.path || 'templates/Modele_word.docx';
+      const resTpl = await fetch(tplPath);
+      if (resTpl.ok) {
+        state.templateBuffer = await resTpl.arrayBuffer();
+        state.templateFileName = `${tplPath.split('/').pop()} (défaut)`;
+      }
+    } catch {
+      state.templateFileName = 'Aucun modèle chargé';
     }
-  } catch {
-    state.templateFileName = 'Aucun modèle chargé';
   }
 
   updateConfigStatusUI();
@@ -623,6 +655,10 @@ function initEventListeners() {
       }
       state.outputConfig = parsed;
       state.configFileName = file.name;
+      await saveCustomConfig({
+        outputConfig: state.outputConfig,
+        configFileName: state.configFileName,
+      });
       updateConfigStatusUI();
       showToast(`Configuration chargée : ${file.name}`, 'success');
     } catch (err) {
@@ -641,11 +677,21 @@ function initEventListeners() {
     try {
       state.templateBuffer = await readFileAsArrayBuffer(file);
       state.templateFileName = file.name;
+      await saveCustomTemplate({
+        templateBuffer: state.templateBuffer,
+        templateFileName: state.templateFileName,
+      });
       updateConfigStatusUI();
       showToast(`Modèle Word chargé : ${file.name}`, 'success');
     } catch (err) {
       showToast(`Erreur modèle Word : ${err.message}`, 'error');
     }
+  });
+
+  dom.btnResetConfig?.addEventListener('click', async () => {
+    await clearCustomConfigAndTemplate();
+    await loadDefaultConfigAndTemplate(true);
+    showToast('Configuration et modèle Word réinitialisés par défaut');
   });
 
   // Actions d'export (HTML, DOCX, PPTX)
@@ -1013,7 +1059,8 @@ function initResizer() {
     const rect = dom.workspace.getBoundingClientRect();
     const relativeX = e.clientX - rect.left;
     const percentage = Math.min(80, Math.max(20, (relativeX / rect.width) * 100));
-    dom.paneEditor.style.width = `${percentage}%`;
+    state.editorWidthPct = Math.round(percentage * 10) / 10;
+    dom.paneEditor.style.width = `${state.editorWidthPct}%`;
   });
 
   document.addEventListener('mouseup', () => {
@@ -1021,6 +1068,7 @@ function initResizer() {
     isResizing = false;
     dom.paneResizer.classList.remove('is-resizing');
     document.body.classList.remove('resizing-active');
+    persistPreferencesNow();
   });
 }
 

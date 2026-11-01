@@ -29,18 +29,18 @@ Permettre à un utilisateur de :
   - **Zone Centrale (Vue Aperçu / HTML)** : Sélecteur `[Rapport | Slide]`.
   - **Zone Droite (Config, Export & Thème)** : Menu déroulant `[Configuration]`, Menu déroulant `[Exporter]`, Bouton `[Thème : Sombre / Sépia]`.
 - **Espace de travail principal (Split-View 50% / 50% par défaut)** :
-  - **Moitié Gauche** : Éditeur de texte standard (`<textarea>`) en plein espace.
-  - **Séparateur Central Déplaçable** : Barre verticale permettant de redimensionner la largeur entre 20 % et 80 %.
+  - **Moitié Gauche** : Éditeur Markdown non-WYSIWYG enrichi (`<div id="mdEditor" contenteditable="true">`) en plein espace, conservant toutes les balises Markdown visibles avec formatage syntaxique en direct.
+  - **Séparateur Central Déplaçable** : Barre verticale permettant de redimensionner la largeur entre 20 % et 80 % (mémorisée dans `IndexedDB`).
   - **Moitié Droite** : Aperçu temps réel dans une `<iframe>` isolée avec synchronisation du défilement vertical.
 
 ### 2.2. Thèmes Visuels de l'Application (`css/styles.css`)
 
-- **État initial au démarrage** : L'application s'ouvre avec un **éditeur vide** (`Sans titre.md`) et le **thème Sombre (Bleu foncé et gris)** actif par défaut.
+- **État initial au démarrage** : L'application s'ouvre avec le **thème Sombre (Bleu foncé et gris)** actif par défaut (et restaure automatiquement depuis `IndexedDB` le dernier brouillon, ses images Base64 et les préférences d'interface).
 - **Portée des thèmes** : Les thèmes **Sombre** et **Clair (Sépia)** habillent l'interface de l'application. Le document HTML affiché dans l'`iframe` et exporté en `.html` utilise le **style de rapport classique Azur** (fond blanc, texte anthracite, accents bleus `#2563eb`).
 
 | Variable CSS (`:root`) | Mode Sombre (Bleu foncé & Gris) — *Défaut* | Mode Clair (Sépia) |
 |---|---|---|
-| `--bg-primary` (Fond éditeur `<textarea>`) | `#0f172a` (Bleu nuit profond) | `#f4ecd8` (Papier sépia clair) |
+| `--bg-primary` (Fond éditeur `#mdEditor`) | `#0f172a` (Bleu nuit profond) | `#f4ecd8` (Papier sépia clair) |
 | `--bg-secondary` (Barre de menu / Menus) | `#1e293b` (Gris ardoise) | `#e8dec5` (Sépia soutenu) |
 | `--bg-hover` (Survol des boutons / items) | `#334155` (Gris bleuté moyen) | `#dccfb2` (Sépia ambré doux) |
 | `--border-color` (Bordures et séparateur) | `#334155` (Gris bleuté) | `#cbbba0` (Brun sépia doux) |
@@ -60,7 +60,7 @@ Permettre à un utilisateur de :
    - Dès que le contenu de l'éditeur est modifié (`state.isDirty = true`), un astérisque `*` est ajouté après le nom (ex: `rapport.md *`).
 2. **Bouton `Nouveau` (Vider l'écran)** :
    - Si `state.isDirty === true`, affiche une boîte de confirmation native `window.confirm("Des modifications non sauvegardées seront perdues. Voulez-vous continuer ?")`.
-   - Vide l'éditeur `<textarea>`, réinitialise `state.markdown = ''`, `state.currentFileName = 'Sans titre.md'`, `state.isDirty = false`, remet la liste déroulante des fichiers sur son option par défaut et rafraîchit l'aperçu.
+   - Vide l'éditeur `#mdEditor`, réinitialise `state.markdown = ''`, `state.currentFileName = 'Sans titre.md'`, `state.isDirty = false`, purge `state.localImages` ainsi que le brouillon `IndexedDB`, remet la liste déroulante des fichiers sur son option par défaut et rafraîchit l'aperçu.
 3. **Bouton `Ouvrir fichier` (Sélection unitaire)** :
    - Ouvre le sélecteur de fichier `<input type="file" accept=".md,.markdown,.txt">`.
    - Si `state.isDirty === true`, demande confirmation avant d'écraser le contenu en cours.
@@ -80,12 +80,12 @@ Permettre à un utilisateur de :
 
 ---
 
-### F2 — Éditeur de Texte Standard (Moitié Gauche), Images & Redimensionnement
+### F2 — Éditeur Markdown Non-WYSIWYG Enrichi (Moitié Gauche), Images & Redimensionnement
 
-1. **Champ de saisie `<textarea id="mdEditor">`** :
-   - Éditeur de texte standard en plein espace de la moitié gauche, sans interprétation WYSIWYG.
-   - Raccourci `Tab` : insère 2 espaces à la position du curseur sans quitter le champ.
-   - À chaque saisie (`input`), met à jour `state.markdown`, active `state.isDirty = true` et rafraîchit l'aperçu `iframe`.
+1. **Champ de saisie `<div id="mdEditor" contenteditable="true">` (`EditorEngine.js`)** :
+   - Éditeur en plein espace de la moitié gauche conservant l'intégralité des délimiteurs Markdown visibles tout en appliquant leur formatage visuel en temps réel (titres `#` à `#####`, styles inline récursifs, blocs de code, citations, séparateurs, listes décalées de `5ch` par niveau d'imbrication, alignement automatique des colonnes de tableaux en grille CSS).
+   - Raccourci `Tab` / `Shift+Tab` : indente ou désindente de 2 espaces sans quitter l'éditeur.
+   - À chaque saisie (`input`), met à jour `state.markdown`, active `state.isDirty = true`, sauvegarde le brouillon dans `IndexedDB` (`StorageService.js`) et rafraîchit l'aperçu `iframe` (avec un `debounce` de 120 ms).
 2. **Glisser-Déposer (Drag & Drop) et Collage d'Images (`Ctrl+V`)** :
    - **Dépôt d'un fichier `.md` / `.markdown` / `.txt`** sur l'éditeur : ouvre le fichier (après confirmation si `state.isDirty === true`).
    - **Dépôt ou collage (`Ctrl+V`) d'un fichier image** (`image/*`) dans l'éditeur :
@@ -101,7 +101,7 @@ Permettre à un utilisateur de :
    - Répartition initiale : **50 % gauche / 50 % droite**.
    - Glisser-déposer horizontal permettant d'ajuster la largeur entre 20 % et 80 %.
 5. **Synchronisation du Défilement (Scroll Sync)** :
-   - En mode **Rapport**, le défilement vertical de l'éditeur `<textarea>` synchronise proportionnellement le défilement vertical de l'`iframe` d'aperçu, et réciproquement.
+   - En mode **Rapport**, le défilement vertical de l'éditeur `#mdEditor` synchronise proportionnellement le défilement vertical de l'`iframe` d'aperçu, et réciproquement.
 
 ---
 
@@ -137,9 +137,10 @@ Permettre à un utilisateur de :
      - `config/output_config.json` (styles Word et masters/thèmes PowerPoint).
      - `templates/Modele_word.docx` (modèle Word binaire en `ArrayBuffer`).
 2. **Menu déroulant `Configuration` (Barre Supérieure — Zone Droite)** :
-   - Affiche l'état des fichiers chargés par défaut et propose deux actions textuelles :
-     - `Charger configuration (.json)` : permet à l'utilisateur d'importer un fichier `.json` personnalisé.
-     - `Charger modèle Word (.docx)` : permet à l'utilisateur d'importer un fichier `.docx` ou `.dotx` personnalisé.
+   - Affiche l'état des fichiers chargés et propose trois actions textuelles :
+     - `Charger configuration (.json)` : permet à l'utilisateur d'importer un fichier `.json` personnalisé (validé structurellement et mémorisé dans `IndexedDB`).
+     - `Charger modèle Word (.docx)` : permet à l'utilisateur d'importer un fichier `.docx` ou `.dotx` personnalisé (mémorisé dans `IndexedDB`).
+     - `Réinitialiser par défaut` : restaure la configuration et le modèle Word par défaut.
 3. **Export Word (`.docx`) — `DocxGenerator.js`** :
    - Accessible depuis le menu déroulant `Exporter > Word (.docx)`.
    - Applique `resolveImagePaths()` et `normalizeMarkdown()` sur le Markdown.

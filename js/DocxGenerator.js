@@ -6,6 +6,7 @@ import {
   yieldToMain,
   resolveImagePaths,
   normalizeMarkdown,
+  ensureOfficeCompatibleImage,
   dataUrlToUint8Array,
   getImageDimensions,
 } from './utils.js';
@@ -100,9 +101,10 @@ async function buildDocxBlocks(cleanMd, docConfig) {
         })
       );
     } else if (block.type === 'image') {
-      const parsedImg = dataUrlToUint8Array(block.src);
+      const compatSrc = await ensureOfficeCompatibleImage(block.src);
+      const parsedImg = dataUrlToUint8Array(compatSrc);
       if (parsedImg) {
-        const dims = await getImageDimensions(block.src, 520, 340);
+        const dims = await getImageDimensions(compatSrc, 520, 340);
         const docImgType = parsedImg.ext === 'jpg' ? 'jpg' : parsedImg.ext === 'gif' ? 'gif' : 'png';
         blocks.push(
           new window.docx.Paragraph({
@@ -117,8 +119,24 @@ async function buildDocxBlocks(cleanMd, docConfig) {
           })
         );
       }
+    } else if (block.type === 'separator') {
+      blocks.push(
+        new window.docx.Paragraph({
+          children: [],
+          border: {
+            bottom: {
+              style: window.docx.BorderStyle.SINGLE,
+              size: 6,
+              color: 'CBD5E1',
+              space: 1,
+            },
+          },
+          spacing: { before: 240, after: 240 },
+        })
+      );
     } else if (block.type === 'list_item') {
-      const styleList = docConfig?.styles?.[block.listType === 'ordered' ? 'ol' : 'ul'];
+      const styleList = docConfig?.styles?.[block.listType === 'ordered' ? 'ordered' : 'ul'] ||
+        docConfig?.styles?.[block.listType === 'ordered' ? 'ol' : 'ul'];
       let appliedStyle;
       let appliedIndent;
       if (Array.isArray(styleList)) {
@@ -138,6 +156,44 @@ async function buildDocxBlocks(cleanMd, docConfig) {
       );
     } else if (block.type === 'table') {
       blocks.push(createDocxTable(block.rows, docConfig));
+    } else if (block.type === 'paragraph' && block.isCode) {
+      const codeBorder = {
+        style: window.docx.BorderStyle.SINGLE,
+        size: 4,
+        color: 'CBD5E1',
+        space: 4,
+      };
+      blocks.push(
+        new window.docx.Paragraph({
+          children: toDocxRuns(block.runs, { code: true, size: 19, color: '1E293B' }),
+          shading: { fill: 'F1F5F9' },
+          border: {
+            top: codeBorder,
+            bottom: codeBorder,
+            left: { ...codeBorder, size: 12, color: '2563EB' },
+            right: codeBorder,
+          },
+          indent: { left: 240, right: 240 },
+          spacing: { before: 160, after: 160 },
+        })
+      );
+    } else if (block.type === 'paragraph' && block.isQuote) {
+      blocks.push(
+        new window.docx.Paragraph({
+          children: toDocxRuns(block.runs, { italic: true, color: '334155' }),
+          shading: { fill: 'F8FAFC' },
+          border: {
+            left: {
+              style: window.docx.BorderStyle.SINGLE,
+              size: 16,
+              color: '2563EB',
+              space: 8,
+            },
+          },
+          indent: { left: 360, right: 240 },
+          spacing: { before: 140, after: 140 },
+        })
+      );
     } else if (block.type === 'paragraph') {
       const styleP = docConfig?.styles?.p;
       blocks.push(
@@ -153,24 +209,35 @@ async function buildDocxBlocks(cleanMd, docConfig) {
 }
 
 /**
- * Convertit des runs internes en TextRun docx.
- * @param {Array} runs
+ * Convertit des runs internes en TextRun docx en préservant les sauts de ligne (\n -> break: 1).
+ * @param {Array} runs - Segments de texte formatés
+ * @param {object} [extraFormat={}] - Attributs de style forcés au niveau du bloc (code, quote)
  * @returns {Array}
  */
-function toDocxRuns(runs) {
+function toDocxRuns(runs, extraFormat = {}) {
   if (!runs?.length) return [new window.docx.TextRun({ text: '' })];
-  return runs.map(
-    (r) =>
-      new window.docx.TextRun({
-        text: r.text,
-        bold: r.format.bold,
-        italics: r.format.italic,
-        strike: r.format.strike,
-        font: r.format.code ? 'Consolas' : undefined,
-        underline: r.format.underline ? { type: window.docx.UnderlineType.SINGLE } : undefined,
-        color: r.format.color || undefined,
-      })
-  );
+  const docxRuns = [];
+  runs.forEach((r) => {
+    const lines = String(r.text ?? '').split('\n');
+    lines.forEach((lineText, lineIdx) => {
+      docxRuns.push(
+        new window.docx.TextRun({
+          text: lineText,
+          break: lineIdx > 0 ? 1 : undefined,
+          bold: extraFormat.bold || r.format.bold,
+          italics: extraFormat.italic || r.format.italic,
+          strike: r.format.strike,
+          font: extraFormat.code || r.format.code ? 'Consolas' : undefined,
+          size: extraFormat.size || undefined,
+          underline: r.format.underline
+            ? { type: window.docx.UnderlineType.SINGLE }
+            : undefined,
+          color: extraFormat.color || r.format.color || undefined,
+        })
+      );
+    });
+  });
+  return docxRuns;
 }
 
 /**

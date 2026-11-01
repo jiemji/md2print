@@ -177,7 +177,7 @@ export async function generatePptx(
       return slide;
     };
 
-    parseMarkdownToSlide(
+    await parseMarkdownToSlide(
       createBlockSlide,
       section.content,
       area,

@@ -7,11 +7,15 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 ## [1.2.0] - 2026-10-31
 
 ### Feature
-- **Persistance haute capacité via `IndexedDB` (`StorageService.js`) avec support complet des images Base64** :
-  - Création du service [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) utilisant la base `IndexedDB` `md2print_db` (stores `app_state` et `local_images`) en remplacement du `localStorage`, permettant de persister sans limite de 5 Mo le brouillon Markdown, l'intégralité des images Base64 associées aux cartouches `[image]` et les préférences d'interface (thème Sombre/Sépia et mode Rapport/Slide).
+- **Persistance haute capacité via `IndexedDB` (`StorageService.js`) avec support complet des images Base64, de la configuration et du layout** :
+  - Création du service [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) utilisant la base `IndexedDB` `md2print_db` (stores `app_state` et `local_images`) en remplacement du `localStorage`, permettant de persister sans limite de 5 Mo le brouillon Markdown, l'intégralité des images Base64 associées aux cartouches `[image]`, les préférences d'interface (thème Sombre/Sépia, mode Rapport/Slide, largeur du séparateur `#paneResizer`) ainsi que la configuration JSON et le modèle Word `.docx` personnalisés.
+  - Ajout de l'action `Réinitialiser par défaut` dans le menu `Configuration` ([`index.html`](file:///g:/devapps/md2print/index.html), [`js/app.js`](file:///g:/devapps/md2print/js/app.js)).
   - Sauvegarde transactionnelle atomique immédiate lors de l'insertion d'une image (`insertImageAsBase64`), de l'ouverture ou de la sauvegarde d'un fichier, et sauvegarde débouncée (`60 ms`) lors de la frappe.
   - Recalcul automatique du compteur d'identifiants `state.imageSeq` (`computeNextImageSeq`) à la restauration pour éviter toute collision `img-N`, et purge automatique des images Base64 supprimées (`pruneUnusedLocalImages`).
-  - Fichiers impactés : [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js), [`js/app.js`](file:///g:/devapps/md2print/js/app.js), [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js).
+  - Fichiers impactés : [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js), [`js/app.js`](file:///g:/devapps/md2print/js/app.js), [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js), [`index.html`](file:///g:/devapps/md2print/index.html).
+- **Rendu des blocs de code (` ``` `), citations (`>`) et séparateurs (`---`) + conversion SVG/WebP en PNG dans Word et PowerPoint** :
+  - Préservation des sauts de ligne (`\n` -> `break: 1`) et habillage dédié des blocs de code (fond grisé, bordure d'accentuation, police `Consolas`), des citations (retrait gauche, bordure latérale, italique) et des séparateurs horizontaux (`---`) dans [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js) et [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js).
+  - Ajout de `ensureOfficeCompatibleImage` dans [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) rastérisant automatiquement via `<canvas>` les images `.svg` et `.webp` en `image/png` pour une compatibilité native avec Word et PowerPoint.
 - **Unification du parsing inline récursif pour les exports Word (`.docx`) et PowerPoint (`.pptx`)** :
   - Refonte récursive de `extractInlineStyles` dans [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) pour prendre en charge les styles combinés et imbriqués (`***gras+italique***`, `**gras**`, `__souligné__`, `<u>souligné</u>`, `~~barré~~`, `*italique*`, `_italique_`, `` `code` ``, `[libellé](url)`).
   - Prise en charge complète du barré (`strike`), du souligné (`underline`) et de la police monospace (`Consolas`) dans les titres et cellules de tableaux Word ([`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js)) ainsi que dans les diapositives PowerPoint ([`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js)).
@@ -20,7 +24,7 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 
 ### Refactor
 - **Extraction du moteur d'édition non-WYSIWYG dans [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js)** :
-  - Isolation complète de la gestion du DOM `contenteditable`, du calcul des offsets de sélection, de l'alignement des tableaux en grille CSS et des objets graphiques `.image-cartouche` dans un module dédié (`877 lignes`), réduisant [`js/app.js`](file:///g:/devapps/md2print/js/app.js) à son rôle d'orchestrateur SPA (`1 047 lignes`).
+  - Isolation complète de la gestion du DOM `contenteditable`, du calcul des offsets de sélection, de l'alignement des tableaux en grille CSS et des objets graphiques `.image-cartouche` dans un module dédié (`877 lignes`), réduisant [`js/app.js`](file:///g:/devapps/md2print/js/app.js) à son rôle d'orchestrateur SPA (`1 100 lignes`).
 - **Fluidité de frappe sur les longs documents (`schedulePreviewUpdate`)** :
   - Ajout d'un `debounce` de `120 ms` sur la régénération de l'`iframe` lors de la saisie dans `#mdEditor` tout en conservant le formatage syntaxique de l'éditeur synchrone et instantané.
 

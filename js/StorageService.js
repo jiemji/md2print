@@ -1,8 +1,9 @@
 /**
  * StorageService.js — Service de persistance locale basé sur IndexedDB
  * Gère le stockage asynchrone haute capacité du brouillon Markdown,
- * du dictionnaire d'images Base64 (sans la limite de 5 Mo du localStorage)
- * et des préférences d'interface (thème Sombre/Sépia, mode Rapport/Slide).
+ * du dictionnaire d'images Base64 (sans la limite de 5 Mo du localStorage),
+ * des préférences d'interface (thème, mode Rapport/Slide, largeur du séparateur)
+ * et des fichiers de configuration / modèle Word personnalisés.
  */
 
 const DB_NAME = 'md2print_db';
@@ -71,8 +72,8 @@ export function openDatabase() {
 }
 
 /**
- * Sauvegarde les préférences d'affichage (thème et mode Rapport/Slide) dans IndexedDB.
- * @param {{ theme: string, currentViewport: string }} prefs
+ * Sauvegarde les préférences d'affichage (thème, mode Rapport/Slide et largeur de l'éditeur) dans IndexedDB.
+ * @param {{ theme: string, currentViewport: string, editorWidthPct?: number }} prefs
  * @returns {Promise<void>}
  */
 export async function savePreferences(prefs) {
@@ -85,6 +86,8 @@ export async function savePreferences(prefs) {
         id: 'prefs',
         theme: prefs.theme,
         currentViewport: prefs.currentViewport,
+        editorWidthPct:
+          typeof prefs.editorWidthPct === 'number' ? prefs.editorWidthPct : 50,
         updatedAt: Date.now(),
       });
       tx.oncomplete = () => resolve();
@@ -93,6 +96,77 @@ export async function savePreferences(prefs) {
     });
   } catch {
     // Ignore silencieusement si IndexedDB est bloqué
+  }
+}
+
+/**
+ * Sauvegarde une configuration output_config.json personnalisée dans IndexedDB.
+ * @param {{ outputConfig: object, configFileName: string }} configPayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomConfig({ outputConfig, configFileName }) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_config',
+        outputConfig,
+        configFileName,
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Sauvegarde un modèle Word (.docx) personnalisé (ArrayBuffer) dans IndexedDB.
+ * @param {{ templateBuffer: ArrayBuffer, templateFileName: string }} templatePayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomTemplate({ templateBuffer, templateFileName }) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_template',
+        templateBuffer,
+        templateFileName,
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Supprime la configuration JSON et le modèle Word personnalisés de IndexedDB.
+ * @returns {Promise<void>}
+ */
+export async function clearCustomConfigAndTemplate() {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      const store = tx.objectStore(STORE_STATE);
+      store.delete('custom_config');
+      store.delete('custom_template');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
   }
 }
 
@@ -179,8 +253,15 @@ export async function clearDraftState() {
 }
 
 /**
- * Charge les préférences, le brouillon Markdown et le dictionnaire d'images Base64 depuis IndexedDB.
- * @returns {Promise<{ prefs: object|null, draft: object|null, localImages: Record<string, string> }>}
+ * Charge les préférences, le brouillon Markdown, le dictionnaire d'images Base64
+ * et les éventuels fichiers de configuration/modèle personnalisés depuis IndexedDB.
+ * @returns {Promise<{
+ *   prefs: object|null,
+ *   draft: object|null,
+ *   localImages: Record<string, string>,
+ *   customConfig: object|null,
+ *   customTemplate: object|null
+ * }>}
  */
 export async function loadStoredState() {
   try {
@@ -192,6 +273,8 @@ export async function loadStoredState() {
 
       const prefsReq = stateStore.get('prefs');
       const draftReq = stateStore.get('draft');
+      const customConfigReq = stateStore.get('custom_config');
+      const customTemplateReq = stateStore.get('custom_template');
       const imagesReq = imagesStore.getAll();
 
       tx.oncomplete = () => {
@@ -213,6 +296,8 @@ export async function loadStoredState() {
           prefs: prefsReq.result || null,
           draft,
           localImages,
+          customConfig: customConfigReq.result || null,
+          customTemplate: customTemplateReq.result || null,
         });
       };
 
@@ -220,6 +305,12 @@ export async function loadStoredState() {
       tx.onabort = () => reject(tx.error);
     });
   } catch {
-    return { prefs: null, draft: null, localImages: {} };
+    return {
+      prefs: null,
+      draft: null,
+      localImages: {},
+      customConfig: null,
+      customTemplate: null,
+    };
   }
 }

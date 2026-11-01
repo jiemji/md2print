@@ -45,6 +45,7 @@ export const extractTitle = (mdText) => {
  * Déclenche le téléchargement d'un Blob par le navigateur.
  * @param {Blob} blob
  * @param {string} filename
+ * @returns {void}
  */
 export const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
@@ -103,6 +104,50 @@ export const readFileAsDataURL = (file) =>
 export const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /**
+ * Convertit si nécessaire une Data URL d'image (notamment SVG ou WebP) en Data URL PNG
+ * via un élément <canvas> hors-écran afin d'assurer la compatibilité native avec Word et PowerPoint.
+ * Les images déjà au format PNG, JPEG ou GIF sont retournées telles quelles sans recompression.
+ * @param {string} dataUrl - Data URL Base64 de l'image source
+ * @returns {Promise<string>} Data URL Base64 compatible Office (PNG, JPEG ou GIF)
+ */
+export const ensureOfficeCompatibleImage = (dataUrl) =>
+  new Promise((resolve) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+      resolve(dataUrl);
+      return;
+    }
+
+    const mimeMatch = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);/i);
+    const subType = mimeMatch ? mimeMatch[1].toLowerCase() : '';
+    if (subType === 'png' || subType === 'jpeg' || subType === 'jpg' || subType === 'gif') {
+      resolve(dataUrl);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const width = img.naturalWidth || img.width || 800;
+        const height = img.naturalHeight || img.height || 600;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+
+/**
  * Convertit une Data URL Base64 en tableau d'octets Uint8Array pour l'intégration DOCX.
  * @param {string} dataUrl
  * @returns {{ bytes: Uint8Array, mime: string, ext: string } | null}
@@ -114,7 +159,6 @@ export const dataUrlToUint8Array = (dataUrl) => {
   const mime = match[1];
   let ext = match[2].toLowerCase();
   if (ext === 'jpeg') ext = 'jpg';
-  if (ext === 'svg+xml') ext = 'png';
   try {
     const binary = atob(match[3]);
     const bytes = new Uint8Array(binary.length);
