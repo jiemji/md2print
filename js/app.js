@@ -32,12 +32,14 @@ import {
   saveCustomTemplate,
   saveCustomPptTemplate,
   saveCustomCss,
+  saveThemeConfigs,
   clearCustomConfigAndTemplate,
   saveDraftState,
   clearDraftState,
   loadStoredState,
 } from './StorageService.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
+import { StyleSettingsManager } from './StyleSettingsManager.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
@@ -63,6 +65,7 @@ const state = {
   reportCss: null,
   slideCss: null,
   customCssFileName: null,
+  themeConfigs: null,
   syncScroll: true,
 };
 
@@ -87,9 +90,11 @@ const initDomRefs = () => {
   dom.btnViewSlide = document.getElementById('btnViewSlide');
   dom.btnToggleSyncScroll = document.getElementById('btnToggleSyncScroll');
 
+  dom.btnOpenStyleSettings = document.getElementById('btnOpenStyleSettings');
   dom.dropdownConfig = document.getElementById('dropdownConfig');
   dom.btnToggleConfig = document.getElementById('btnToggleConfig');
   dom.configStatusText = document.getElementById('configStatusText');
+  dom.btnMenuOpenStyleSettings = document.getElementById('btnMenuOpenStyleSettings');
   dom.btnLoadConfigJson = document.getElementById('btnLoadConfigJson');
   dom.configJsonInput = document.getElementById('configJsonInput');
   dom.btnLoadTemplateDocx = document.getElementById('btnLoadTemplateDocx');
@@ -109,6 +114,7 @@ const initDomRefs = () => {
   dom.btnToggleTheme = document.getElementById('btnToggleTheme');
 
   dom.workspace = document.getElementById('workspace');
+  dom.pageStyleConfig = document.getElementById('pageStyleConfig');
   dom.paneEditor = document.getElementById('paneEditor');
   dom.mdEditor = document.getElementById('mdEditor');
   dom.paneResizer = document.getElementById('paneResizer');
@@ -223,8 +229,16 @@ function scheduleDraftSave(delay = 60) {
  * @returns {Promise<void>}
  */
 async function restoreFromIndexedDB() {
-  const { prefs, draft, localImages, customConfig, customTemplate, customPptTemplate, customCss } =
-    await loadStoredState();
+  const {
+    prefs,
+    draft,
+    localImages,
+    customConfig,
+    customTemplate,
+    customPptTemplate,
+    customCss,
+    customThemeConfigs,
+  } = await loadStoredState();
 
   if (prefs) {
     if (prefs.theme === 'dark' || prefs.theme === 'sepia') {
@@ -276,6 +290,10 @@ async function restoreFromIndexedDB() {
     if (customCss.reportCss) state.reportCss = customCss.reportCss;
     if (customCss.slideCss) state.slideCss = customCss.slideCss;
     state.customCssFileName = customCss.fileName || 'CSS personnalisé';
+  }
+
+  if (customThemeConfigs) {
+    state.themeConfigs = customThemeConfigs;
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -492,6 +510,84 @@ function syncFromEditorDOM() {
 }
 
 // --- Attachement des Événements ---
+
+// --- Gestionnaire de la Page de Paramétrage des Styles de Balises ---
+let styleSettingsManager = null;
+
+/**
+ * Récupère ou instancie le gestionnaire de paramétrage des styles.
+ * @returns {StyleSettingsManager|null}
+ */
+function getOrCreateStyleSettingsManager() {
+  if (!styleSettingsManager && dom.pageStyleConfig) {
+    styleSettingsManager = new StyleSettingsManager({
+      container: dom.pageStyleConfig,
+      onApply: async ({ reportCss, slideCss, configs }) => {
+        state.reportCss = reportCss;
+        state.slideCss = slideCss;
+        state.themeConfigs = configs;
+        state.customCssFileName = 'Styles personnalisés';
+        await saveCustomCss({ reportCss, slideCss, fileName: 'styles-personnalises.css' });
+        await saveThemeConfigs(configs);
+        updateConfigStatusUI();
+        updatePreview();
+        showToast('Styles appliqués et sauvegardés avec succès', 'success');
+      },
+      onClose: () => {
+        closeStyleSettingsPage();
+      },
+    });
+
+    if (state.themeConfigs) {
+      if (state.themeConfigs.report) {
+        styleSettingsManager.setConfig('report', state.themeConfigs.report);
+      }
+      if (state.themeConfigs.slide) {
+        styleSettingsManager.setConfig('slide', state.themeConfigs.slide);
+      }
+    }
+    styleSettingsManager.init();
+  }
+  return styleSettingsManager;
+}
+
+/**
+ * Affiche la page plein écran de paramétrage des styles de balises.
+ * @returns {void}
+ */
+function openStyleSettingsPage() {
+  const manager = getOrCreateStyleSettingsManager();
+  if (manager) {
+    manager.switchMode(state.currentViewport);
+  }
+  if (dom.workspace) dom.workspace.style.display = 'none';
+  if (dom.pageStyleConfig) dom.pageStyleConfig.style.display = 'flex';
+  dom.btnOpenStyleSettings?.classList.add('active');
+  dom.dropdownConfig?.classList.remove('open');
+}
+
+/**
+ * Ferme la page de paramétrage et restaure l'espace de travail d'édition.
+ * @returns {void}
+ */
+function closeStyleSettingsPage() {
+  if (dom.pageStyleConfig) dom.pageStyleConfig.style.display = 'none';
+  if (dom.workspace) dom.workspace.style.display = 'flex';
+  dom.btnOpenStyleSettings?.classList.remove('active');
+  updatePreview();
+}
+
+/**
+ * Bascule entre l'espace d'édition et la page de paramétrage des styles.
+ * @returns {void}
+ */
+function toggleStyleSettingsPage() {
+  if (dom.pageStyleConfig && dom.pageStyleConfig.style.display === 'flex') {
+    closeStyleSettingsPage();
+  } else {
+    openStyleSettingsPage();
+  }
+}
 
 /**
  * Attache l'ensemble des écouteurs d'événements de l'interface (menus, éditeur, raccourcis, exports).
@@ -789,6 +885,14 @@ function initEventListeners() {
   dom.btnViewReport.addEventListener('click', () => setViewMode('report'));
   dom.btnViewSlide.addEventListener('click', () => setViewMode('slide'));
 
+  // Accès à la page de paramétrage des styles de balises
+  dom.btnOpenStyleSettings?.addEventListener('click', () => {
+    toggleStyleSettingsPage();
+  });
+  dom.btnMenuOpenStyleSettings?.addEventListener('click', () => {
+    openStyleSettingsPage();
+  });
+
   // Menus déroulants Configuration & Exporter
   dom.btnToggleConfig.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -912,6 +1016,9 @@ function initEventListeners() {
   dom.btnResetConfig?.addEventListener('click', async () => {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
+    if (styleSettingsManager) {
+      styleSettingsManager.handleResetDefaults();
+    }
     updatePreview();
     showToast('Configuration, modèles et styles CSS réinitialisés par défaut');
   });
@@ -1220,6 +1327,9 @@ function setViewMode(mode) {
   state.currentViewport = mode;
   dom.btnViewReport.classList.toggle('active', mode === 'report');
   dom.btnViewSlide.classList.toggle('active', mode === 'slide');
+  if (styleSettingsManager && dom.pageStyleConfig && dom.pageStyleConfig.style.display === 'flex') {
+    styleSettingsManager.switchMode(mode);
+  }
   persistPreferencesNow();
   updatePreview();
 }

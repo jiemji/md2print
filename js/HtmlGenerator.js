@@ -285,6 +285,8 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
  * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
  * @param {object} [options.pptConfig] - Configuration PPTX issue de output_config.json
  * @param {string} [options.templateId='default'] - Identifiant du template PPTX
+ * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision rapport
+ * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision slide
  * @returns {string} Code HTML autonome complet
  */
 export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
@@ -299,68 +301,75 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     slideCss = null,
   } = options;
 
+  const isSlide = viewMode === 'slide';
   const resolvedMarkdown = resolveImagePaths(rawMarkdown || '', localImages);
   const cleanMarkdown = normalizeMarkdown(resolvedMarkdown);
   const tocList = extractTOC(cleanMarkdown);
-  const parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
   const formattedDate = new Date().toLocaleDateString('fr-FR');
 
-  // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
-  const plannedSlides = planSlides(cleanMarkdown, docTitle, {
-    pptConfig,
-    templateId,
-    mermaidSvgMap,
-    date: formattedDate,
-  });
+  let parsedContent = '';
+  let slidesHTML = '';
 
-  const slidesHTML = plannedSlides
-    .map((slide, idx) => {
-      const activeClass = idx === 0 ? 'active' : '';
-      if (slide.type === 'title') {
-        return `
-          <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-            <div class="slide-inner slide-title-inner">
-              <div class="slide-title-card">
-                <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
-                <div class="slide-title-meta">
-                  <span class="slide-title-date">${escapeHtml(slide.date)}</span>
+  if (isSlide) {
+    // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
+    const plannedSlides = planSlides(cleanMarkdown, docTitle, {
+      pptConfig,
+      templateId,
+      mermaidSvgMap,
+      date: formattedDate,
+    });
+
+    slidesHTML = plannedSlides
+      .map((slide, idx) => {
+        const activeClass = idx === 0 ? 'active' : '';
+        if (slide.type === 'title') {
+          return `
+            <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+              <div class="slide-inner slide-title-inner">
+                <div class="slide-title-card">
+                  <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
+                  <div class="slide-title-meta">
+                    <span class="slide-title-date">${escapeHtml(slide.date)}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        `;
-      }
-      if (slide.type === 'chapter') {
+          `;
+        }
+        if (slide.type === 'chapter') {
+          return `
+            <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+              <div class="slide-inner slide-chapter-inner">
+                <div class="slide-chapter-card">
+                  <span class="slide-chapter-badge">Chapitre</span>
+                  <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
+                  <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        const slideContentHtml = parseMarkdownToHTML(slide.markdown, mermaidSvgMap);
+        const showChapterTag = slide.chapter && slide.chapter !== slide.title;
         return `
-          <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-            <div class="slide-inner slide-chapter-inner">
-              <div class="slide-chapter-card">
-                <span class="slide-chapter-badge">Chapitre</span>
-                <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
-                <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
+          <div class="slide slide-content ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+            <div class="slide-inner slide-content-inner">
+              <header class="slide-header">
+                ${showChapterTag ? `<span class="slide-chapter-tag">${escapeHtml(slide.chapter)}</span>` : ''}
+                <h2 class="slide-header-title">${escapeHtml(slide.title)}</h2>
+              </header>
+              <div class="slide-body">
+                ${slideContentHtml}
               </div>
             </div>
           </div>
         `;
-      }
-
-      const slideContentHtml = parseMarkdownToHTML(slide.markdown, mermaidSvgMap);
-      const showChapterTag = slide.chapter && slide.chapter !== slide.title;
-      return `
-        <div class="slide slide-content ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-          <div class="slide-inner slide-content-inner">
-            <header class="slide-header">
-              ${showChapterTag ? `<span class="slide-chapter-tag">${escapeHtml(slide.chapter)}</span>` : ''}
-              <h2 class="slide-header-title">${escapeHtml(slide.title)}</h2>
-            </header>
-            <div class="slide-body">
-              ${slideContentHtml}
-            </div>
-          </div>
-        </div>
-      `;
-    })
-    .join('\n');
+      })
+      .join('\n');
+  } else {
+    parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
+  }
 
   let tocItemsHTML = '';
   if (tocList.length === 0) {
@@ -381,12 +390,13 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   }
 
   const activeCSS =
-    viewMode === 'slide'
+    isSlide
       ? (slideCss || DEFAULT_SLIDE_CSS)
       : (reportCss || DEFAULT_REPORT_CSS);
 
   const documentJS = `
     (function() {
+      const isSlideMode = ${isSlide ? 'true' : 'false'};
       let currentSlideIndex = 0;
       let totalSlides = 0;
 
@@ -400,7 +410,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       window.handleTocClick = function(event, targetId) {
         event.preventDefault();
 
-        if (document.body.getAttribute('data-view-mode') === 'slide') {
+        if (isSlideMode) {
           const slides = document.querySelectorAll('.slide');
           for (let i = 0; i < slides.length; i++) {
             if (
@@ -411,19 +421,16 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
               break;
             }
           }
+          const sidebar = document.getElementById('tocSidebar');
+          if (sidebar) {
+            sidebar.classList.add('collapsed');
+          }
           return;
         }
 
         const target = document.getElementById(targetId);
         if (!target) return;
-
-        const banner = document.querySelector('.top-banner');
-        const bannerHeight = banner ? banner.offsetHeight : 56;
-        const elementPos = target.getBoundingClientRect().top + window.pageYOffset;
-        window.scrollTo({
-          top: elementPos - bannerHeight - 16,
-          behavior: 'smooth'
-        });
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
 
       function updateSlideControls() {
@@ -473,6 +480,13 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 
         document.addEventListener('keydown', (e) => {
           if (document.body.getAttribute('data-view-mode') !== 'slide') return;
+          if (e.key === 'Escape') {
+            const sidebar = document.getElementById('tocSidebar');
+            if (sidebar && !sidebar.classList.contains('collapsed')) {
+              sidebar.classList.add('collapsed');
+            }
+            return;
+          }
           if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
             e.preventDefault();
             window.nextSlide();
@@ -512,8 +526,11 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       }
 
       function initDocument() {
-        initScrollSpy();
-        initSlideMode();
+        if (isSlideMode) {
+          initSlideMode();
+        } else {
+          initScrollSpy();
+        }
       }
 
       if (document.readyState === 'loading') {
@@ -523,6 +540,14 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       }
     })();
   `;
+
+  const tocSidebarClass = isSlide ? 'toc-sidebar collapsed' : 'toc-sidebar';
+  const mainContentHTML = isSlide
+    ? `<div class="slide-container" id="slideContainer">\n${slidesHTML}\n      </div>`
+    : `<article class="markdown-rendered-content">\n        ${parsedContent}\n      </article>`;
+  const controlsHTML = isSlide
+    ? `\n  <div class="slide-controls">\n    <button type="button" class="banner-btn" id="slidePrev" onclick="prevSlide()">Précédent</button>\n    <span class="slide-counter" id="slideCounter">0 / 0</span>\n    <button type="button" class="banner-btn" id="slideNext" onclick="nextSlide()">Suivant</button>\n  </div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -549,7 +574,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   </header>
 
   <div class="document-layout">
-    <aside class="toc-sidebar" id="tocSidebar">
+    <aside class="${tocSidebarClass}" id="tocSidebar">
       <div class="toc-header-block">
         <span class="toc-title">Navigation</span>
         <span class="toc-counter">${tocList.length}</span>
@@ -562,20 +587,9 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     </aside>
 
     <main class="document-body">
-      <article class="markdown-rendered-content">
-        ${parsedContent}
-      </article>
-      <div class="slide-container" id="slideContainer">
-        ${slidesHTML}
-      </div>
+      ${mainContentHTML}
     </main>
-  </div>
-
-  <div class="slide-controls">
-    <button type="button" class="banner-btn" id="slidePrev" onclick="prevSlide()">Précédent</button>
-    <span class="slide-counter" id="slideCounter">0 / 0</span>
-    <button type="button" class="banner-btn" id="slideNext" onclick="nextSlide()">Suivant</button>
-  </div>
+  </div>${controlsHTML}
 
   <script>${documentJS}</script>
 </body>

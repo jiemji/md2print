@@ -9,76 +9,99 @@
 
 export const DEFAULT_REPORT_CSS = `/* ==========================================================================
    md2print — Thème par Défaut : Vision Rapport (Inspiré de Modele_word.docx)
+   ==========================================================================
+   Ce fichier CSS paramétrable définit le style visuel de la vue Rapport continu
+   et de l'exportation HTML autonome basée sur les règles typographiques, couleurs
+   et marges extraites du modèle Microsoft Word d'entreprise (Modele_word.docx).
+
+   Toutes les dimensions, couleurs, polices et marges sont personnalisables
+   ci-dessous via les variables CSS (:root).
    ========================================================================== */
+
 :root {
-  /* 1. Typographie (Modele_word.docx : Calibri Light & Calibri) */
+  /* ========================================================================
+     1. TYPOGRAPHIE (Extraite de Modele_word.docx : Calibri Light & Calibri)
+     ======================================================================== */
   --report-font-body: 'Calibri', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --report-font-heading: 'Calibri Light', 'Segoe UI Light', 'Calibri', -apple-system, sans-serif;
   --report-font-mono: Consolas, 'JetBrains Mono', 'Courier New', monospace;
 
-  --report-font-size-base: 1rem;
-  --report-line-height-base: 1.55;
+  --report-font-size-base: 1rem;         /* 16px ~ équivalent 11pt Word */
+  --report-line-height-base: 1.55;       /* Interligne standard Word 1.15-1.5 */
 
-  --report-title-size: clamp(2rem, 3.2vw, 2.5rem);
-  --report-h1-size: 1.65rem;
-  --report-h2-size: 1.35rem;
-  --report-h3-size: 1.18rem;
-  --report-h4-size: 1.05rem;
-  --report-h5-size: 0.95rem;
-  --report-h6-size: 0.88rem;
+  /* Échelle des titres Word */
+  --report-title-size: clamp(2rem, 3.2vw, 2.5rem);  /* Style "Titre" Word (36pt) */
+  --report-h1-size: 1.65rem;             /* Style "Titre 1" Word (20pt / 40 half-pts) */
+  --report-h2-size: 1.35rem;             /* Style "Titre 2" Word (16pt / 32 half-pts) */
+  --report-h3-size: 1.18rem;             /* Style "Titre 3" Word (14pt / 28 half-pts) */
+  --report-h4-size: 1.05rem;             /* Style "Titre 4" Word */
+  --report-h5-size: 0.95rem;             /* Style "Titre 5" Word */
+  --report-h6-size: 0.88rem;             /* Style "Titre 6" Word */
 
-  /* 2. Palette de couleurs (Modele_word.docx) */
-  --report-color-h1: #C00000;
-  --report-color-h2: #2F5496;
-  --report-color-h3: #2F5496;
-  --report-color-h4: #2F5496;
-  --report-color-h5: #2F5496;
-  --report-color-h6: #595959;
-  --report-color-subtitle: #595959;
+  /* ========================================================================
+     2. PALETTE DE COULEURS (Charte graphique Modele_word.docx)
+     ======================================================================== */
+  /* Couleurs de titres Word */
+  --report-color-h1: #C00000;            /* Rouge crimson / Bordeaux signature Titre 1 Word */
+  --report-color-h2: #2F5496;            /* Bleu corporatif / Marine Titre 2 & Titre 3 Word */
+  --report-color-h3: #2F5496;            /* Bleu corporatif Word */
+  --report-color-h4: #2F5496;            /* Bleu corporatif Word */
+  --report-color-h5: #2F5496;            /* Bleu corporatif Word */
+  --report-color-h6: #595959;            /* Gris moyen Titre 6, 7 & Sous-titre Word */
+  --report-color-subtitle: #595959;      /* Style "Sous-titre" Word */
 
-  --report-color-text: #272727;
-  --report-color-muted: #595959;
-  --report-color-dim: #8c8c8c;
-  --report-color-link: #0563C1;
+  /* Textes & fonds généraux */
+  --report-color-text: #272727;          /* Texte de paragraphe sombre et lisible */
+  --report-color-muted: #595959;         /* Métadonnées & textes secondaires */
+  --report-color-dim: #8c8c8c;           /* Indices & numérotations discrètes */
+  --report-color-link: #0563C1;          /* Bleu lien hypertexte Word (hlink) */
   --report-color-link-hover: #104a8e;
 
-  --report-bg-backdrop: #f1f5f9;
-  --report-bg-paper: #ffffff;
-  --report-bg-sidebar: #f8fafc;
-  --report-bg-header: #ffffff;
-  --report-border-color: #d1d5db;
-  --report-border-light: #e5e7eb;
+  /* Arrière-plans & structure papier */
+  --report-bg-backdrop: #f8fafc;         /* Arrière-plan neutre autour de la feuille Word */
+  --report-bg-paper: #ffffff;            /* Fond de la page blanche du rapport */
+  --report-bg-sidebar: #f8fafc;          /* Fond du sommaire latéral */
+  --report-bg-header: #ffffff;           /* Fond du bandeau supérieur */
+  --report-border-color: #d1d5db;        /* Bordures standards */
+  --report-border-light: #e5e7eb;        /* Séparateurs légers */
 
-  --report-accent-blue: #4472C4;
-  --report-accent-orange: #ED7D31;
-  --report-accent-gray: #A5A5A5;
-  --report-accent-gold: #FFC000;
-  --report-accent-cyan: #5B9BD5;
-  --report-accent-green: #70AD47;
+  /* Accents corporatifs Word (ClrScheme Office) */
+  --report-accent-blue: #4472C4;         /* Accent1 Word */
+  --report-accent-orange: #ED7D31;       /* Accent2 Word */
+  --report-accent-gray: #A5A5A5;         /* Accent3 Word */
+  --report-accent-gold: #FFC000;         /* Accent4 Word */
+  --report-accent-cyan: #5B9BD5;         /* Accent5 Word */
+  --report-accent-green: #70AD47;        /* Accent6 Word */
 
-  /* 3. Mise en page & Marges Word (25 mm = 1417 dxa) */
-  --report-page-max-width: 960px;
-  --report-page-padding-y: 44px;
-  --report-page-padding-x: 52px;
+  /* ========================================================================
+     3. MISE EN PAGE & MARGES (Calibrées sur les 25 mm Word = 1417 dxa)
+     ======================================================================== */
+  --report-page-max-width: 1020px;       /* Largeur maximale de lecture optimale */
+  --report-page-padding-y: 44px;         /* Marge haute/basse (~25 mm) */
+  --report-page-padding-x: 52px;         /* Marge gauche/droite (~25 mm) */
   --report-paper-shadow: 0 4px 20px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.04);
   --report-paper-radius: 4px;
 
   --report-header-height: 56px;
-  --report-sidebar-width: 290px;
+  --report-sidebar-width: 280px;
   --report-radius-sm: 4px;
   --report-radius-md: 6px;
 
-  /* 4. Tableaux (TableauNormal Word & output_config.json) */
-  --report-table-header-bg: #003366;
-  --report-table-header-color: #ffffff;
-  --report-table-border: #cccccc;
-  --report-table-border-light: #e8e8e8;
-  --report-table-row-even: #f9f9f9;
-  --report-table-row-hover: #eef4fb;
+  /* ========================================================================
+     4. TABLEAUX (TableauNormal Word & output_config.json)
+     ======================================================================== */
+  --report-table-header-bg: #003366;     /* En-tête bleu marine output_config.json */
+  --report-table-header-color: #ffffff;  /* Texte d'en-tête blanc */
+  --report-table-border: #cccccc;        /* Bordure de cellule */
+  --report-table-border-light: #e8e8e8;  /* Lignes intérieures */
+  --report-table-row-even: #f9f9f9;      /* Ligne alternée (rowAltFill) */
+  --report-table-row-hover: #eef4fb;     /* Survol de ligne */
 
-  /* 5. Citations & Callouts */
-  --report-quote-text: #404040;
-  --report-quote-border: #2F5496;
+  /* ========================================================================
+     5. CITATIONS & CALLOUTS (GitHub-style & Citation Word)
+     ======================================================================== */
+  --report-quote-text: #404040;          /* Couleur w:val="404040" du style Citation */
+  --report-quote-border: #2F5496;        /* Liseré bleu corporatif */
   --report-quote-bg: rgba(47, 84, 150, 0.05);
 
   --report-callout-note-border: #2F5496;
@@ -101,14 +124,19 @@ export const DEFAULT_REPORT_CSS = `/* ==========================================
   --report-callout-important-bg: rgba(91, 155, 213, 0.08);
   --report-callout-important-title: #2b6da8;
 
-  /* 6. Cartouches métriques & badges */
+  /* ========================================================================
+     6. CARTOUCHES DE DONNÉES / MÉTRIQUES & BADGES
+     ======================================================================== */
   --report-metric-val-size: clamp(3rem, 4.8rem, 5.2rem);
-  --report-metric-val-color: #C00000;
-  --report-metric-accent: #2F5496;
+  --report-metric-val-color: #C00000;    /* Valeur 5x en rouge signature Word */
+  --report-metric-accent: #2F5496;       /* Liseré haut en bleu corporatif */
   --report-metric-bg-start: #ffffff;
   --report-metric-bg-end: #f8fafc;
 }
 
+/* ==========================================================================
+   RESET & DISPOSITION GÉNÉRALE DU RAPPORT
+   ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -118,7 +146,6 @@ export const DEFAULT_REPORT_CSS = `/* ==========================================
 html {
   scroll-behavior: smooth;
   font-size: 16px;
-  background-color: var(--report-bg-backdrop);
 }
 
 body {
@@ -133,6 +160,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ==========================================================================
+   BANDEAU SUPÉRIEUR FIXE
+   ========================================================================== */
 .top-banner {
   position: sticky;
   top: 0;
@@ -208,6 +238,9 @@ body {
   color: var(--report-color-h2);
 }
 
+/* ==========================================================================
+   LAYOUT : SOMMAIRE LATÉRAL + FEUILLE PAPIER DU RAPPORT
+   ========================================================================== */
 .document-layout {
   display: flex;
   flex: 1;
@@ -215,6 +248,7 @@ body {
   min-height: calc(100vh - var(--report-header-height));
 }
 
+/* Sommaire Latéral */
 .toc-sidebar {
   width: var(--report-sidebar-width);
   min-width: var(--report-sidebar-width);
@@ -316,31 +350,43 @@ body {
   padding: 8px;
 }
 
+/* Corps du Document : Conteneur A4 centré */
 .document-body {
   flex: 1;
-  padding: 32px 24px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  padding: 32px 36px;
+  max-width: var(--report-page-max-width);
+  margin: 0 auto;
+  width: 100%;
   min-width: 0;
+  display: block;
 }
 
 .markdown-rendered-content {
   background: var(--report-bg-paper);
   width: 100%;
-  max-width: var(--report-page-max-width);
   padding: var(--report-page-padding-y) var(--report-page-padding-x);
   border-radius: var(--report-paper-radius);
   border: 1px solid var(--report-border-color);
   box-shadow: var(--report-paper-shadow);
   font-size: var(--report-font-size-base);
   color: var(--report-color-text);
+  margin: 0 auto;
 }
 
+/* Éléments de présentation masqués en vision rapport */
+.slide-container,
+.slide-controls {
+  display: none !important;
+}
+
+/* ==========================================================================
+   TYPOGRAPHIE & HIÉRARCHIE DES TITRES (RÈGLES EXACTES MODELE_WORD.DOCX)
+   ========================================================================== */
 .doc-heading {
   scroll-margin-top: calc(var(--report-header-height) + 24px);
 }
 
+/* Titre principal du Document (# Titre -> Style Titre Word 36pt) */
 .doc-main-title {
   font-family: var(--report-font-heading);
   font-size: var(--report-title-size);
@@ -355,6 +401,7 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Titre 1 Word (## -> Style Titre1 w:val="C00000" 20pt) */
 .doc-h2 {
   font-family: var(--report-font-heading);
   font-size: var(--report-h1-size);
@@ -367,6 +414,7 @@ body {
   line-height: 1.3;
 }
 
+/* Titre 2 Word (### -> Style Titre2 w:val="2F5496" 16pt) */
 .doc-h3 {
   font-family: var(--report-font-heading);
   font-size: var(--report-h2-size);
@@ -377,6 +425,7 @@ body {
   line-height: 1.35;
 }
 
+/* Titre 3 Word (#### -> Style Titre3 w:val="2F5496" 14pt) */
 .doc-h4 {
   font-family: var(--report-font-body);
   font-size: var(--report-h3-size);
@@ -387,6 +436,7 @@ body {
   line-height: 1.4;
 }
 
+/* Titres 4, 5, 6 Word */
 .doc-h5, .doc-h6 {
   font-family: var(--report-font-body);
   font-size: var(--report-h4-size);
@@ -402,6 +452,7 @@ p {
   text-align: justify;
 }
 
+/* Listes à puces & Listes numérotées (Listepuce & Listenumero) */
 ul, ol {
   margin-bottom: 16px;
   padding-left: 28px;
@@ -430,6 +481,9 @@ li {
   text-decoration: line-through;
 }
 
+/* ==========================================================================
+   CITATIONS (Style Citation Word : w:val="404040")
+   ========================================================================== */
 blockquote {
   margin: 20px 0;
   padding: 14px 20px;
@@ -444,6 +498,9 @@ blockquote p:last-child {
   margin-bottom: 0;
 }
 
+/* ==========================================================================
+   CALLOUTS / ALERTES GITHUB-STYLE (> [!NOTE], > [!TIP], ETC.)
+   ========================================================================== */
 .callout {
   margin: 20px 0;
   padding: 14px 18px;
@@ -507,6 +564,9 @@ blockquote p:last-child {
   --callout-title: var(--report-callout-important-title);
 }
 
+/* ==========================================================================
+   BADGES INLINE ([badge:type:texte])
+   ========================================================================== */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -558,6 +618,9 @@ blockquote p:last-child {
   border: 1px solid var(--report-border-color);
 }
 
+/* ==========================================================================
+   CARTOUCHES DE DONNÉES / MÉTRIQUES 5X ([chiffre:valeur:libellé])
+   ========================================================================== */
 .metric-card {
   display: inline-flex;
   flex-direction: column;
@@ -595,6 +658,9 @@ blockquote p:last-child {
   line-height: 1.3;
 }
 
+/* ==========================================================================
+   TABLEAUX (TABLEAUNORMAL & CONFIG OUTPUT_CONFIG.JSON)
+   ========================================================================== */
 .table-responsive-wrapper {
   width: 100%;
   overflow-x: auto;
@@ -647,6 +713,9 @@ blockquote p:last-child {
   background: var(--report-table-row-hover);
 }
 
+/* ==========================================================================
+   SCHÉMAS MERMAID & CODE BLOCKS
+   ========================================================================== */
 .mermaid-card {
   margin: 24px 0;
   padding: 20px 24px;
@@ -705,6 +774,7 @@ p code, li code, td code {
 .hljs-comment { color: #94a3b8; font-style: italic; }
 .hljs-number, .hljs-literal { color: #fbbf24; }
 
+/* Liens & images */
 a {
   color: var(--report-color-link);
   text-decoration: underline;
@@ -730,10 +800,18 @@ hr {
   margin: 28px 0;
 }
 
-.slide-container, .slide-controls {
-  display: none !important;
+@media (max-width: 900px) {
+  .document-body {
+    padding: 16px 12px;
+  }
+  .markdown-rendered-content {
+    padding: 24px 20px;
+  }
 }
 
+/* ==========================================================================
+   IMPRESSION (PAGINATION EXACTE A4 AVEC MARGES WORD 25 MM)
+   ========================================================================== */
 @media print {
   @page {
     size: A4 portrait;
@@ -778,66 +856,95 @@ hr {
 
 export const DEFAULT_SLIDE_CSS = `/* ==========================================================================
    md2print — Thème par Défaut : Vision Slide (Inspiré de Modele_presentation.potx)
+   ==========================================================================
+   Ce fichier CSS paramétrable définit le style visuel de la vue Diaporama (Slide)
+   et de l'exportation de présentation interactive 16:9, calqué sur la charte
+   graphique, les masques et les palettes extraits du modèle PowerPoint
+   d'entreprise (Modele_presentation.potx).
+
+   Toutes les dimensions, couleurs, polices et marges sont personnalisables
+   ci-dessous via les variables CSS (:root).
    ========================================================================== */
+
 :root {
-  /* 1. Typographie (Modele_presentation.potx : Aptos Display & Aptos) */
+  /* ========================================================================
+     1. TYPOGRAPHIE (Extraite de Modele_presentation.potx : Aptos Display & Aptos)
+     ======================================================================== */
   --slide-font-body: 'Aptos', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --slide-font-heading: 'Aptos Display', 'Segoe UI Semibold', 'Aptos', -apple-system, sans-serif;
   --slide-font-mono: Consolas, 'JetBrains Mono', 'Courier New', monospace;
 
-  --slide-font-size-base: 1.25rem;
+  --slide-font-size-base: 1.25rem;       /* Taille confortable pour lecture sur écran projeté */
   --slide-line-height-base: 1.6;
 
-  --slide-title-cover-size: clamp(2.4rem, 4.5vw, 3.4rem);
-  --slide-title-chapter-size: clamp(2rem, 3.6vw, 2.6rem);
-  --slide-title-content-size: clamp(1.6rem, 2.6vw, 2.1rem);
+  /* Échelle des titres de diapositives */
+  --slide-title-cover-size: clamp(2.4rem, 4.5vw, 3.4rem);   /* Titre de couverture (Couverture) */
+  --slide-title-chapter-size: clamp(2rem, 3.6vw, 2.6rem);   /* Titre d'inter-titre (Section) */
+  --slide-title-content-size: clamp(1.6rem, 2.6vw, 2.1rem); /* Titre de diapositive de contenu (Slide) */
 
-  /* 2. Palette de couleurs (Modele_presentation.potx) */
-  --slide-brand-red: #C41718;
-  --slide-brand-red-alt: #C00000;
-  --slide-brand-amber: #FBAE40;
-  --slide-brand-dark: #0E2841;
+  /* ========================================================================
+     2. PALETTE DE COULEURS (Charte graphique Modele_presentation.potx)
+     ======================================================================== */
+  /* Couleurs signatures du modèle OpenXML */
+  --slide-brand-red: #C41718;            /* Rouge signature dégradé du bandeau de diapositive */
+  --slide-brand-red-alt: #C00000;        /* Rouge bordeaux plein (Couverture & Section) */
+  --slide-brand-amber: #FBAE40;          /* Ambre / Or chaleureux (liseré secondaire) */
+  --slide-brand-dark: #0E2841;           /* Bleu nuit ardoise profond (ClrScheme dk2) */
 
-  --slide-accent-teal: #156082;
-  --slide-accent-coral: #E97132;
-  --slide-accent-green: #196B24;
-  --slide-accent-cyan: #0F9ED5;
-  --slide-accent-purple: #A02B93;
+  /* Accents secondaires du thème PowerPoint (ClrScheme Office) */
+  --slide-accent-teal: #156082;          /* Accent1 (Bleu canard / Sarcelle) */
+  --slide-accent-coral: #E97132;         /* Accent2 (Corail) */
+  --slide-accent-green: #196B24;         /* Accent3 (Vert forêt) */
+  --slide-accent-cyan: #0F9ED5;          /* Accent4 (Bleu cyan vif) */
+  --slide-accent-purple: #A02B93;        /* Accent5 (Pourpre / Magenta) */
 
-  --slide-text-main: #0E2841;
-  --slide-text-body: #1e293b;
-  --slide-text-muted: #64748b;
-  --slide-text-dim: #94a3b8;
+  /* Textes & contrastes */
+  --slide-text-main: #0E2841;            /* Titres & textes d'accent sombres */
+  --slide-text-body: #1e293b;            /* Corps de texte lisible */
+  --slide-text-muted: #64748b;           /* Métadonnées & sous-titres */
+  --slide-text-dim: #94a3b8;             /* Numéros de page & dates discrètes */
 
-  --slide-stage-backdrop: #0b1120;
-  --slide-canvas-bg: #ffffff;
-  --slide-border-color: #cbd5e1;
+  /* Arrière-plans & structure 16:9 */
+  --slide-stage-backdrop: #0b1120;       /* Fond de scène sombre (mode projection immersif) */
+  --slide-canvas-bg: #ffffff;            /* Fond blanc immaculé de la diapositive */
+  --slide-border-color: #cbd5e1;         /* Bordures douces */
   --slide-shadow: 0 16px 48px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
   --slide-radius: 8px;
 
-  /* 3. Proportions 16:9 standard */
-  --slide-max-width: 1280px;
-  --slide-aspect-ratio: 16 / 9;
+  /* ========================================================================
+     3. FORMAT & PROPORTIONS 16:9 (Widescreen standard 12192000 x 6858000 dxa)
+     ======================================================================== */
+  --slide-max-width: 1280px;             /* Largeur standard de la diapositive */
+  --slide-aspect-ratio: 16 / 9;          /* Ratio universel 16:9 */
   --slide-padding-y: 44px;
   --slide-padding-x: 56px;
 
-  /* 4. Tableaux */
-  --slide-table-header-bg: #0E2841;
+  /* ========================================================================
+     4. TABLEAUX DE DIAPOSITIVES
+     ======================================================================== */
+  --slide-table-header-bg: #0E2841;      /* En-tête bleu nuit ardoise */
   --slide-table-header-color: #ffffff;
   --slide-table-border: #cbd5e1;
   --slide-table-border-light: #e2e8f0;
   --slide-table-row-even: #f8fafc;
   --slide-table-row-hover: #eef2f6;
 
-  /* 5. Callouts & Citations */
+  /* ========================================================================
+     5. CALLOUTS & CITATIONS DE DIAPOSITIVES
+     ======================================================================== */
   --slide-callout-border-width: 5px;
 
-  /* 6. Cartouches métriques */
+  /* ========================================================================
+     6. CARTOUCHES MÉTRIQUES 5X & BADGES DE DIAPOSITIVES
+     ======================================================================== */
   --slide-metric-val-size: clamp(3.6rem, 5.5rem, 6.5rem);
-  --slide-metric-accent: #C41718;
-  --slide-metric-val-color: #0E2841;
+  --slide-metric-accent: #C41718;        /* Liseré supérieur rouge signature */
+  --slide-metric-val-color: #0E2841;     /* Valeur en bleu nuit très contrasté */
 }
 
+/* ==========================================================================
+   RESET & SCÈNE DE PROJECTION DU DIAPORAMA
+   ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -855,20 +962,207 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.markdown-rendered-content {
-  display: none !important;
+/* ==========================================================================
+   BANDEAU SUPÉRIEUR FIXE DU DIAPORAMA
+   ========================================================================== */
+.top-banner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: var(--slide-brand-dark);
+  border-bottom: 2px solid var(--slide-brand-red);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
+.banner-inner {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+}
+
+.banner-center {
+  text-align: center;
+  min-width: 0;
+}
+
+.banner-main-title {
+  font-family: var(--slide-font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.banner-date {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.banner-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.banner-btn:hover {
+  background: var(--slide-brand-red);
+  border-color: var(--slide-brand-red);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   SOMMAIRE LATÉRAL ESCAMOTABLE EN VISION SLIDE (TIROIR / DRAWER)
+   ========================================================================== */
+.toc-sidebar {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--slide-brand-dark);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  z-index: 1050;
+  overflow-y: auto;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toc-sidebar.collapsed {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toc-header-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.toc-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.toc-counter {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(196, 23, 24, 0.2);
+  color: var(--slide-brand-amber);
+}
+
+.toc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toc-link {
+  display: block;
+  padding: 7px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border-left: 3px solid transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toc-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--slide-brand-amber);
+}
+
+.toc-item.active > .toc-link {
+  color: #ffffff;
+  font-weight: 700;
+  background: rgba(196, 23, 24, 0.25);
+  border-left-color: var(--slide-brand-red);
+}
+
+.toc-h1 .toc-link {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.toc-h2 .toc-link {
+  padding-left: 18px;
+  font-weight: 600;
+}
+
+.toc-h3 .toc-link {
+  padding-left: 28px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.toc-empty {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-style: italic;
+  padding: 8px;
+}
+
+/* ==========================================================================
+   STRUCTURE GÉNÉRALE & SCÈNE DE PROJECTION 16:9
+   ========================================================================== */
 .document-layout {
-  height: 100vh;
+  height: calc(100vh - 48px);
   width: 100vw;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
 .document-body {
   flex: 1;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   display: flex;
   align-items: center;
@@ -878,10 +1172,14 @@ html, body {
   position: relative;
 }
 
-.toc-sidebar, .top-banner {
+/* En mode slide, le contenu standard markdown est masqué au profit du conteneur de diapositives */
+.markdown-rendered-content {
   display: none !important;
 }
 
+/* ==========================================================================
+   CONTENEUR ET CADRE DIAPOSITIVE 16:9
+   ========================================================================== */
 .slide-container {
   display: flex;
   align-items: center;
@@ -923,6 +1221,9 @@ html, body {
   }
 }
 
+/* ==========================================================================
+   1. DIAPOSITIVE DE TITRE / COUVERTURE (Layout 1 : Couverture)
+   ========================================================================== */
 .slide.slide-title {
   justify-content: center;
   align-items: center;
@@ -932,6 +1233,7 @@ html, body {
   position: relative;
 }
 
+/* Bandeau signature rouge & ambre en bordure supérieure */
 .slide.slide-title::before {
   content: '';
   position: absolute;
@@ -984,6 +1286,9 @@ html, body {
   border: 1px solid rgba(14, 40, 65, 0.12);
 }
 
+/* ==========================================================================
+   2. DIAPOSITIVE D'INTER-TITRE / SECTION (Layout 3 : Section)
+   ========================================================================== */
 .slide.slide-chapter {
   justify-content: center;
   align-items: center;
@@ -1044,6 +1349,9 @@ html, body {
   color: var(--slide-text-muted);
 }
 
+/* ==========================================================================
+   3. DIAPOSITIVE DE CONTENU (Layout 6 : Slide)
+   ========================================================================== */
 .slide.slide-content {
   justify-content: flex-start;
   align-items: stretch;
@@ -1051,6 +1359,7 @@ html, body {
   position: relative;
 }
 
+/* Liseré supérieur bicolore signature Modele_presentation.potx */
 .slide.slide-content::before {
   content: '';
   position: absolute;
@@ -1133,6 +1442,9 @@ html, body {
   margin-bottom: 6px;
 }
 
+/* ==========================================================================
+   TABLEAUX EN VISION SLIDE
+   ========================================================================== */
 .slide-body .table-responsive-wrapper {
   margin: 16px 0;
   border: 1px solid var(--slide-table-border);
@@ -1178,6 +1490,9 @@ html, body {
   background: var(--slide-table-row-even);
 }
 
+/* ==========================================================================
+   CARTOUCHES MÉTRIQUES 5X EN VISION SLIDE
+   ========================================================================== */
 .slide-body .metric-card {
   display: inline-flex;
   flex-direction: column;
@@ -1210,6 +1525,9 @@ html, body {
   margin-top: 8px;
 }
 
+/* ==========================================================================
+   CALLOUTS, CITATIONS & SCHÉMAS MERMAID EN SLIDE
+   ========================================================================== */
 .slide-body blockquote {
   margin: 16px 0;
   padding: 12px 18px;
@@ -1278,6 +1596,9 @@ html, body {
   margin: 0 auto;
 }
 
+/* ==========================================================================
+   CONTRÔLES DE NAVIGATION INTERACTIFS DE DIAPOSITIVES
+   ========================================================================== */
 .slide-controls {
   display: flex;
   align-items: center;
@@ -1327,6 +1648,9 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ==========================================================================
+   IMPRESSION (1 DIAPOSITIVE PAR PAGE EN FORMAT PAYSAGE)
+   ========================================================================== */
 @media print {
   @page {
     size: landscape;

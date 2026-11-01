@@ -49,7 +49,7 @@
   --report-color-link-hover: #104a8e;
 
   /* Arrière-plans & structure papier */
-  --report-bg-backdrop: #f1f5f9;         /* Arrière-plan neutre autour de la feuille Word */
+  --report-bg-backdrop: #f8fafc;         /* Arrière-plan neutre autour de la feuille Word */
   --report-bg-paper: #ffffff;            /* Fond de la page blanche du rapport */
   --report-bg-sidebar: #f8fafc;          /* Fond du sommaire latéral */
   --report-bg-header: #ffffff;           /* Fond du bandeau supérieur */
@@ -67,14 +67,14 @@
   /* ========================================================================
      3. MISE EN PAGE & MARGES (Calibrées sur les 25 mm Word = 1417 dxa)
      ======================================================================== */
-  --report-page-max-width: 960px;        /* Largeur maximale de lecture optimale */
+  --report-page-max-width: 1020px;       /* Largeur maximale de lecture optimale */
   --report-page-padding-y: 44px;         /* Marge haute/basse (~25 mm) */
   --report-page-padding-x: 52px;         /* Marge gauche/droite (~25 mm) */
   --report-paper-shadow: 0 4px 20px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.04);
   --report-paper-radius: 4px;
 
   --report-header-height: 56px;
-  --report-sidebar-width: 290px;
+  --report-sidebar-width: 280px;
   --report-radius-sm: 4px;
   --report-radius-md: 6px;
 
@@ -137,7 +137,6 @@
 html {
   scroll-behavior: smooth;
   font-size: 16px;
-  background-color: var(--report-bg-backdrop);
 }
 
 body {
@@ -342,26 +341,33 @@ body {
   padding: 8px;
 }
 
-/* Corps du Document : Effet Feuille de Rapport Word A4 */
+/* Corps du Document : Conteneur A4 centré */
 .document-body {
   flex: 1;
-  padding: 32px 24px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  padding: 32px 36px;
+  max-width: var(--report-page-max-width);
+  margin: 0 auto;
+  width: 100%;
   min-width: 0;
+  display: block;
 }
 
 .markdown-rendered-content {
   background: var(--report-bg-paper);
   width: 100%;
-  max-width: var(--report-page-max-width);
   padding: var(--report-page-padding-y) var(--report-page-padding-x);
   border-radius: var(--report-paper-radius);
   border: 1px solid var(--report-border-color);
   box-shadow: var(--report-paper-shadow);
   font-size: var(--report-font-size-base);
   color: var(--report-color-text);
+  margin: 0 auto;
+}
+
+/* Éléments de présentation masqués en vision rapport */
+.slide-container,
+.slide-controls {
+  display: none !important;
 }
 
 /* ==========================================================================
@@ -783,6 +789,15 @@ hr {
   height: 1px;
   background: var(--report-border-color);
   margin: 28px 0;
+}
+
+@media (max-width: 900px) {
+  .document-body {
+    padding: 16px 12px;
+  }
+  .markdown-rendered-content {
+    padding: 24px 20px;
+  }
 }
 
 /* ==========================================================================

@@ -203,6 +203,30 @@ export async function saveCustomCss(cssPayload) {
 }
 
 /**
+ * Sauvegarde les configurations de personnalisation des balises (Rapport et Slide) dans IndexedDB.
+ * @param {{ report?: object, slide?: object }} configs
+ * @returns {Promise<void>}
+ */
+export async function saveThemeConfigs(configs) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_theme_configs',
+        configs: configs && typeof configs === 'object' ? configs : {},
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
  * Supprime la configuration JSON, les modèles Word/PowerPoint et les styles CSS personnalisés de IndexedDB.
  * @returns {Promise<void>}
  */
@@ -216,6 +240,7 @@ export async function clearCustomConfigAndTemplate() {
       store.delete('custom_template');
       store.delete('custom_ppt_template');
       store.delete('custom_css');
+      store.delete('custom_theme_configs');
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -333,6 +358,7 @@ export async function loadStoredState() {
       const customTemplateReq = stateStore.get('custom_template');
       const customPptTemplateReq = stateStore.get('custom_ppt_template');
       const customCssReq = stateStore.get('custom_css');
+      const customThemeConfigsReq = stateStore.get('custom_theme_configs');
       const imagesReq = imagesStore.getAll();
 
       tx.oncomplete = () => {
@@ -358,6 +384,7 @@ export async function loadStoredState() {
           customTemplate: customTemplateReq.result || null,
           customPptTemplate: customPptTemplateReq.result || null,
           customCss: customCssReq.result || null,
+          customThemeConfigs: customThemeConfigsReq.result?.configs || null,
         });
       };
 

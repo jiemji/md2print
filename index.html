@@ -48,6 +48,9 @@
 
       <!-- Zone Droite : Configuration, Export et Thème -->
       <div class="header-group header-right">
+        <!-- Bouton direct d'accès à la page de paramétrage des styles -->
+        <button type="button" class="btn" id="btnOpenStyleSettings" title="Personnaliser les polices, tailles et couleurs de chaque type de balise">Styles des balises</button>
+
         <!-- Menu déroulant Configuration -->
         <div class="dropdown" id="dropdownConfig">
           <button type="button" class="btn" id="btnToggleConfig">Configuration</button>
@@ -55,6 +58,7 @@
             <div class="dropdown-status" id="configStatusText">
               Config : par défaut<br>Modèle : par défaut
             </div>
+            <button type="button" class="dropdown-item" id="btnMenuOpenStyleSettings">Paramétrer les styles des balises</button>
             <button type="button" class="dropdown-item" id="btnLoadConfigJson">Charger configuration (.json)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplateDocx">Charger modèle Word (.docx)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplatePptx">Charger modèle PowerPoint (.potx)</button>
@@ -102,6 +106,9 @@
         <iframe id="previewIframe" class="preview-iframe" title="Aperçu du document formaté"></iframe>
       </section>
     </main>
+
+    <!-- Page de Paramétrage des Styles de Balises (Hors-ligne, sans icône) -->
+    <section class="style-config-page" id="pageStyleConfig" style="display: none;"></section>
   </div>
 
   <!-- Conteneur de Notifications Textuelles -->
