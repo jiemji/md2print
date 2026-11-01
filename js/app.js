@@ -31,11 +31,13 @@ import {
   saveCustomConfig,
   saveCustomTemplate,
   saveCustomPptTemplate,
+  saveCustomCss,
   clearCustomConfigAndTemplate,
   saveDraftState,
   clearDraftState,
   loadStoredState,
 } from './StorageService.js';
+import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
@@ -58,6 +60,9 @@ const state = {
   templateFileName: 'Modele_word.docx (défaut)',
   pptTemplateBuffer: null,
   pptTemplateFileName: 'Modele_presentation.potx (défaut)',
+  reportCss: null,
+  slideCss: null,
+  customCssFileName: null,
   syncScroll: true,
 };
 
@@ -91,6 +96,8 @@ const initDomRefs = () => {
   dom.templateDocxInput = document.getElementById('templateDocxInput');
   dom.btnLoadTemplatePptx = document.getElementById('btnLoadTemplatePptx');
   dom.templatePptxInput = document.getElementById('templatePptxInput');
+  dom.btnLoadCustomCss = document.getElementById('btnLoadCustomCss');
+  dom.customCssInput = document.getElementById('customCssInput');
   dom.btnResetConfig = document.getElementById('btnResetConfig');
 
   dom.dropdownExport = document.getElementById('dropdownExport');
@@ -216,7 +223,7 @@ function scheduleDraftSave(delay = 60) {
  * @returns {Promise<void>}
  */
 async function restoreFromIndexedDB() {
-  const { prefs, draft, localImages, customConfig, customTemplate, customPptTemplate } =
+  const { prefs, draft, localImages, customConfig, customTemplate, customPptTemplate, customCss } =
     await loadStoredState();
 
   if (prefs) {
@@ -263,6 +270,12 @@ async function restoreFromIndexedDB() {
   if (customPptTemplate?.pptTemplateBuffer instanceof ArrayBuffer) {
     state.pptTemplateBuffer = customPptTemplate.pptTemplateBuffer;
     state.pptTemplateFileName = customPptTemplate.pptTemplateFileName || 'Modèle PPT personnalisé';
+  }
+
+  if (customCss) {
+    if (customCss.reportCss) state.reportCss = customCss.reportCss;
+    if (customCss.slideCss) state.slideCss = customCss.slideCss;
+    state.customCssFileName = customCss.fileName || 'CSS personnalisé';
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -337,6 +350,36 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
     }
   }
 
+  if (forceReset || !state.reportCss) {
+    try {
+      const resReportCss = await fetch('css/report.css');
+      if (resReportCss.ok) {
+        state.reportCss = await resReportCss.text();
+      } else {
+        state.reportCss = DEFAULT_REPORT_CSS;
+      }
+    } catch {
+      state.reportCss = DEFAULT_REPORT_CSS;
+    }
+  }
+
+  if (forceReset || !state.slideCss) {
+    try {
+      const resSlideCss = await fetch('css/slide.css');
+      if (resSlideCss.ok) {
+        state.slideCss = await resSlideCss.text();
+      } else {
+        state.slideCss = DEFAULT_SLIDE_CSS;
+      }
+    } catch {
+      state.slideCss = DEFAULT_SLIDE_CSS;
+    }
+  }
+
+  if (forceReset) {
+    state.customCssFileName = null;
+  }
+
   updateConfigStatusUI();
 }
 
@@ -346,7 +389,8 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
  */
 function updateConfigStatusUI() {
   if (!dom.configStatusText) return;
-  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}`;
+  const cssStatus = state.customCssFileName || 'par défaut (Word / PPTX)';
+  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}<br>CSS : ${escapeHtml(cssStatus)}`;
 }
 
 /**
@@ -837,10 +881,39 @@ function initEventListeners() {
     }
   });
 
+  dom.btnLoadCustomCss?.addEventListener('click', () => {
+    dom.customCssInput.value = '';
+    dom.customCssInput.click();
+  });
+
+  dom.customCssInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const cssText = await readFileAsText(file);
+      const isSlide = state.currentViewport === 'slide';
+      if (isSlide) {
+        state.slideCss = cssText;
+        await saveCustomCss({ slideCss: cssText, fileName: file.name });
+        showToast(`CSS Diaporama chargé : ${file.name}`, 'success');
+      } else {
+        state.reportCss = cssText;
+        await saveCustomCss({ reportCss: cssText, fileName: file.name });
+        showToast(`CSS Rapport chargé : ${file.name}`, 'success');
+      }
+      state.customCssFileName = file.name;
+      updateConfigStatusUI();
+      updatePreview();
+    } catch (err) {
+      showToast(`Erreur CSS : ${err.message}`, 'error');
+    }
+  });
+
   dom.btnResetConfig?.addEventListener('click', async () => {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
-    showToast('Configuration et modèles réinitialisés par défaut');
+    updatePreview();
+    showToast('Configuration, modèles et styles CSS réinitialisés par défaut');
   });
 
   // Actions d'export (HTML, DOCX, PPTX)
@@ -1191,6 +1264,8 @@ async function updatePreview() {
     localImages: state.localImages,
     mermaidSvgMap,
     pptConfig: state.outputConfig,
+    reportCss: state.reportCss,
+    slideCss: state.slideCss,
   });
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -1229,6 +1304,8 @@ async function handleExportHtml() {
     localImages: state.localImages,
     mermaidSvgMap,
     pptConfig: state.outputConfig,
+    reportCss: state.reportCss,
+    slideCss: state.slideCss,
   });
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const filename = `${toSlug(title)}.html`;

@@ -177,7 +177,33 @@ export async function saveCustomPptTemplate({ pptTemplateBuffer, pptTemplateFile
 }
 
 /**
- * Supprime la configuration JSON, le modèle Word et le modèle PowerPoint personnalisés de IndexedDB.
+ * Sauvegarde une feuille de style CSS personnalisée (vision rapport ou slide) dans IndexedDB.
+ * @param {{ reportCss?: string|null, slideCss?: string|null, fileName?: string }} cssPayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomCss(cssPayload) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_css',
+        reportCss: typeof cssPayload.reportCss === 'string' ? cssPayload.reportCss : null,
+        slideCss: typeof cssPayload.slideCss === 'string' ? cssPayload.slideCss : null,
+        fileName: cssPayload.fileName || 'custom.css',
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Supprime la configuration JSON, les modèles Word/PowerPoint et les styles CSS personnalisés de IndexedDB.
  * @returns {Promise<void>}
  */
 export async function clearCustomConfigAndTemplate() {
@@ -189,6 +215,7 @@ export async function clearCustomConfigAndTemplate() {
       store.delete('custom_config');
       store.delete('custom_template');
       store.delete('custom_ppt_template');
+      store.delete('custom_css');
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -305,6 +332,7 @@ export async function loadStoredState() {
       const customConfigReq = stateStore.get('custom_config');
       const customTemplateReq = stateStore.get('custom_template');
       const customPptTemplateReq = stateStore.get('custom_ppt_template');
+      const customCssReq = stateStore.get('custom_css');
       const imagesReq = imagesStore.getAll();
 
       tx.oncomplete = () => {
@@ -329,6 +357,7 @@ export async function loadStoredState() {
           customConfig: customConfigReq.result || null,
           customTemplate: customTemplateReq.result || null,
           customPptTemplate: customPptTemplateReq.result || null,
+          customCss: customCssReq.result || null,
         });
       };
 
@@ -343,6 +372,7 @@ export async function loadStoredState() {
       customConfig: null,
       customTemplate: null,
       customPptTemplate: null,
+      customCss: null,
     };
   }
 }
