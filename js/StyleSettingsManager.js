@@ -70,6 +70,12 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
       borderLeft: '#2F5496',
     },
+    column: {
+      bg: '#f8fafc',
+      border: '#cbd5e1',
+      padding: '14px',
+      radius: '6px',
+    },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C00000', borderLeftWidth: 10 },
     contentSlide: { headerBg: '#ffffff', borderTopColor: '#C00000', borderTopWidth: 6 },
@@ -133,6 +139,12 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
       borderLeft: '#C41718',
     },
+    column: {
+      bg: '#ffffff',
+      border: '#cbd5e1',
+      padding: '14px',
+      radius: '6px',
+    },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C41718', borderLeftWidth: 10 },
     contentSlide: { headerBg: '#ffffff', borderTopColor: '#C41718', borderTopWidth: 6 },
@@ -161,6 +173,223 @@ export const FONT_OPTIONS = [
   'JetBrains Mono',
   'Courier New',
 ];
+
+/**
+ * Nettoie une chaîne de nom de police (supprime quotes et listes de repli).
+ * @param {string} val - Valeur CSS brute contenant un nom de police
+ * @returns {string} Nom de police extrait et nettoyé
+ */
+function cleanFontName(val) {
+  if (!val) return '';
+  const match = val.match(/['"]?([^'",]+)['"]?/);
+  return match ? match[1].trim() : val.trim();
+}
+
+/**
+ * Normalise une chaîne de couleur hexadécimale.
+ * @param {string} val - Chaîne de couleur brute (hexadécimale, nom ou rgb)
+ * @returns {string} Couleur normalisée en hexadécimal 6 caractères (#rrggbb) ou valeur brute si non convertible
+ */
+function normalizeColor(val) {
+  if (!val) return '';
+  val = val.trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(val)) return val;
+  if (/^#[0-9A-Fa-f]{3}$/.test(val)) {
+    return `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}`;
+  }
+  return val;
+}
+
+/**
+ * Extrait la configuration complète des styles depuis un texte CSS (Vision Rapport ou Slide).
+ * 1. Recherche prioritaire du bloc JSON intégré sous commentaire :
+ *    /\* [md2print-config:mode=...] {JSON} [\/md2print-config] *\/
+ * 2. Si absent (ex: fichier CSS édité manuellement ou issu d'une version précédente),
+ *    analyse exhaustive des variables :root et des sélecteurs CSS.
+ *
+ * @function parseConfigFromCss
+ * @param {string} css - Contenu brut de la feuille CSS
+ * @param {'report'|'slide'} [defaultMode='slide'] - Mode par défaut si non détecté
+ * @returns {{ mode: 'report'|'slide', config: object }|null}
+ */
+export function parseConfigFromCss(css, defaultMode = 'slide') {
+  if (!css || typeof css !== 'string') return null;
+
+  // 1. Tag de configuration embarqué (priorité absolue)
+  const configTagRegex = /\/\*\s*\[md2print-config(?::mode=(report|slide))?\]\s*([\s\S]*?)\s*\[\/md2print-config\]\s*\*\//;
+  const tagMatch = css.match(configTagRegex);
+  if (tagMatch) {
+    try {
+      const modeInTag = tagMatch[1] || defaultMode;
+      const parsed = JSON.parse(tagMatch[2].trim());
+      if (parsed && typeof parsed === 'object') {
+        const rawConfig = parsed[modeInTag] || parsed;
+        const defaults = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[modeInTag]));
+        for (const [k, v] of Object.entries(rawConfig)) {
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+            defaults[k] = { ...(defaults[k] || {}), ...v };
+          } else {
+            defaults[k] = v;
+          }
+        }
+        return { mode: modeInTag, config: defaults };
+      }
+    } catch (e) {
+      console.warn('Erreur lecture du tag JSON dans le CSS :', e);
+    }
+  }
+
+  // 2. Détection du mode heuristique
+  const isSlide = defaultMode === 'slide' || css.includes('--slide-') || css.includes('.slide-body');
+  const mode = isSlide ? 'slide' : 'report';
+  const prefix = isSlide ? '--slide-' : '--report-';
+  const cfg = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[mode]));
+
+  // Extraire toutes les variables CSS du dernier bloc :root trouvé
+  const rootBlocks = [...css.matchAll(/:root\s*\{([^}]+)\}/g)];
+  const cssVars = {};
+  for (const block of rootBlocks) {
+    const lines = block[1].split(';');
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx !== -1) {
+        const prop = line.slice(0, colonIdx).trim();
+        const val = line.slice(colonIdx + 1).trim();
+        if (prop.startsWith('--')) {
+          cssVars[prop] = val;
+        }
+      }
+    }
+  }
+
+  // Helper pour extraire une propriété d'une règle CSS en appliquant la cascade (dernière occurrence)
+  function extractRuleProp(selectorRegex, propName) {
+    const matches = [...css.matchAll(new RegExp('(?:' + selectorRegex + ')\\s*\\{([^}]+)\\}', 'g'))];
+    if (matches.length === 0) return null;
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const body = matches[i][matches[i].length - 1];
+      const propMatch = body.match(new RegExp('(?:^|;)\\s*' + propName + '\\s*:\\s*([^!;}]+)'));
+      if (propMatch) {
+        const val = propMatch[1].trim();
+        const varMatch = val.match(/var\(\s*(--[a-zA-Z0-9_-]+)(?:\s*,\s*([^)]+))?\)/);
+        if (varMatch) {
+          const varName = varMatch[1];
+          const fallback = varMatch[2]?.trim();
+          return cssVars[varName] || fallback || null;
+        }
+        return val;
+      }
+    }
+    return null;
+  }
+
+  // Typographies & Corps de texte
+  if (cssVars[`${prefix}font-body`]) cfg.body.font = cleanFontName(cssVars[`${prefix}font-body`]);
+  if (cssVars[`${prefix}font-heading`]) {
+    const headFont = cleanFontName(cssVars[`${prefix}font-heading`]);
+    cfg.hMain.font = headFont;
+    cfg.h1.font = headFont;
+    cfg.h2.font = headFont;
+    cfg.h3.font = headFont;
+    cfg.h4.font = headFont;
+    cfg.h5.font = headFont;
+  }
+  if (cssVars[`${prefix}font-mono`]) cfg.code.font = cleanFontName(cssVars[`${prefix}font-mono`]);
+  if (cssVars[`${prefix}font-size-base`]) cfg.body.size = cssVars[`${prefix}font-size-base`];
+  if (cssVars[`${prefix}line-height-base`]) cfg.body.lineHeight = cssVars[`${prefix}line-height-base`];
+
+  // Titres & Hiérarchie
+  if (cssVars[`${prefix}title-cover-size`]) cfg.hMain.size = cssVars[`${prefix}title-cover-size`];
+  if (cssVars[`${prefix}title-chapter-size`]) cfg.h1.size = cssVars[`${prefix}title-chapter-size`];
+  if (cssVars[`${prefix}title-content-size`]) cfg.h2.size = cssVars[`${prefix}title-content-size`];
+  if (cssVars[`${prefix}text-main`]) {
+    const mainCol = normalizeColor(cssVars[`${prefix}text-main`]);
+    cfg.h1.color = mainCol;
+    cfg.h2.color = mainCol;
+    cfg.h3.color = mainCol;
+  }
+  if (cssVars[`${prefix}text-body`]) cfg.body.color = normalizeColor(cssVars[`${prefix}text-body`]);
+
+  // Arrière-plans & Structure
+  if (cssVars[`${prefix}stage-backdrop`]) cfg.page.bgBackdrop = normalizeColor(cssVars[`${prefix}stage-backdrop`]);
+  if (cssVars[`${prefix}canvas-bg`]) cfg.page.bgPaper = normalizeColor(cssVars[`${prefix}canvas-bg`]);
+  if (cssVars[`${prefix}border-color`]) cfg.page.border = normalizeColor(cssVars[`${prefix}border-color`]);
+
+  // Cartouche métrique
+  if (cssVars[`${prefix}metric-val-size`]) cfg.metric.size = cssVars[`${prefix}metric-val-size`];
+  if (cssVars[`${prefix}metric-accent`]) cfg.metric.accentColor = normalizeColor(cssVars[`${prefix}metric-accent`]);
+  if (cssVars[`${prefix}metric-val-color`]) cfg.metric.valColor = normalizeColor(cssVars[`${prefix}metric-val-color`]);
+
+  // Colonnes côte à côte
+  if (cssVars[`${prefix}column-bg`]) cfg.column.bg = normalizeColor(cssVars[`${prefix}column-bg`]);
+  if (cssVars[`${prefix}column-border`]) cfg.column.border = normalizeColor(cssVars[`${prefix}column-border`]);
+  if (cssVars[`${prefix}column-radius`]) cfg.column.radius = cssVars[`${prefix}column-radius`];
+  if (cssVars[`${prefix}column-padding`]) cfg.column.padding = cssVars[`${prefix}column-padding`];
+
+  // Mermaid
+  if (cssVars[`${prefix}mermaid-bg`]) cfg.mermaid.bg = normalizeColor(cssVars[`${prefix}mermaid-bg`]);
+  if (cssVars[`${prefix}mermaid-border`]) cfg.mermaid.border = normalizeColor(cssVars[`${prefix}mermaid-border`]);
+  if (cssVars[`${prefix}mermaid-border-left`]) cfg.mermaid.borderLeft = normalizeColor(cssVars[`${prefix}mermaid-border-left`]);
+
+  // Liserés & Bandeaux
+  if (isSlide) {
+    if (cssVars['--slide-cover-border-top-color']) cfg.coverSlide.borderTopColor = normalizeColor(cssVars['--slide-cover-border-top-color']);
+    if (cssVars['--slide-cover-border-top-width']) cfg.coverSlide.borderTopWidth = parseInt(cssVars['--slide-cover-border-top-width'], 10) || 8;
+    if (cssVars['--slide-chapter-border-left-color']) cfg.chapterSlide.borderLeftColor = normalizeColor(cssVars['--slide-chapter-border-left-color']);
+    if (cssVars['--slide-chapter-border-left-width']) cfg.chapterSlide.borderLeftWidth = parseInt(cssVars['--slide-chapter-border-left-width'], 10) || 10;
+    if (cssVars['--slide-content-border-top-color']) cfg.contentSlide.borderTopColor = normalizeColor(cssVars['--slide-content-border-top-color']);
+    if (cssVars['--slide-content-border-top-width']) cfg.contentSlide.borderTopWidth = parseInt(cssVars['--slide-content-border-top-width'], 10) || 6;
+    if (cssVars['--slide-header-bg']) cfg.contentSlide.headerBg = normalizeColor(cssVars['--slide-header-bg']);
+  }
+
+  // Règles spécifiques de cascade
+  const headerBg = extractRuleProp('\\.slide\\.slide-content\\s+\\.slide-header', 'background-color');
+  if (headerBg) cfg.contentSlide.headerBg = normalizeColor(headerBg);
+
+  const mainTitleColor = extractRuleProp('\\.slide-main-title', 'color');
+  if (mainTitleColor) cfg.hMain.color = normalizeColor(mainTitleColor);
+  const chapterTitleColor = extractRuleProp('\\.slide-chapter-title', 'color');
+  if (chapterTitleColor) cfg.h1.color = normalizeColor(chapterTitleColor);
+  const headerTitleColor = extractRuleProp('\\.slide-header-title', 'color');
+  if (headerTitleColor) cfg.h2.color = normalizeColor(headerTitleColor);
+
+  const thBg = extractRuleProp('\\.slide-body\\s+\\.doc-table\\s+th|\\.doc-table\\s+th', 'background-color');
+  if (thBg) cfg.table.headerBg = normalizeColor(thBg);
+  const thColor = extractRuleProp('\\.slide-body\\s+\\.doc-table\\s+th|\\.doc-table\\s+th', 'color');
+  if (thColor) cfg.table.headerColor = normalizeColor(thColor);
+  const tdColor = extractRuleProp('\\.slide-body\\s+\\.doc-table\\s+td|\\.doc-table\\s+td', 'color');
+  if (tdColor) cfg.table.cellColor = normalizeColor(tdColor);
+
+  const colBg = extractRuleProp('\\.slide-column', 'background-color');
+  if (colBg) cfg.column.bg = normalizeColor(colBg);
+
+  // Images de fond
+  const coverImgMatches = [...css.matchAll(/\.slide\.slide-title::after\s*\{([^}]+)\}/g)];
+  if (coverImgMatches.length > 0) {
+    const lastCoverBlock = coverImgMatches[coverImgMatches.length - 1][1];
+    const imgUrlMatch = lastCoverBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      cfg.coverSlide.bgImage = imgUrlMatch[1];
+      cfg.coverSlide.bgImageName = 'Image restaurée';
+      const opMatch = lastCoverBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch) cfg.coverSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+    }
+  }
+
+  const chapterImgMatches = [...css.matchAll(/\.slide\.slide-chapter::after\s*\{([^}]+)\}/g)];
+  if (chapterImgMatches.length > 0) {
+    const lastChapterBlock = chapterImgMatches[chapterImgMatches.length - 1][1];
+    const imgUrlMatch = lastChapterBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      cfg.chapterSlide.bgImage = imgUrlMatch[1];
+      cfg.chapterSlide.bgImageName = 'Image restaurée';
+      const opMatch = lastChapterBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch) cfg.chapterSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+    }
+  }
+
+  return { mode, config: cfg };
+}
 
 /**
  * Formate les propriétés CSS d'un titre (police, taille, couleur, casse, gras, souligné).
@@ -234,6 +463,10 @@ export function generateThemeCss(mode, config) {
   --slide-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
   --slide-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
   --slide-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#C41718'};
+  --slide-column-bg: ${cfg.column?.bg || '#ffffff'};
+  --slide-column-border: ${cfg.column?.border || '#cbd5e1'};
+  --slide-column-radius: ${cfg.column?.radius || '6px'};
+  --slide-column-padding: ${cfg.column?.padding || '14px'};
 }
 
 /* === Titres & Hiérarchie === */
@@ -506,6 +739,10 @@ ${cfg.chapterSlide?.bgImage ? `
   width: 100% !important;
   min-height: 0 !important;
   box-sizing: border-box !important;
+  background-color: ${cfg.column?.bg || '#ffffff'} !important;
+  border: ${cfg.column?.border && cfg.column.border !== 'transparent' && cfg.column.border !== 'none' ? `1px solid ${cfg.column.border}` : 'none'} !important;
+  border-radius: ${cfg.column?.radius || '6px'} !important;
+  padding: ${cfg.column?.padding || '14px'} !important;
 }
 .slide-column-content {
   display: flex !important;
@@ -576,6 +813,10 @@ ${cfg.chapterSlide?.bgImage ? `
   --report-metric-val-size: ${cfg.metric.size};
   --report-metric-accent: ${cfg.metric.accentColor};
   --report-metric-val-color: ${cfg.metric.valColor};
+  --report-column-bg: ${cfg.column?.bg || '#f8fafc'};
+  --report-column-border: ${cfg.column?.border || '#cbd5e1'};
+  --report-column-radius: ${cfg.column?.radius || '6px'};
+  --report-column-padding: ${cfg.column?.padding || '14px'};
 }
 
 /* === Titres & Hiérarchie === */
@@ -741,6 +982,10 @@ ${cfg.chapterSlide?.bgImage ? `
   flex: 1 1 0%;
   min-width: 0;
   box-sizing: border-box;
+  background-color: ${cfg.column?.bg || '#f8fafc'};
+  border: ${cfg.column?.border && cfg.column.border !== 'transparent' && cfg.column.border !== 'none' ? `1px solid ${cfg.column.border}` : 'none'};
+  border-radius: ${cfg.column?.radius || '6px'};
+  padding: ${cfg.column?.padding || '14px'};
 }
 .slide-column-content {
   display: flex;
@@ -776,7 +1021,9 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 `;
 
-  return `${baseCss}\n${overrides}`;
+  const metadataTag = `/* [md2print-config:mode=${mode}]\n${JSON.stringify(cfg)}\n[/md2print-config] */`;
+
+  return `${metadataTag}\n\n${baseCss}\n${overrides}`;
 }
 
 /**
@@ -864,7 +1111,10 @@ export class StyleSettingsManager {
           </div>
           <div class="style-config-actions">
             <button type="button" class="btn btn-primary" id="btnApplyStyleConfig">Appliquer les styles</button>
+            <button type="button" class="btn" id="btnImportStyleConfig">Importer style (.css / .json)</button>
+            <input type="file" id="styleConfigFileInput" class="hidden-input" accept=".css,.json">
             <button type="button" class="btn" id="btnExportStyleCss">Exporter CSS (.css)</button>
+            <button type="button" class="btn" id="btnExportStyleJson">Exporter JSON (.json)</button>
             <button type="button" class="btn" id="btnResetStyleDefaults">Réinitialiser par défaut</button>
             <button type="button" class="btn" id="btnCloseStyleConfig">Retour à l'éditeur</button>
           </div>
@@ -1289,6 +1539,32 @@ export class StyleSettingsManager {
 
                 <div class="config-row">
                   <div class="config-label-col">
+                    <span class="config-tag-label">Colonnes côte à côte ([colonne])</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Couleur de fond</label>
+                      <input type="color" class="color-picker-input" data-bind="column.bg">
+                      <input type="text" class="text-input color-hex-input" data-bind="column.bg" spellcheck="false">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Bordure</label>
+                      <input type="color" class="color-picker-input" data-bind="column.border">
+                      <input type="text" class="text-input color-hex-input" data-bind="column.border" spellcheck="false">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Arrondi</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.radius" placeholder="6px">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Marge interne</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.padding" placeholder="14px">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="config-row">
+                  <div class="config-label-col">
                     <span class="config-tag-label">Scène et Diapositives standard</span>
                   </div>
                   <div class="config-inputs-col">
@@ -1530,8 +1806,53 @@ export class StyleSettingsManager {
       this.handleApply();
     });
 
+    // Importation de styles (.css ou .json)
+    const btnImport = this.container.querySelector('#btnImportStyleConfig');
+    const inputImport = this.container.querySelector('#styleConfigFileInput');
+    btnImport?.addEventListener('click', () => {
+      if (inputImport) {
+        inputImport.value = '';
+        inputImport.click();
+      }
+    });
+
+    inputImport?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        if (file.name.toLowerCase().endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          const targetMode = (parsed.report || parsed.slide) ? this.activeMode : this.activeMode;
+          const cfgData = parsed[targetMode] || parsed;
+          this.setConfig(targetMode, cfgData);
+          this.updateFormValues();
+          this.updateLivePreview();
+          this.handleApply();
+        } else {
+          const parsed = parseConfigFromCss(text, this.activeMode);
+          if (parsed?.config) {
+            const targetMode = parsed.mode || this.activeMode;
+            if (targetMode !== this.activeMode) {
+              this.switchMode(targetMode);
+            }
+            this.setConfig(targetMode, parsed.config);
+            this.updateFormValues();
+            this.updateLivePreview();
+            this.handleApply();
+          }
+        }
+      } catch (err) {
+        console.error('Erreur importation style :', err);
+      }
+    });
+
     this.container.querySelector('#btnExportStyleCss')?.addEventListener('click', () => {
       this.handleExportCss();
+    });
+
+    this.container.querySelector('#btnExportStyleJson')?.addEventListener('click', () => {
+      this.handleExportJson();
     });
 
     this.container.querySelector('#btnResetStyleDefaults')?.addEventListener('click', () => {
@@ -1823,6 +2144,21 @@ export class StyleSettingsManager {
                   La clarté et la concision garantissent l'impact des présentations de direction.
                 </blockquote>
 
+                <div class="slide-columns-row" style="margin: 12px 0;">
+                  <div class="slide-column">
+                    <div class="slide-column-content">
+                      <p style="margin: 0; font-weight: 700;">Colonne 1</p>
+                      <p style="margin: 0;">Analyse qualitative et synthèse des observations.</p>
+                    </div>
+                  </div>
+                  <div class="slide-column">
+                    <div class="slide-column-content">
+                      <p style="margin: 0; font-weight: 700;">Colonne 2</p>
+                      <p style="margin: 0;">Recommandations et plan de mise en œuvre.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <figure class="mermaid-card" style="margin: 12px 0;">
                   <div class="mermaid-diagram" style="padding: 10px; display: flex; justify-content: center; align-items: center;">
                     <svg viewBox="0 0 360 80" style="width: 100%; max-height: 80px; display: block; margin: auto;">
@@ -1907,6 +2243,21 @@ export class StyleSettingsManager {
             L'excellence opérationnelle commence par la rigueur documentaire.
           </blockquote>
 
+          <div class="slide-columns-row" style="margin: 14px 0;">
+            <div class="slide-column">
+              <div class="slide-column-content">
+                <p style="margin: 0; font-weight: 700;">Volet A</p>
+                <p style="margin: 0;">Indicateurs et constats préliminaires.</p>
+              </div>
+            </div>
+            <div class="slide-column">
+              <div class="slide-column-content">
+                <p style="margin: 0; font-weight: 700;">Volet B</p>
+                <p style="margin: 0;">Mesures correctives et calendrier prévisionnel.</p>
+              </div>
+            </div>
+          </div>
+
           <div class="table-responsive-wrapper">
             <table class="doc-table">
               <thead>
@@ -1966,7 +2317,8 @@ console.log(report.status);</code></pre>
   }
 
   /**
-   * Applique les styles et notifie l'application.
+   * Applique les styles et notifie l'application parente via le callback onApply.
+   * @returns {void}
    */
   handleApply() {
     const reportCss = generateThemeCss('report', this.configs.report);
@@ -1980,8 +2332,11 @@ console.log(report.status);</code></pre>
 
   /**
    * Télécharge le fichier CSS généré pour le mode actif.
+   * Déclenche également l'application et la persistance immédiate dans l'application.
+   * @returns {void}
    */
   handleExportCss() {
+    this.handleApply();
     const mode = this.activeMode;
     const cssText = generateThemeCss(mode, this.configs[mode]);
     const blob = new Blob([cssText], { type: 'text/css;charset=utf-8' });
@@ -1996,7 +2351,28 @@ console.log(report.status);</code></pre>
   }
 
   /**
+   * Télécharge la configuration JSON du mode actif.
+   * Déclenche également l'application et la persistance immédiate dans l'application.
+   * @returns {void}
+   */
+  handleExportJson() {
+    this.handleApply();
+    const mode = this.activeMode;
+    const jsonText = JSON.stringify(this.configs[mode], null, 2);
+    const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `md2print-${mode}-config.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
    * Réinitialise les réglages du mode actif aux valeurs par défaut.
+   * @returns {void}
    */
   handleResetDefaults() {
     this.configs[this.activeMode] = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[this.activeMode]));

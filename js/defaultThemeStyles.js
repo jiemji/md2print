@@ -64,6 +64,10 @@ export const DEFAULT_REPORT_CSS = `/* ==========================================
   --report-bg-header: #ffffff;           /* Fond du bandeau supérieur */
   --report-border-color: #d1d5db;        /* Bordures standards */
   --report-border-light: #e5e7eb;        /* Séparateurs légers */
+  --report-column-bg: #f8fafc;
+  --report-column-border: #cbd5e1;
+  --report-column-radius: 6px;
+  --report-column-padding: 14px;
 
   /* Accents corporatifs Word (ClrScheme Office) */
   --report-accent-blue: #4472C4;         /* Accent1 Word */
@@ -697,6 +701,10 @@ blockquote p:last-child {
   flex: 1 1 0;
   min-width: 0;
   box-sizing: border-box;
+  background-color: var(--report-column-bg, #f8fafc);
+  border: 1px solid var(--report-column-border, #cbd5e1);
+  border-radius: var(--report-column-radius, 6px);
+  padding: var(--report-column-padding, 14px);
 }
 
 .slide-column-content {
@@ -997,6 +1005,10 @@ export const DEFAULT_SLIDE_CSS = `/* ===========================================
   --slide-stage-backdrop: #0b1120;       /* Fond de scène sombre (mode projection immersif) */
   --slide-canvas-bg: #ffffff;            /* Fond blanc immaculé de la diapositive */
   --slide-border-color: #cbd5e1;         /* Bordures douces */
+  --slide-column-bg: #ffffff;
+  --slide-column-border: #cbd5e1;
+  --slide-column-radius: 6px;
+  --slide-column-padding: 14px;
   --slide-shadow: 0 16px 48px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
   --slide-radius: 8px;
 
@@ -1844,6 +1856,10 @@ html, body {
   width: 100%;
   min-height: 0;
   box-sizing: border-box;
+  background-color: var(--slide-column-bg, #ffffff);
+  border: 1px solid var(--slide-column-border, #cbd5e1);
+  border-radius: var(--slide-column-radius, 6px);
+  padding: var(--slide-column-padding, 14px);
 }
 
 .slide-column-content {

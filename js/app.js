@@ -39,7 +39,7 @@ import {
   loadStoredState,
 } from './StorageService.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
-import { StyleSettingsManager } from './StyleSettingsManager.js';
+import { StyleSettingsManager, parseConfigFromCss } from './StyleSettingsManager.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
@@ -321,8 +321,10 @@ async function restoreFromIndexedDB() {
 }
 
 /**
- * Charge automatiquement config/output_config.json et templates/Modele_word.docx
- * si aucun fichier personnalisé n'a été restauré depuis IndexedDB (ou si forceReset = true).
+ * Charge automatiquement config/output_config.json, les modèles Word/PowerPoint et les feuilles CSS (css/report.css, css/slide.css).
+ * Extrait et synchronise également les réglages de personnalisation de styles (themeConfigs) depuis les feuilles CSS chargées
+ * si aucun réglage personnalisé n'a été restauré depuis IndexedDB (ou si forceReset = true).
+ *
  * @param {boolean} [forceReset=false] - Si true, écrase toute configuration personnalisée
  * @returns {Promise<void>}
  */
@@ -393,6 +395,23 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
       }
     } catch {
       state.slideCss = DEFAULT_SLIDE_CSS;
+    }
+  }
+
+  // Synchronisation automatique des configurations de style depuis les fichiers CSS chargés
+  if (!state.themeConfigs) {
+    state.themeConfigs = {};
+  }
+  if (state.slideCss && (state.slideCss.includes('/* === Surcharges') || state.slideCss.includes('[md2print-config') || !state.themeConfigs.slide)) {
+    const parsedSlide = parseConfigFromCss(state.slideCss, 'slide');
+    if (parsedSlide?.config) {
+      state.themeConfigs.slide = { ...(state.themeConfigs.slide || {}), ...parsedSlide.config };
+    }
+  }
+  if (state.reportCss && (state.reportCss.includes('/* === Surcharges') || state.reportCss.includes('[md2print-config') || !state.themeConfigs.report)) {
+    const parsedReport = parseConfigFromCss(state.reportCss, 'report');
+    if (parsedReport?.config) {
+      state.themeConfigs.report = { ...(state.themeConfigs.report || {}), ...parsedReport.config };
     }
   }
 
@@ -560,6 +579,14 @@ function getOrCreateStyleSettingsManager() {
 function openStyleSettingsPage() {
   const manager = getOrCreateStyleSettingsManager();
   if (manager) {
+    if (state.themeConfigs) {
+      if (state.themeConfigs.report) {
+        manager.setConfig('report', state.themeConfigs.report);
+      }
+      if (state.themeConfigs.slide) {
+        manager.setConfig('slide', state.themeConfigs.slide);
+      }
+    }
     manager.switchMode(state.currentViewport);
   }
   if (dom.workspace) dom.workspace.style.display = 'none';
@@ -684,6 +711,9 @@ function initEventListeners() {
   // F2 — Éditeur de texte standard (Saisie 100% fluide sans destruction/reconstruction du DOM)
   dom.mdEditor.addEventListener('input', (e) => {
     if (e.isComposing) return;
+    if (e.target !== dom.mdEditor && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) {
+      return;
+    }
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
     state.plannedSlides = null;
     if (!state.isDirty) {
@@ -761,6 +791,10 @@ function initEventListeners() {
 
   // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Ctrl+M (schéma Mermaid), Tab et Enter
   dom.mdEditor.addEventListener('keydown', (e) => {
+    if (e.target !== dom.mdEditor && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) {
+      return;
+    }
+
     if (e.key === 'Backspace' || e.key === 'Delete') {
       if (handleCartoucheDeletion(dom.mdEditor, e, syncFromEditorDOM)) return;
     }
@@ -774,6 +808,16 @@ function initEventListeners() {
       syncFromEditorDOM();
       updatePreview();
       persistDraftNow();
+
+      // Placer le focus et le curseur immédiatement dans le textarea du schéma Mermaid inséré
+      const allCartouches = dom.mdEditor.querySelectorAll('.mermaid-cartouche');
+      const lastCartouche = allCartouches[allCartouches.length - 1];
+      const textarea = lastCartouche?.querySelector('.mermaid-code-textarea');
+      if (textarea) {
+        textarea.focus();
+        textarea.select();
+      }
+
       showToast('Schéma Mermaid inséré', 'success');
       return;
     }
@@ -1041,18 +1085,28 @@ function initEventListeners() {
     try {
       const cssText = await readFileAsText(file);
       const isSlide = state.currentViewport === 'slide';
+      const mode = isSlide ? 'slide' : 'report';
       if (isSlide) {
         state.slideCss = cssText;
-        await saveCustomCss({ slideCss: cssText, fileName: file.name });
-        showToast(`CSS Diaporama chargé : ${file.name}`, 'success');
+        await saveCustomCss({ reportCss: state.reportCss, slideCss: cssText, fileName: file.name });
       } else {
         state.reportCss = cssText;
-        await saveCustomCss({ reportCss: cssText, fileName: file.name });
-        showToast(`CSS Rapport chargé : ${file.name}`, 'success');
+        await saveCustomCss({ reportCss: cssText, slideCss: state.slideCss, fileName: file.name });
+      }
+      // Synchronisation immédiate des configurations de styles de balises
+      const parsed = parseConfigFromCss(cssText, mode);
+      if (parsed?.config) {
+        if (!state.themeConfigs) state.themeConfigs = {};
+        state.themeConfigs[mode] = parsed.config;
+        await saveThemeConfigs(state.themeConfigs);
+        if (styleSettingsManager) {
+          styleSettingsManager.setConfig(mode, parsed.config);
+        }
       }
       state.customCssFileName = file.name;
       updateConfigStatusUI();
       updatePreview();
+      showToast(`CSS ${isSlide ? 'Diaporama' : 'Rapport'} chargé et synchronisé : ${file.name}`, 'success');
     } catch (err) {
       showToast(`Erreur CSS : ${err.message}`, 'error');
     }

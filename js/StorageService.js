@@ -178,7 +178,13 @@ export async function saveCustomPptTemplate({ pptTemplateBuffer, pptTemplateFile
 
 /**
  * Sauvegarde une feuille de style CSS personnalisée (vision rapport ou slide) dans IndexedDB.
- * @param {{ reportCss?: string|null, slideCss?: string|null, fileName?: string }} cssPayload
+ * Effectue une fusion non destructive : si seule la feuille rapport ou slide est fournie,
+ * la feuille existante de l'autre mode déjà stockée dans IndexedDB est préservée.
+ *
+ * @param {object} cssPayload - Données de la feuille de style
+ * @param {string|null} [cssPayload.reportCss] - Code CSS personnalisé pour la Vision Rapport
+ * @param {string|null} [cssPayload.slideCss] - Code CSS personnalisé pour la Vision Slide
+ * @param {string} [cssPayload.fileName] - Nom du fichier de style source
  * @returns {Promise<void>}
  */
 export async function saveCustomCss(cssPayload) {
@@ -186,13 +192,24 @@ export async function saveCustomCss(cssPayload) {
     const db = await openDatabase();
     await new Promise((resolve, reject) => {
       const tx = db.transaction([STORE_STATE], 'readwrite');
-      tx.objectStore(STORE_STATE).put({
-        id: 'custom_css',
-        reportCss: typeof cssPayload.reportCss === 'string' ? cssPayload.reportCss : null,
-        slideCss: typeof cssPayload.slideCss === 'string' ? cssPayload.slideCss : null,
-        fileName: cssPayload.fileName || 'custom.css',
-        updatedAt: Date.now(),
-      });
+      const store = tx.objectStore(STORE_STATE);
+      const getReq = store.get('custom_css');
+      getReq.onsuccess = () => {
+        const existing = getReq.result || {};
+        store.put({
+          id: 'custom_css',
+          reportCss:
+            typeof cssPayload.reportCss === 'string'
+              ? cssPayload.reportCss
+              : (existing.reportCss || null),
+          slideCss:
+            typeof cssPayload.slideCss === 'string'
+              ? cssPayload.slideCss
+              : (existing.slideCss || null),
+          fileName: cssPayload.fileName || existing.fileName || 'custom.css',
+          updatedAt: Date.now(),
+        });
+      };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);

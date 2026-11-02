@@ -4,6 +4,34 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.6.0] - 2026-11-02
+
+### Feature
+- **Gestionnaire de styles auto-portant et synchronisation CSS / JSON** :
+  - **Analyseur automatique de feuilles CSS (`parseConfigFromCss`)** : Détection et extraction récursive des variables `:root` et des sélecteurs CSS depuis n'importe quel fichier CSS exporté ou existant (`css/slide.css`, `css/report.css`), réhydratant fidèlement tous les champs de l'écran de paramétrage (`StyleSettingsManager.js`).
+  - **Tag de métadonnées transparent** : Injection automatique du tag `/* [md2print-config:mode=...] ... [/md2print-config] */` en en-tête des feuilles de styles générées, garantissant un aller-retour sans aucune perte d'information.
+  - **Import / Export unifiés** : Nouveaux boutons textuels `Importer style (.css / .json)` et `Exporter JSON (.json)` dans la barre d'outils des styles.
+  - **Fusion non-destructive dans `StorageService.js`** : Sauvegarde préservant les styles de l'autre mode (Rapport ou Slide) lors de l'enregistrement unitaire.
+  - Fichiers impactés : [`js/StyleSettingsManager.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/StyleSettingsManager.js), [`js/StorageService.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/StorageService.js), [`js/app.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/app.js), [`css/slide.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/slide.css).
+
+- **Mise en page multi-colonnes flexible (`[colonne]...[/colonne]`)** :
+  - Création de conteneurs colonnes côte à côte se partageant équitablement la largeur disponible, avec prise en charge optionnelle des ratios numériques de pondération (`[colonne:1]`, `[colonne:2]`).
+  - Tolérance aux imbrications riches : texte, schémas Mermaid vectoriels, badges, cartouches KPI et images.
+  - Paramétrage interactif complet dans l'éditeur de style : couleur de fond (`column.bg`), couleur de bordure (`column.border`), rayon des angles (`column.radius`) et marge interne (`column.padding`).
+  - Fichiers impactés : [`js/HtmlGenerator.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/HtmlGenerator.js), [`js/StyleSettingsManager.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/StyleSettingsManager.js), [`css/slide.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/slide.css), [`css/report.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/report.css), [`js/defaultThemeStyles.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/defaultThemeStyles.js).
+
+- **Cartouches d'indicateurs KPI et adaptation visuelle** :
+  - Balises `[chiffre:valeur:libellé]` partageant automatiquement l'espace horizontal sur une même ligne en mode diaporama et rapport.
+  - Mise à l'échelle dynamique des schémas Mermaid dans les diapositives pour s'adapter à la hauteur disponible.
+  - Personnalisation du bandeau de titre (`contentSlide.headerBg`) et des liserés d'accentuation (couverture, chapitre, contenu).
+  - Fichiers impactés : [`css/slide.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/slide.css), [`css/report.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/report.css), [`js/HtmlGenerator.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/HtmlGenerator.js).
+
+### Fix
+- **Saisie fluide et positionnement du curseur sur schémas Mermaid** :
+  - Empêchement de la propagation des événements d'entrée du `textarea` interne du cartouche vers le conteneur éditeur pour éviter la désynchronisation du curseur lors des sauts de ligne.
+  - Prise en charge des blocs de code Mermaid non encore fermés pendant la frappe directe sans transformation prématurée en cartouche.
+  - Fichiers impactés : [`js/EditorEngine.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/EditorEngine.js), [`js/app.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/app.js).
+
 ## [1.5.0] - 2026-11-02
 
 ### Feature

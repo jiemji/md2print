@@ -109,7 +109,8 @@ export function createMermaidCartoucheElement(code = '', options = {}) {
     }
   });
 
-  textarea.addEventListener('input', () => {
+  textarea.addEventListener('input', (e) => {
+    e.stopPropagation();
     span.dataset.mermaidCode = textarea.value;
     adjustHeight();
     span.dispatchEvent(new CustomEvent('cartouche-input', { bubbles: true }));
@@ -161,7 +162,15 @@ export function serializeEditorToMarkdown(editorEl) {
           if (result.length > 0 && !result.endsWith('\n')) {
             result += '\n';
           }
-          result += '```mermaid\n' + code.trim() + '\n```\n';
+          result += '```mermaid\n' + code.trim() + '\n```';
+          const next = child.nextSibling;
+          const nextIsNewline =
+            next &&
+            next.nodeType === Node.TEXT_NODE &&
+            next.nodeValue.startsWith('\n');
+          if (!nextIsNewline) {
+            result += '\n';
+          }
           continue;
         } else if (child.tagName === 'BR') {
           if (child.dataset.sentinel === 'true') continue;
@@ -753,6 +762,33 @@ export function setEditorContent(
       }
 
       if (isMermaid) {
+        let hasClosingFence = false;
+        let lookahead = i + 1;
+        while (lookahead < lines.length) {
+          if (lines[lookahead].trimStart().startsWith('```')) {
+            hasClosingFence = true;
+            break;
+          }
+          lookahead++;
+        }
+
+        // Si le bloc Mermaid n'est pas encore fermé (ex: en cours de frappe dans l'éditeur),
+        // on le formate en bloc de code pour permettre la saisie ligne par ligne
+        if (!hasClosingFence) {
+          inCodeBlock = true;
+          if (line.length > 0) {
+            const fenceSpan = document.createElement('span');
+            fenceSpan.className = 'md-codeblock-fence';
+            fenceSpan.textContent = line;
+            fragment.appendChild(fenceSpan);
+          }
+          if (i < lines.length - 1) {
+            fragment.appendChild(document.createTextNode('\n'));
+          }
+          i++;
+          continue;
+        }
+
         const mermaidLines = [];
         let j = i + 1;
         while (j < lines.length && !lines[j].trimStart().startsWith('```')) {
@@ -825,7 +861,7 @@ export function setEditorContent(
     if (isMermaidHeaderLine(line)) {
       activeCalloutType = null;
       const endMermaidIdx = findUnfencedMermaidBlockEnd(lines, i);
-      if (endMermaidIdx >= i) {
+      if (endMermaidIdx > i) {
         const mermaidLines = lines.slice(i, endMermaidIdx + 1);
         const mermaidCode = mermaidLines.join('\n');
         const isExp = openMermaidIndexes.has(mermaidCartoucheCount);
@@ -988,6 +1024,13 @@ export function insertNodeAtEditorCaret(editorEl, node) {
       editorEl.appendChild(node);
     }
     ensureTrailingSentinel(editorEl);
+    if (sel) {
+      const afterRange = document.createRange();
+      afterRange.setStartAfter(node);
+      afterRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(afterRange);
+    }
     return;
   }
 
