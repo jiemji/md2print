@@ -1,9 +1,10 @@
 /**
- * StorageService.js — Service de persistance locale basé sur IndexedDB
+ * @module StorageService
+ * @description Service de persistance locale basé sur IndexedDB pour md2print.
  * Gère le stockage asynchrone haute capacité du brouillon Markdown,
  * du dictionnaire d'images Base64 (sans la limite de 5 Mo du localStorage),
- * des préférences d'interface (thème, mode Rapport/Slide, largeur du séparateur)
- * et des fichiers de configuration / modèle Word personnalisés.
+ * des préférences d'interface (thème, mode Rapport/Slide, défilement lié, largeur du séparateur)
+ * et des fichiers de configuration / modèles d'entreprise personnalisés (Word .docx et PowerPoint .potx).
  */
 
 const DB_NAME = 'md2print_db';
@@ -88,6 +89,7 @@ export async function savePreferences(prefs) {
         currentViewport: prefs.currentViewport,
         editorWidthPct:
           typeof prefs.editorWidthPct === 'number' ? prefs.editorWidthPct : 50,
+        syncScroll: typeof prefs.syncScroll === 'boolean' ? prefs.syncScroll : true,
         updatedAt: Date.now(),
       });
       tx.oncomplete = () => resolve();
@@ -150,7 +152,82 @@ export async function saveCustomTemplate({ templateBuffer, templateFileName }) {
 }
 
 /**
- * Supprime la configuration JSON et le modèle Word personnalisés de IndexedDB.
+ * Sauvegarde un modèle PowerPoint (.potx) personnalisé (ArrayBuffer) dans IndexedDB.
+ * @param {{ pptTemplateBuffer: ArrayBuffer, pptTemplateFileName: string }} pptTemplatePayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomPptTemplate({ pptTemplateBuffer, pptTemplateFileName }) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_ppt_template',
+        pptTemplateBuffer,
+        pptTemplateFileName,
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Sauvegarde une feuille de style CSS personnalisée (vision rapport ou slide) dans IndexedDB.
+ * @param {{ reportCss?: string|null, slideCss?: string|null, fileName?: string }} cssPayload
+ * @returns {Promise<void>}
+ */
+export async function saveCustomCss(cssPayload) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_css',
+        reportCss: typeof cssPayload.reportCss === 'string' ? cssPayload.reportCss : null,
+        slideCss: typeof cssPayload.slideCss === 'string' ? cssPayload.slideCss : null,
+        fileName: cssPayload.fileName || 'custom.css',
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Sauvegarde les configurations de personnalisation des balises (Rapport et Slide) dans IndexedDB.
+ * @param {{ report?: object, slide?: object }} configs
+ * @returns {Promise<void>}
+ */
+export async function saveThemeConfigs(configs) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      tx.objectStore(STORE_STATE).put({
+        id: 'custom_theme_configs',
+        configs: configs && typeof configs === 'object' ? configs : {},
+        updatedAt: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Supprime la configuration JSON, les modèles Word/PowerPoint et les styles CSS personnalisés de IndexedDB.
  * @returns {Promise<void>}
  */
 export async function clearCustomConfigAndTemplate() {
@@ -161,6 +238,9 @@ export async function clearCustomConfigAndTemplate() {
       const store = tx.objectStore(STORE_STATE);
       store.delete('custom_config');
       store.delete('custom_template');
+      store.delete('custom_ppt_template');
+      store.delete('custom_css');
+      store.delete('custom_theme_configs');
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -260,7 +340,8 @@ export async function clearDraftState() {
  *   draft: object|null,
  *   localImages: Record<string, string>,
  *   customConfig: object|null,
- *   customTemplate: object|null
+ *   customTemplate: object|null,
+ *   customPptTemplate: object|null
  * }>}
  */
 export async function loadStoredState() {
@@ -275,6 +356,9 @@ export async function loadStoredState() {
       const draftReq = stateStore.get('draft');
       const customConfigReq = stateStore.get('custom_config');
       const customTemplateReq = stateStore.get('custom_template');
+      const customPptTemplateReq = stateStore.get('custom_ppt_template');
+      const customCssReq = stateStore.get('custom_css');
+      const customThemeConfigsReq = stateStore.get('custom_theme_configs');
       const imagesReq = imagesStore.getAll();
 
       tx.oncomplete = () => {
@@ -298,6 +382,9 @@ export async function loadStoredState() {
           localImages,
           customConfig: customConfigReq.result || null,
           customTemplate: customTemplateReq.result || null,
+          customPptTemplate: customPptTemplateReq.result || null,
+          customCss: customCssReq.result || null,
+          customThemeConfigs: customThemeConfigsReq.result?.configs || null,
         });
       };
 
@@ -311,6 +398,8 @@ export async function loadStoredState() {
       localImages: {},
       customConfig: null,
       customTemplate: null,
+      customPptTemplate: null,
+      customCss: null,
     };
   }
 }

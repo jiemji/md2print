@@ -1,7 +1,12 @@
 /**
- * HtmlGenerator.js — Génération du document HTML autonome (et de l'aperçu iframe)
- * Intègre CSS (thème Azur classique), Sommaire latéral repliable avec ScrollSpy,
- * et support des modes Rapport continu et Slide interactif (100 % textuel, sans icône ni émoji).
+ * @module HtmlGenerator
+ * @description Génération du document HTML autonome et du flux de prévisualisation iframe.
+ * Intègre le CSS (thème Azur classique), le sommaire latéral repliable avec ScrollSpy,
+ * les schémas Mermaid vectoriels, les alertes/callouts GitHub, les badges inline,
+ * les cartouches de données/métriques agrandies (5x), et le support des modes
+ * Rapport continu et Diaporama interactif.
+ * @requires utils
+ * @requires SlidePlanner
  */
 import {
   toSlug,
@@ -9,8 +14,78 @@ import {
   normalizeMarkdown,
   resolveImagePaths,
   normalizeMermaidCode,
+  resolveCallout,
+  resolveBadgeClass,
+  parseMetricTag,
+  resolveMetricClass,
 } from './utils.js';
 import { planSlides } from './SlidePlanner.js';
+import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
+
+let markedExtensionsInitialized = false;
+
+/**
+ * Enregistre les extensions personnalisées de Marked.js (badges [badge:...] et chiffres [chiffre:...]).
+ */
+function ensureMarkedExtensions() {
+  if (markedExtensionsInitialized || typeof window.marked === 'undefined') return;
+  window.marked.use({
+    extensions: [
+      {
+        name: 'badge',
+        level: 'inline',
+        start(src) {
+          return src.indexOf('[badge:');
+        },
+        tokenizer(src) {
+          const match = /^\[badge:(?:([a-zA-Z0-9_-]+):)?([^\]\n]+)\]/.exec(src);
+          if (match) {
+            return {
+              type: 'badge',
+              raw: match[0],
+              badgeType: (match[1] || 'neutral').toLowerCase(),
+              text: match[2].trim(),
+            };
+          }
+        },
+        renderer(token) {
+          const badgeClass = resolveBadgeClass(token.badgeType);
+          return `<span class="badge ${badgeClass}">${escapeHtml(token.text)}</span>`;
+        },
+      },
+      {
+        name: 'metric',
+        level: 'inline',
+        start(src) {
+          const match = src.match(/\[(chiffre|metric|stat|kpi):/i);
+          return match ? match.index : -1;
+        },
+        tokenizer(src) {
+          const match =
+            /^\[(chiffre|metric|stat|kpi):([^:\]\n]+)(?::([^:\]\n]+))?(?::([^\]\n]+))?\]/i.exec(src);
+          if (match) {
+            const parsed = parseMetricTag(match[2], match[3], match[4]);
+            return {
+              type: 'metric',
+              raw: match[0],
+              val: parsed.val,
+              label: parsed.label,
+              variant: parsed.variant,
+            };
+          }
+        },
+        renderer(token) {
+          const variantClass = resolveMetricClass(token.variant);
+          const labelHtml = token.label
+            ? `<span class="metric-label">${escapeHtml(token.label)}</span>`
+            : '';
+          return `<span class="metric-card ${variantClass}"><span class="metric-value">${escapeHtml(token.val)}</span>${labelHtml}</span>`;
+        },
+      },
+    ],
+  });
+  markedExtensionsInitialized = true;
+}
 
 /**
  * Extrait la table des matières (H1, H2, H3) du texte Markdown normalisé.
@@ -132,6 +207,50 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     return `<li>${formattedText}</li>`;
   };
 
+  // Traitement spécifique des alertes / callouts GitHub (> [!NOTE], > [!TIP], etc.)
+  renderer.blockquote = function (token) {
+    if (token.tokens && token.tokens.length > 0 && token.tokens[0].type === 'paragraph') {
+      const match = token.tokens[0].text.match(
+        /^\[!([a-zA-Z0-9_-]+)\](?:[^\S\r\n]*([^\r\n]*))?(?:\r?\n([\s\S]*))?$/
+      );
+      if (match) {
+        const rawType = match[1];
+        const customTitle = (match[2] || '').trim();
+        const rest = match[3] || '';
+        const callout = resolveCallout(rawType, customTitle);
+        let bodyHtml = '';
+        if (rest.trim()) {
+          bodyHtml += `<p>${window.marked.parseInline(rest)}</p>`;
+        }
+        if (token.tokens.length > 1) {
+          bodyHtml += this.parser.parse(token.tokens.slice(1));
+        }
+        return `<aside class="callout callout-${callout.kind}"><div class="callout-header"><span class="callout-title">${escapeHtml(callout.title)}</span></div><div class="callout-body">${bodyHtml}</div></aside>`;
+      }
+    }
+    return `<blockquote>${this.parser.parse(token.tokens)}</blockquote>`;
+  };
+
+  renderer.image = function ({ href, title, text }) {
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+    const altAttr = text ? ` alt="${escapeHtml(text)}"` : ' alt=""';
+    return `<figure class="slide-image-box"><img src="${escapeHtml(href)}"${altAttr}${titleAttr} class="slide-image" loading="lazy"></figure>`;
+  };
+
+  renderer.paragraph = function ({ tokens, text }) {
+    if (
+      tokens &&
+      tokens.length > 0 &&
+      tokens.every((tok) => tok.type === 'image' || (tok.type === 'text' && !tok.text.trim()))
+    ) {
+      return this.parser.parseInline(tokens);
+    }
+    const inner = this.parser && tokens ? this.parser.parseInline(tokens) : text;
+    return `<p>${inner}</p>\n`;
+  };
+
+  ensureMarkedExtensions();
+
   window.marked.setOptions({
     renderer,
     gfm: true,
@@ -184,6 +303,8 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
  * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
  * @param {object} [options.pptConfig] - Configuration PPTX issue de output_config.json
  * @param {string} [options.templateId='default'] - Identifiant du template PPTX
+ * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision rapport
+ * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision slide
  * @returns {string} Code HTML autonome complet
  */
 export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
@@ -194,70 +315,79 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     mermaidSvgMap = {},
     pptConfig = null,
     templateId = 'default',
+    reportCss = null,
+    slideCss = null,
   } = options;
 
+  const isSlide = viewMode === 'slide';
   const resolvedMarkdown = resolveImagePaths(rawMarkdown || '', localImages);
   const cleanMarkdown = normalizeMarkdown(resolvedMarkdown);
   const tocList = extractTOC(cleanMarkdown);
-  const parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
   const formattedDate = new Date().toLocaleDateString('fr-FR');
 
-  // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
-  const plannedSlides = planSlides(cleanMarkdown, docTitle, {
-    pptConfig,
-    templateId,
-    mermaidSvgMap,
-    date: formattedDate,
-  });
+  let parsedContent = '';
+  let slidesHTML = '';
 
-  const slidesHTML = plannedSlides
-    .map((slide, idx) => {
-      const activeClass = idx === 0 ? 'active' : '';
-      if (slide.type === 'title') {
-        return `
-          <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-            <div class="slide-inner slide-title-inner">
-              <div class="slide-title-card">
-                <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
-                <div class="slide-title-meta">
-                  <span class="slide-title-date">${escapeHtml(slide.date)}</span>
+  if (isSlide) {
+    // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
+    const plannedSlides = planSlides(cleanMarkdown, docTitle, {
+      pptConfig,
+      templateId,
+      mermaidSvgMap,
+      date: formattedDate,
+    });
+
+    slidesHTML = plannedSlides
+      .map((slide, idx) => {
+        const activeClass = idx === 0 ? 'active' : '';
+        if (slide.type === 'title') {
+          return `
+            <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+              <div class="slide-inner slide-title-inner">
+                <div class="slide-title-card">
+                  <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
+                  <div class="slide-title-meta">
+                    <span class="slide-title-date">${escapeHtml(slide.date)}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        `;
-      }
-      if (slide.type === 'chapter') {
+          `;
+        }
+        if (slide.type === 'chapter') {
+          return `
+            <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+              <div class="slide-inner slide-chapter-inner">
+                <div class="slide-chapter-card">
+                  <span class="slide-chapter-badge">Chapitre</span>
+                  <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
+                  <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        const slideContentHtml = parseMarkdownToHTML(slide.markdown, mermaidSvgMap);
+        const showChapterTag = slide.chapter && slide.chapter !== slide.title;
         return `
-          <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-            <div class="slide-inner slide-chapter-inner">
-              <div class="slide-chapter-card">
-                <span class="slide-chapter-badge">Chapitre</span>
-                <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
-                <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
+          <div class="slide slide-content ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
+            <div class="slide-inner slide-content-inner">
+              <header class="slide-header">
+                ${showChapterTag ? `<span class="slide-chapter-tag">${escapeHtml(slide.chapter)}</span>` : ''}
+                <h2 class="slide-header-title">${escapeHtml(slide.title)}</h2>
+              </header>
+              <div class="slide-body">
+                ${slideContentHtml}
               </div>
             </div>
           </div>
         `;
-      }
-
-      const slideContentHtml = parseMarkdownToHTML(slide.markdown, mermaidSvgMap);
-      const showChapterTag = slide.chapter && slide.chapter !== slide.title;
-      return `
-        <div class="slide slide-content ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
-          <div class="slide-inner slide-content-inner">
-            <header class="slide-header">
-              ${showChapterTag ? `<span class="slide-chapter-tag">${escapeHtml(slide.chapter)}</span>` : ''}
-              <h2 class="slide-header-title">${escapeHtml(slide.title)}</h2>
-            </header>
-            <div class="slide-body">
-              ${slideContentHtml}
-            </div>
-          </div>
-        </div>
-      `;
-    })
-    .join('\n');
+      })
+      .join('\n');
+  } else {
+    parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
+  }
 
   let tocItemsHTML = '';
   if (tocList.length === 0) {
@@ -277,746 +407,91 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       .join('');
   }
 
-  const documentCSS = `
-    :root {
-      --primary: #2563eb;
-      --primary-dark: #1d4ed8;
-      --primary-light: #eff6ff;
-      --text-main: #0f172a;
-      --text-muted: #475569;
-      --text-dim: #94a3b8;
-      --bg-page: #ffffff;
-      --bg-sidebar: #f8fafc;
-      --border-color: #e2e8f0;
-      --border-light: #f1f5f9;
-      --header-height: 56px;
-      --sidebar-width: 280px;
-      --radius-sm: 4px;
-      --radius-md: 6px;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      --font-mono: Consolas, 'JetBrains Mono', 'Courier New', monospace;
-      --content-font-size: 1rem;
-      --content-line-height: 1.7;
-      --slide-font-size: 1.85rem;
-    }
-
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    html {
-      scroll-behavior: smooth;
-      font-size: 16px;
-    }
-
-    body {
-      font-family: var(--font-sans);
-      background-color: var(--bg-page);
-      color: var(--text-main);
-      line-height: var(--content-line-height);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* === Bandeau Supérieur Fixe === */
-    .top-banner {
-      position: sticky;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--header-height);
-      background: #ffffff;
-      border-bottom: 1px solid var(--border-color);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      padding: 0 20px;
-    }
-
-    .banner-inner {
-      width: 100%;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .banner-left {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-    }
-
-    .banner-center {
-      text-align: center;
-      min-width: 0;
-    }
-
-    .banner-main-title {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--text-main);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .banner-actions {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-
-    .banner-date {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-    }
-
-    .banner-btn {
-      background: #ffffff;
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: var(--radius-sm);
-      font-family: inherit;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-    }
-
-    .banner-btn:hover {
-      background: var(--primary-light);
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    /* === Layout Global : Sommaire + Contenu === */
-    .document-layout {
-      display: flex;
-      flex: 1;
-      width: 100%;
-      min-height: calc(100vh - var(--header-height));
-    }
-
-    /* === Sommaire Latéral Repliable === */
-    .toc-sidebar {
-      width: var(--sidebar-width);
-      min-width: var(--sidebar-width);
-      background: var(--bg-sidebar);
-      border-right: 1px solid var(--border-color);
-      position: sticky;
-      top: var(--header-height);
-      height: calc(100vh - var(--header-height));
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      padding: 20px 14px;
-      transition: margin-left 0.25s ease, opacity 0.2s ease;
-      z-index: 500;
-    }
-
-    .toc-sidebar.collapsed {
-      margin-left: calc(-1 * var(--sidebar-width));
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .toc-header-block {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .toc-title {
-      font-size: 0.82rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-    }
-
-    .toc-counter {
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 2px 7px;
-      border-radius: var(--radius-sm);
-      background: var(--primary-light);
-      color: var(--primary);
-    }
-
-    .toc-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .toc-link {
-      display: block;
-      padding: 6px 10px;
-      border-radius: var(--radius-sm);
-      text-decoration: none;
-      color: var(--text-muted);
-      font-size: 0.84rem;
-      line-height: 1.4;
-      border-left: 3px solid transparent;
-      transition: background 0.15s ease, color 0.15s ease;
-    }
-
-    .toc-link:hover {
-      color: var(--primary);
-      background: #ffffff;
-    }
-
-    .toc-item.active > .toc-link {
-      color: var(--primary);
-      font-weight: 700;
-      background: #ffffff;
-      border-left-color: var(--primary);
-    }
-
-    .toc-h1 .toc-link {
-      font-weight: 700;
-      color: var(--text-main);
-    }
-
-    .toc-h2 .toc-link {
-      padding-left: 14px;
-      font-weight: 600;
-    }
-
-    .toc-h3 .toc-link {
-      padding-left: 26px;
-      font-size: 0.78rem;
-    }
-
-    .toc-empty {
-      font-size: 0.8rem;
-      color: var(--text-dim);
-      font-style: italic;
-      padding: 8px;
-    }
-
-    /* === Corps du Document === */
-    .document-body {
-      flex: 1;
-      padding: 32px 44px;
-      max-width: 1100px;
-      margin: 0 auto;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .markdown-rendered-content {
-      font-size: var(--content-font-size);
-      color: var(--text-main);
-    }
-
-    .doc-heading {
-      scroll-margin-top: calc(var(--header-height) + 20px);
-    }
-
-    .doc-main-title {
-      font-size: 2rem;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-bottom: 22px;
-      padding-bottom: 12px;
-      border-bottom: 2px solid var(--border-color);
-      line-height: 1.25;
-    }
-
-    .doc-h2 {
-      font-size: 1.45rem;
-      font-weight: 700;
-      margin-top: 38px;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-color);
-      color: var(--text-main);
-    }
-
-    .doc-h3 {
-      font-size: 1.18rem;
-      font-weight: 600;
-      margin-top: 26px;
-      margin-bottom: 12px;
-      color: var(--text-main);
-    }
-
-    .doc-h4, .doc-h5, .doc-h6 {
-      font-size: 1.02rem;
-      font-weight: 600;
-      margin-top: 20px;
-      margin-bottom: 10px;
-      color: var(--text-muted);
-    }
-
-    p {
-      margin-bottom: 16px;
-      line-height: var(--content-line-height);
-    }
-
-    ul, ol {
-      margin-bottom: 18px;
-      padding-left: 24px;
-    }
-
-    li {
-      margin-bottom: 6px;
-      line-height: var(--content-line-height);
-    }
-
-    .task-list-item {
-      list-style: none;
-      margin-left: -20px;
-    }
-
-    .task-box {
-      font-family: var(--font-mono);
-      font-size: 0.85em;
-      color: var(--primary);
-      font-weight: 700;
-      margin-right: 6px;
-    }
-
-    .task-checked .task-label {
-      color: var(--text-muted);
-      text-decoration: line-through;
-    }
-
-    blockquote {
-      margin: 20px 0;
-      padding: 14px 18px;
-      background: var(--primary-light);
-      border-left: 4px solid var(--primary);
-      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      color: var(--text-main);
-    }
-
-    blockquote p:last-child {
-      margin-bottom: 0;
-    }
-
-    hr {
-      border: none;
-      height: 1px;
-      background: var(--border-color);
-      margin: 32px 0;
-    }
-
-    a {
-      color: var(--primary);
-      text-decoration: underline;
-    }
-
-    img {
-      max-width: 100%;
-      height: auto;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border-color);
-      margin: 16px auto;
-      display: block;
-    }
-
-    /* === Cadre des Schémas Mermaid (Fond légèrement plus foncé + léger ombrage) === */
-    .mermaid-card {
-      margin: 24px 0;
-      padding: 22px 26px;
-      background: linear-gradient(180deg, #e9f0f8 0%, #e1eaf5 100%);
-      border: 1px solid #cbd5e1;
-      border-left: 4px solid var(--primary);
-      border-radius: 10px;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.65);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow-x: auto;
-    }
-
-    .mermaid-diagram {
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .mermaid-diagram svg {
-      max-width: 100%;
-      height: auto !important;
-      display: block;
-      margin: 0 auto;
-    }
-
-    .mermaid-card--pending {
-      align-items: stretch;
-    }
-
-    .mermaid-source {
-      margin: 0;
-      font-family: var(--font-mono);
-      font-size: 0.86rem;
-      color: var(--text-main);
-      white-space: pre-wrap;
-    }
-
-    /* === Tableaux === */
-    .table-responsive-wrapper {
-      width: 100%;
-      overflow-x: auto;
-      margin: 20px 0;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      background: #ffffff;
-    }
-
-    .doc-table {
-      width: 100%;
-      border-collapse: collapse;
-      border-spacing: 0;
-    }
-
-    .doc-table thead {
-      background: var(--primary);
-      color: #ffffff;
-    }
-
-    .doc-table th {
-      padding: 10px 12px;
-      text-align: left;
-      font-weight: 700;
-      font-size: 0.82rem;
-      border-right: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .doc-table th:last-child {
-      border-right: none;
-    }
-
-    .doc-table td {
-      padding: 9px 12px;
-      border-top: 1px solid var(--border-color);
-      border-right: 1px solid var(--border-light);
-      font-size: 0.85rem;
-      color: var(--text-main);
-    }
-
-    .doc-table td:last-child {
-      border-right: none;
-    }
-
-    .doc-table tbody tr:nth-child(even) td {
-      background: #f8fafc;
-    }
-
-    /* === Blocs de Code Sobres === */
-    pre.code-block {
-      margin: 20px 0;
-      padding: 16px 18px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border-color);
-      background: #1e293b;
-      overflow-x: auto;
-    }
-
-    code {
-      font-family: var(--font-mono);
-      font-size: 0.88rem;
-    }
-
-    p code, li code, td code {
-      background: #f1f5f9;
-      color: var(--primary-dark);
-      padding: 2px 5px;
-      border-radius: 3px;
-      font-size: 0.85em;
-      border: 1px solid var(--border-color);
-    }
-
-    .hljs { color: #f8fafc; background: transparent; }
-    .hljs-keyword, .hljs-selector-tag { color: #f43f5e; }
-    .hljs-title, .hljs-title.function_ { color: #60a5fa; font-weight: 600; }
-    .hljs-string, .hljs-regexp { color: #34d399; }
-    .hljs-comment { color: #94a3b8; font-style: italic; }
-    .hljs-number, .hljs-literal { color: #fbbf24; }
-    .hljs-attr, .hljs-variable { color: #a78bfa; }
-
-    /* === Mode Slide === */
-    .slide-container,
-    .slide-controls {
-      display: none;
-    }
-
-    body[data-view-mode="slide"] {
-      overflow: hidden;
-      height: 100vh;
-    }
-
-    body[data-view-mode="slide"] .document-layout {
-      height: calc(100vh - var(--header-height));
-      overflow: hidden;
-    }
-
-    body[data-view-mode="slide"] .document-body {
-      padding: 0;
-      max-width: 100%;
-      height: calc(100vh - var(--header-height));
-      overflow: hidden;
-      position: relative;
-    }
-
-    body[data-view-mode="slide"] .markdown-rendered-content {
-      display: none;
-    }
-
-    body[data-view-mode="slide"] .slide-container {
-      display: block;
-      width: 100%;
-      height: calc(100vh - var(--header-height));
-    }
-
-    .slide {
-      display: none;
-      width: 100%;
-      height: calc(100vh - var(--header-height));
-      padding: 40px 60px 80px;
-      overflow-y: auto;
-      font-size: var(--slide-font-size);
-    }
-
-    .slide.active {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .slide-inner {
-      width: 100%;
-      margin: 0 auto;
-    }
-
-    /* Diapositive de titre / couverture */
-    .slide.slide-title {
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-    }
-
-    .slide-title-inner {
-      max-width: 900px;
-      margin: auto;
-    }
-
-    .slide-title-card {
-      padding: 56px 48px;
-      background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
-      border: 1px solid var(--border-color);
-      border-top: 6px solid var(--primary);
-      border-radius: var(--radius-md);
-      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
-    }
-
-    .slide-main-title {
-      font-size: 2.6rem;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-bottom: 20px;
-      line-height: 1.25;
-    }
-
-    .slide-title-meta {
-      font-size: 1.05rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    /* Diapositive d'inter-titre / chapitre */
-    .slide.slide-chapter {
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-    }
-
-    .slide-chapter-inner {
-      max-width: 860px;
-      margin: auto;
-    }
-
-    .slide-chapter-card {
-      padding: 48px 40px;
-      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-      border: 1px solid #bfdbfe;
-      border-left: 6px solid var(--primary);
-      border-radius: var(--radius-md);
-      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
-    }
-
-    .slide-chapter-badge {
-      display: inline-block;
-      text-transform: uppercase;
-      font-size: 0.82rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--primary);
-      background: #ffffff;
-      padding: 4px 12px;
-      border-radius: var(--radius-sm);
-      margin-bottom: 16px;
-      border: 1px solid #bfdbfe;
-    }
-
-    .slide-chapter-title {
-      font-size: 2.2rem;
-      font-weight: 700;
-      color: var(--text-main);
-      line-height: 1.3;
-      margin-bottom: 14px;
-    }
-
-    .slide-chapter-date {
-      font-size: 0.92rem;
-      color: var(--text-muted);
-    }
-
-    /* Diapositive de contenu */
-    .slide.slide-content {
-      justify-content: flex-start;
-      align-items: stretch;
-    }
-
-    .slide-content-inner {
-      max-width: 1100px;
-      width: 100%;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-    }
-
-    .slide-header {
-      padding-bottom: 14px;
-      margin-bottom: 22px;
-      border-bottom: 2px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .slide-chapter-tag {
-      font-size: 0.8rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--primary);
-    }
-
-    .slide-header-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: var(--text-main);
-      line-height: 1.3;
-    }
-
-    .slide-body {
-      flex: 1;
-    }
-
-    .slide-body p, .slide-body li {
-      font-size: 1.25rem;
-      line-height: 1.65;
-      margin-bottom: 12px;
-    }
-
-    .slide-body h3 {
-      font-size: 1.4rem;
-      margin-top: 18px;
-      margin-bottom: 10px;
-      color: var(--primary);
-    }
-
-    .slide-body h4 {
-      font-size: 1.2rem;
-      margin-top: 14px;
-      margin-bottom: 8px;
-      color: var(--text-muted);
-    }
-
-    .slide-body .table-responsive-wrapper {
-      margin: 16px 0;
-    }
-
-    .slide-body .doc-table th, .slide-body .doc-table td {
-      font-size: 0.95rem;
-      padding: 8px 12px;
-    }
-
-    .slide-body .mermaid-card {
-      margin: 18px 0;
-      padding: 16px 20px;
-    }
-
-    body[data-view-mode="slide"] .slide-controls {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      position: fixed;
-      bottom: 16px;
-      right: 24px;
-      z-index: 800;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid var(--border-color);
-      padding: 6px 12px;
-      border-radius: var(--radius-md);
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-    }
-
-    .slide-counter {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-main);
-    }
-
-    @media print {
-      .top-banner, .toc-sidebar, .slide-controls {
-        display: none !important;
-      }
-      body {
-        height: auto !important;
-        overflow: visible !important;
-      }
-      .document-layout, .document-body {
-        display: block !important;
-        padding: 0 !important;
-        max-width: 100% !important;
-      }
-      .markdown-rendered-content {
-        display: block !important;
-      }
-      .slide-container {
-        display: none !important;
-      }
-      .mermaid-card {
-        background: #e6eef8 !important;
-        border: 1px solid #cbd5e1 !important;
-        border-left: 4px solid var(--primary) !important;
-        box-shadow: none !important;
-        page-break-inside: avoid;
-        break-inside: avoid;
-      }
-    }
-  `;
+  const activeCSS =
+    isSlide
+      ? (slideCss || DEFAULT_SLIDE_CSS)
+      : (reportCss || DEFAULT_REPORT_CSS);
+
+  const slideContainmentCSS = isSlide
+    ? `
+/* === Confinement impératif 16:9 et intégration proportionnelle des images === */
+.slide {
+  overflow: hidden !important;
+}
+.slide-content-inner {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+.slide-header {
+  flex-shrink: 0 !important;
+}
+.slide-body {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+.slide-image-box,
+.slide-body figure,
+.slide-body p:has(img) {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-height: 100% !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.slide-image,
+.slide-image-box img,
+.slide-body img,
+.slide img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+  margin: auto !important;
+  box-sizing: border-box !important;
+}
+`
+    : `
+/* === Rendu propre des images en vision Rapport === */
+.slide-image-box, figure {
+  margin: 16px auto;
+  text-align: center;
+  max-width: 100%;
+}
+.slide-image, .slide-image-box img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--report-radius-sm, 6px);
+  border: 1px solid var(--report-border-color, #e2e8f0);
+  margin: 0 auto;
+  display: block;
+}
+`;
 
   const documentJS = `
     (function() {
+      const isSlideMode = ${isSlide ? 'true' : 'false'};
       let currentSlideIndex = 0;
       let totalSlides = 0;
 
@@ -1030,7 +505,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       window.handleTocClick = function(event, targetId) {
         event.preventDefault();
 
-        if (document.body.getAttribute('data-view-mode') === 'slide') {
+        if (isSlideMode) {
           const slides = document.querySelectorAll('.slide');
           for (let i = 0; i < slides.length; i++) {
             if (
@@ -1041,19 +516,16 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
               break;
             }
           }
+          const sidebar = document.getElementById('tocSidebar');
+          if (sidebar) {
+            sidebar.classList.add('collapsed');
+          }
           return;
         }
 
         const target = document.getElementById(targetId);
         if (!target) return;
-
-        const banner = document.querySelector('.top-banner');
-        const bannerHeight = banner ? banner.offsetHeight : 56;
-        const elementPos = target.getBoundingClientRect().top + window.pageYOffset;
-        window.scrollTo({
-          top: elementPos - bannerHeight - 16,
-          behavior: 'smooth'
-        });
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
 
       function updateSlideControls() {
@@ -1082,6 +554,14 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
         }
       }
 
+      window.showSlide = showSlide;
+      window.getCurrentSlideIndex = function() {
+        return currentSlideIndex;
+      };
+      window.getTotalSlides = function() {
+        return totalSlides;
+      };
+
       window.prevSlide = function() {
         if (currentSlideIndex > 0) showSlide(currentSlideIndex - 1);
       };
@@ -1103,6 +583,13 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 
         document.addEventListener('keydown', (e) => {
           if (document.body.getAttribute('data-view-mode') !== 'slide') return;
+          if (e.key === 'Escape') {
+            const sidebar = document.getElementById('tocSidebar');
+            if (sidebar && !sidebar.classList.contains('collapsed')) {
+              sidebar.classList.add('collapsed');
+            }
+            return;
+          }
           if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
             e.preventDefault();
             window.nextSlide();
@@ -1142,8 +629,11 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       }
 
       function initDocument() {
-        initScrollSpy();
-        initSlideMode();
+        if (isSlideMode) {
+          initSlideMode();
+        } else {
+          initScrollSpy();
+        }
       }
 
       if (document.readyState === 'loading') {
@@ -1154,13 +644,21 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     })();
   `;
 
+  const tocSidebarClass = isSlide ? 'toc-sidebar collapsed' : 'toc-sidebar';
+  const mainContentHTML = isSlide
+    ? `<div class="slide-container" id="slideContainer">\n${slidesHTML}\n      </div>`
+    : `<article class="markdown-rendered-content">\n        ${parsedContent}\n      </article>`;
+  const controlsHTML = isSlide
+    ? `\n  <div class="slide-controls">\n    <button type="button" class="banner-btn" id="slidePrev" onclick="prevSlide()">Précédent</button>\n    <span class="slide-counter" id="slideCounter">0 / 0</span>\n    <button type="button" class="banner-btn" id="slideNext" onclick="nextSlide()">Suivant</button>\n  </div>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(docTitle || 'Document')}</title>
-  <style>${documentCSS}</style>
+  <style id="documentStyle">${activeCSS}\n${slideContainmentCSS}</style>
 </head>
 <body data-view-mode="${escapeHtml(viewMode)}">
   <header class="top-banner">
@@ -1179,7 +677,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   </header>
 
   <div class="document-layout">
-    <aside class="toc-sidebar" id="tocSidebar">
+    <aside class="${tocSidebarClass}" id="tocSidebar">
       <div class="toc-header-block">
         <span class="toc-title">Navigation</span>
         <span class="toc-counter">${tocList.length}</span>
@@ -1192,20 +690,9 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
     </aside>
 
     <main class="document-body">
-      <article class="markdown-rendered-content">
-        ${parsedContent}
-      </article>
-      <div class="slide-container" id="slideContainer">
-        ${slidesHTML}
-      </div>
+      ${mainContentHTML}
     </main>
-  </div>
-
-  <div class="slide-controls">
-    <button type="button" class="banner-btn" id="slidePrev" onclick="prevSlide()">Précédent</button>
-    <span class="slide-counter" id="slideCounter">0 / 0</span>
-    <button type="button" class="banner-btn" id="slideNext" onclick="nextSlide()">Suivant</button>
-  </div>
+  </div>${controlsHTML}
 
   <script>${documentJS}</script>
 </body>

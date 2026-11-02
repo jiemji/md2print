@@ -4,6 +4,42 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.4.0] - 2026-11-01
+
+### Feature
+- **Page interactive de paramétrage des styles et des balises (`StyleSettingsManager.js`)** :
+  - Création du module [`js/StyleSettingsManager.js`](file:///g:/devapps/md2print/js/StyleSettingsManager.js) et intégration de la page plein écran `#pageStyleConfig` accessible via le bouton d'en-tête « Styles des balises » et l'entrée « Paramétrer les styles des balises » du menu Configuration.
+  - Personnalisation en temps réel des couleurs, polices et tailles de police pour chaque type d'élément Markdown :
+    - Titres (titre principal `#`, titres 1 à 4 `##`, `###`, `####`, `#####`).
+    - Corps de texte (`p`, `li`) et liens hypertextes (`a` avec couleur normale et survol).
+    - Cartouche métrique 5x (`> [!data]` avec police, taille agrandie, couleur de la valeur, liseré supérieur et légende).
+    - Encarts d'alerte et recommandations (callouts `[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!important]`).
+    - Citations (`blockquote`), code inline et blocs de code (`pre`, `code`).
+    - Tableaux Markdown (en-têtes `th`, cellules `td`, alternance de lignes, bordures).
+    - Arrière-plans généraux de scène et conteneur papier/diapositive.
+  - Panneau d'aperçu en direct (*Live Preview*) intégrant un échantillon complet et réactif instantanément à chaque réglage.
+  - Bascule entre **Vision Rapport (Word)** et **Vision Slide (PowerPoint)** avec styles par défaut calqués sur `Modele_word.docx` et `Modele_presentation.potx`.
+  - Actions d'application immédiate, d'exportation de fichier CSS (`.css`), de réinitialisation et de sauvegarde persistante dans IndexedDB via `saveThemeConfigs`.
+  - Fichiers impactés : [`js/StyleSettingsManager.js`](file:///g:/devapps/md2print/js/StyleSettingsManager.js), [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js), [`index.html`](file:///g:/devapps/md2print/index.html), [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css), [`js/app.js`](file:///g:/devapps/md2print/js/app.js).
+- **Sommaire escamotable (Tiroir / Drawer) en Vision Slide** :
+  - Restauration du bandeau supérieur sobre bleu nuit (`#0E2841`) avec le titre du document et le bouton textuel « Sommaire ».
+  - Transformation du sommaire latéral en tiroir escamotable replié par défaut (`.collapsed`), se déployant en superposition fluide sans altérer le ratio 16:9 de la présentation.
+  - Navigation directe vers la diapositive sélectionnée avec repliage automatique du tiroir, et prise en charge du raccourci clavier <kbd>Échap</kbd> pour refermer le sommaire.
+  - Fichiers impactés : [`css/slide.css`](file:///g:/devapps/md2print/css/slide.css), [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js), [`js/defaultThemeStyles.js`](file:///g:/devapps/md2print/js/defaultThemeStyles.js).
+- **Thèmes CSS par défaut paramétrables pour la Vision Rapport et la Vision Slide** :
+  - Création de [`css/report.css`](file:///g:/devapps/md2print/css/report.css) inspiré de `Modele_word.docx` (Calibri, Calibri Light, `#C00000`, `#2F5496`, marges 25mm).
+  - Création de [`css/slide.css`](file:///g:/devapps/md2print/css/slide.css) inspiré de `Modele_presentation.potx` (Aptos, Aptos Display, `#0E2841`, `#C41718`, `#FBAE40`, ratio 16:9).
+  - Synchronisation complète dans [`js/defaultThemeStyles.js`](file:///g:/devapps/md2print/js/defaultThemeStyles.js) pour un fonctionnement 100 % autonome et hors-ligne via le protocole `file:///`.
+  - Fichiers impactés : [`css/report.css`](file:///g:/devapps/md2print/css/report.css), [`css/slide.css`](file:///g:/devapps/md2print/css/slide.css), [`js/defaultThemeStyles.js`](file:///g:/devapps/md2print/js/defaultThemeStyles.js).
+
+### Fix
+- **Rétablissement et isolation complète de la Vision Rapport** :
+  - Isolation du rendu HTML dans [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : suppression des nœuds `.slide-container` et `.slide-controls` du DOM en mode Rapport.
+  - Correction de la mise en page en bloc centré pour `.document-body` et `.markdown-rendered-content` pour éliminer les déformations flexbox.
+  - Restriction de la capture des touches fléchées au mode Diaporama, restaurant le défilement clavier naturel (flèches, PageUp, PageDown) dans le rapport.
+  - Maintien du défilement lié asymétrique (le défilement de l'aperçu entraîne l'éditeur, tandis que l'éditeur est libre de défiler).
+  - Fichiers impactés : [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js), [`css/report.css`](file:///g:/devapps/md2print/css/report.css), [`js/defaultThemeStyles.js`](file:///g:/devapps/md2print/js/defaultThemeStyles.js).
+
 ## [1.3.0] - 2026-11-01
 
 ### Feature

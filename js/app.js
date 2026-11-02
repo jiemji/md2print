@@ -30,14 +30,20 @@ import {
   savePreferences,
   saveCustomConfig,
   saveCustomTemplate,
+  saveCustomPptTemplate,
+  saveCustomCss,
+  saveThemeConfigs,
   clearCustomConfigAndTemplate,
   saveDraftState,
   clearDraftState,
   loadStoredState,
 } from './StorageService.js';
+import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
+import { StyleSettingsManager } from './StyleSettingsManager.js';
 import { generateStandaloneHTML } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
+import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 
 // --- État Applicatif Singleton ---
 const state = {
@@ -48,6 +54,7 @@ const state = {
   selectedFolderIndex: '',
   localImages: {},
   imageSeq: 1,
+  plannedSlides: null,
   currentViewport: 'report', // 'report' | 'slide'
   theme: 'dark', // 'dark' | 'sepia'
   editorWidthPct: 50,
@@ -55,6 +62,13 @@ const state = {
   configFileName: 'output_config.json (défaut)',
   templateBuffer: null,
   templateFileName: 'Modele_word.docx (défaut)',
+  pptTemplateBuffer: null,
+  pptTemplateFileName: 'Modele_presentation.potx (défaut)',
+  reportCss: null,
+  slideCss: null,
+  customCssFileName: null,
+  themeConfigs: null,
+  syncScroll: true,
 };
 
 // --- Cache des Références DOM ---
@@ -76,14 +90,21 @@ const initDomRefs = () => {
 
   dom.btnViewReport = document.getElementById('btnViewReport');
   dom.btnViewSlide = document.getElementById('btnViewSlide');
+  dom.btnToggleSyncScroll = document.getElementById('btnToggleSyncScroll');
 
+  dom.btnOpenStyleSettings = document.getElementById('btnOpenStyleSettings');
   dom.dropdownConfig = document.getElementById('dropdownConfig');
   dom.btnToggleConfig = document.getElementById('btnToggleConfig');
   dom.configStatusText = document.getElementById('configStatusText');
+  dom.btnMenuOpenStyleSettings = document.getElementById('btnMenuOpenStyleSettings');
   dom.btnLoadConfigJson = document.getElementById('btnLoadConfigJson');
   dom.configJsonInput = document.getElementById('configJsonInput');
   dom.btnLoadTemplateDocx = document.getElementById('btnLoadTemplateDocx');
   dom.templateDocxInput = document.getElementById('templateDocxInput');
+  dom.btnLoadTemplatePptx = document.getElementById('btnLoadTemplatePptx');
+  dom.templatePptxInput = document.getElementById('templatePptxInput');
+  dom.btnLoadCustomCss = document.getElementById('btnLoadCustomCss');
+  dom.customCssInput = document.getElementById('customCssInput');
   dom.btnResetConfig = document.getElementById('btnResetConfig');
 
   dom.dropdownExport = document.getElementById('dropdownExport');
@@ -95,6 +116,7 @@ const initDomRefs = () => {
   dom.btnToggleTheme = document.getElementById('btnToggleTheme');
 
   dom.workspace = document.getElementById('workspace');
+  dom.pageStyleConfig = document.getElementById('pageStyleConfig');
   dom.paneEditor = document.getElementById('paneEditor');
   dom.mdEditor = document.getElementById('mdEditor');
   dom.paneResizer = document.getElementById('paneResizer');
@@ -165,6 +187,7 @@ async function persistPreferencesNow() {
     theme: state.theme,
     currentViewport: state.currentViewport,
     editorWidthPct: state.editorWidthPct,
+    syncScroll: state.syncScroll,
   });
 }
 
@@ -208,7 +231,16 @@ function scheduleDraftSave(delay = 60) {
  * @returns {Promise<void>}
  */
 async function restoreFromIndexedDB() {
-  const { prefs, draft, localImages, customConfig, customTemplate } = await loadStoredState();
+  const {
+    prefs,
+    draft,
+    localImages,
+    customConfig,
+    customTemplate,
+    customPptTemplate,
+    customCss,
+    customThemeConfigs,
+  } = await loadStoredState();
 
   if (prefs) {
     if (prefs.theme === 'dark' || prefs.theme === 'sepia') {
@@ -234,7 +266,12 @@ async function restoreFromIndexedDB() {
         dom.paneEditor.style.width = `${state.editorWidthPct}%`;
       }
     }
+    if (typeof prefs.syncScroll === 'boolean') {
+      state.syncScroll = prefs.syncScroll;
+    }
   }
+
+  updateSyncScrollUI();
 
   if (customConfig?.outputConfig && typeof customConfig.outputConfig === 'object') {
     state.outputConfig = customConfig.outputConfig;
@@ -243,7 +280,22 @@ async function restoreFromIndexedDB() {
 
   if (customTemplate?.templateBuffer instanceof ArrayBuffer) {
     state.templateBuffer = customTemplate.templateBuffer;
-    state.templateFileName = customTemplate.templateFileName || 'Modèle personnalisé';
+    state.templateFileName = customTemplate.templateFileName || 'Modèle Word personnalisé';
+  }
+
+  if (customPptTemplate?.pptTemplateBuffer instanceof ArrayBuffer) {
+    state.pptTemplateBuffer = customPptTemplate.pptTemplateBuffer;
+    state.pptTemplateFileName = customPptTemplate.pptTemplateFileName || 'Modèle PPT personnalisé';
+  }
+
+  if (customCss) {
+    if (customCss.reportCss) state.reportCss = customCss.reportCss;
+    if (customCss.slideCss) state.slideCss = customCss.slideCss;
+    state.customCssFileName = customCss.fileName || 'CSS personnalisé';
+  }
+
+  if (customThemeConfigs) {
+    state.themeConfigs = customThemeConfigs;
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -296,8 +348,56 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
         state.templateFileName = `${tplPath.split('/').pop()} (défaut)`;
       }
     } catch {
-      state.templateFileName = 'Aucun modèle chargé';
+      state.templateFileName = 'Aucun modèle Word chargé';
     }
+  }
+
+  if (forceReset || !state.pptTemplateBuffer) {
+    try {
+      const pw = state.outputConfig?.powerpoint;
+      const defPpt =
+        pw?.templates?.find((t) => t.id === (pw.default || 'standard')) || pw?.templates?.[0];
+      const pptPath = defPpt?.path || 'templates/Modele_presentation.potx';
+      const resPpt = await fetch(pptPath);
+      if (resPpt.ok) {
+        state.pptTemplateBuffer = await resPpt.arrayBuffer();
+        state.pptTemplateFileName = `${pptPath.split('/').pop()} (défaut)`;
+      } else {
+        state.pptTemplateFileName = 'Aucun modèle PPT chargé';
+      }
+    } catch {
+      state.pptTemplateFileName = 'Modèle PPT par défaut introuvable';
+    }
+  }
+
+  if (forceReset || !state.reportCss) {
+    try {
+      const resReportCss = await fetch('css/report.css');
+      if (resReportCss.ok) {
+        state.reportCss = await resReportCss.text();
+      } else {
+        state.reportCss = DEFAULT_REPORT_CSS;
+      }
+    } catch {
+      state.reportCss = DEFAULT_REPORT_CSS;
+    }
+  }
+
+  if (forceReset || !state.slideCss) {
+    try {
+      const resSlideCss = await fetch('css/slide.css');
+      if (resSlideCss.ok) {
+        state.slideCss = await resSlideCss.text();
+      } else {
+        state.slideCss = DEFAULT_SLIDE_CSS;
+      }
+    } catch {
+      state.slideCss = DEFAULT_SLIDE_CSS;
+    }
+  }
+
+  if (forceReset) {
+    state.customCssFileName = null;
   }
 
   updateConfigStatusUI();
@@ -309,7 +409,8 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
  */
 function updateConfigStatusUI() {
   if (!dom.configStatusText) return;
-  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle : ${escapeHtml(state.templateFileName)}`;
+  const cssStatus = state.customCssFileName || 'par défaut (Word / PPTX)';
+  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}<br>CSS : ${escapeHtml(cssStatus)}`;
 }
 
 /**
@@ -321,6 +422,52 @@ function updateFileNameDisplay() {
   const suffix = state.isDirty ? ' *' : '';
   dom.currentFileName.textContent = `${state.currentFileName}${suffix}`;
   dom.currentFileName.classList.toggle('is-dirty', state.isDirty);
+}
+
+/**
+ * Met à jour le libellé et l'état visuel du bouton de défilement lié.
+ * @returns {void}
+ */
+function updateSyncScrollUI() {
+  if (!dom.btnToggleSyncScroll) return;
+  if (state.syncScroll) {
+    dom.btnToggleSyncScroll.textContent = 'Défilement lié : Activé';
+    dom.btnToggleSyncScroll.classList.remove('btn-inactive');
+    dom.btnToggleSyncScroll.classList.add('btn-active');
+  } else {
+    dom.btnToggleSyncScroll.textContent = 'Défilement lié : Désactivé';
+    dom.btnToggleSyncScroll.classList.remove('btn-active');
+    dom.btnToggleSyncScroll.classList.add('btn-inactive');
+  }
+}
+
+/**
+ * Active ou désactive le défilement synchronisé entre l'éditeur et l'aperçu.
+ * @returns {void}
+ */
+function toggleSyncScroll() {
+  state.syncScroll = !state.syncScroll;
+  updateSyncScrollUI();
+  persistPreferencesNow();
+  if (state.syncScroll) {
+    showToast('Défilement lié activé (Aperçu -> Éditeur)');
+    syncScrollIframeToEditor();
+  } else {
+    showToast('Défilement lié désactivé (défilement libre)');
+  }
+}
+
+/**
+ * Détecte si l'utilisateur a saisi un bloc Mermaid brut fermé (```mermaid ... ```) non encore converti en cartouche.
+ * @returns {void}
+ */
+function checkForUnfencedCartouches() {
+  const text = state.markdown || '';
+  const mermaidMatches = text.match(/```mermaid[\s\S]*?```/gi) || [];
+  const existingCartouches = dom.mdEditor.querySelectorAll('.mermaid-cartouche').length;
+  if (mermaidMatches.length > existingCartouches) {
+    syncFromEditorDOM();
+  }
 }
 
 /**
@@ -360,11 +507,89 @@ function syncFromEditorDOM() {
     );
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
   }
-  schedulePreviewUpdate(120);
-  scheduleDraftSave(60);
+  schedulePreviewUpdate(400);
+  scheduleDraftSave(1500);
 }
 
 // --- Attachement des Événements ---
+
+// --- Gestionnaire de la Page de Paramétrage des Styles de Balises ---
+let styleSettingsManager = null;
+
+/**
+ * Récupère ou instancie le gestionnaire de paramétrage des styles.
+ * @returns {StyleSettingsManager|null}
+ */
+function getOrCreateStyleSettingsManager() {
+  if (!styleSettingsManager && dom.pageStyleConfig) {
+    styleSettingsManager = new StyleSettingsManager({
+      container: dom.pageStyleConfig,
+      onApply: async ({ reportCss, slideCss, configs }) => {
+        state.reportCss = reportCss;
+        state.slideCss = slideCss;
+        state.themeConfigs = configs;
+        state.customCssFileName = 'Styles personnalisés';
+        await saveCustomCss({ reportCss, slideCss, fileName: 'styles-personnalises.css' });
+        await saveThemeConfigs(configs);
+        updateConfigStatusUI();
+        updatePreview();
+        showToast('Styles appliqués et sauvegardés avec succès', 'success');
+      },
+      onClose: () => {
+        closeStyleSettingsPage();
+      },
+    });
+
+    if (state.themeConfigs) {
+      if (state.themeConfigs.report) {
+        styleSettingsManager.setConfig('report', state.themeConfigs.report);
+      }
+      if (state.themeConfigs.slide) {
+        styleSettingsManager.setConfig('slide', state.themeConfigs.slide);
+      }
+    }
+    styleSettingsManager.init();
+  }
+  return styleSettingsManager;
+}
+
+/**
+ * Affiche la page plein écran de paramétrage des styles de balises.
+ * @returns {void}
+ */
+function openStyleSettingsPage() {
+  const manager = getOrCreateStyleSettingsManager();
+  if (manager) {
+    manager.switchMode(state.currentViewport);
+  }
+  if (dom.workspace) dom.workspace.style.display = 'none';
+  if (dom.pageStyleConfig) dom.pageStyleConfig.style.display = 'flex';
+  dom.btnOpenStyleSettings?.classList.add('active');
+  dom.dropdownConfig?.classList.remove('open');
+}
+
+/**
+ * Ferme la page de paramétrage et restaure l'espace de travail d'édition.
+ * @returns {void}
+ */
+function closeStyleSettingsPage() {
+  if (dom.pageStyleConfig) dom.pageStyleConfig.style.display = 'none';
+  if (dom.workspace) dom.workspace.style.display = 'flex';
+  dom.btnOpenStyleSettings?.classList.remove('active');
+  updatePreview();
+}
+
+/**
+ * Bascule entre l'espace d'édition et la page de paramétrage des styles.
+ * @returns {void}
+ */
+function toggleStyleSettingsPage() {
+  if (dom.pageStyleConfig && dom.pageStyleConfig.style.display === 'flex') {
+    closeStyleSettingsPage();
+  } else {
+    openStyleSettingsPage();
+  }
+}
 
 /**
  * Attache l'ensemble des écouteurs d'événements de l'interface (menus, éditeur, raccourcis, exports).
@@ -445,32 +670,47 @@ function initEventListeners() {
     handleSaveMarkdown();
   });
 
-  // Raccourci global Ctrl+S / Cmd+S
+  // Raccourci global Ctrl+S / Cmd+S et F8 (Bascule Défilement lié)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       handleSaveMarkdown();
+    } else if (e.key === 'F8') {
+      e.preventDefault();
+      toggleSyncScroll();
     }
   });
 
-  // F2 — Éditeur de texte standard avec objets graphiques (.image-cartouche et .mermaid-cartouche)
+  // F2 — Éditeur de texte standard (Saisie 100% fluide sans destruction/reconstruction du DOM)
   dom.mdEditor.addEventListener('input', (e) => {
     if (e.isComposing) return;
-    if (e.target?.classList?.contains('mermaid-code-textarea')) {
-      state.markdown = serializeEditorToMarkdown(dom.mdEditor);
-      if (!state.isDirty) {
-        state.isDirty = true;
-        updateFileNameDisplay();
-      }
-      schedulePreviewUpdate(120);
-      scheduleDraftSave(60);
-      return;
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    state.plannedSlides = null;
+    if (!state.isDirty) {
+      state.isDirty = true;
+      updateFileNameDisplay();
     }
-    syncFromEditorDOM();
+    if (e.data === '`' || e.data === '\n') {
+      checkForUnfencedCartouches();
+    }
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
   });
 
   dom.mdEditor.addEventListener('compositionend', () => {
-    syncFromEditorDOM();
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    if (!state.isDirty) {
+      state.isDirty = true;
+      updateFileNameDisplay();
+    }
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
+  });
+
+  // Sauvegarde immédiate lors de la perte de focus
+  dom.mdEditor.addEventListener('blur', () => {
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+    persistDraftNow();
   });
 
   // Événement personnalisé émis lors de la frappe ou indentation dans un textarea Mermaid
@@ -480,8 +720,8 @@ function initEventListeners() {
       state.isDirty = true;
       updateFileNameDisplay();
     }
-    schedulePreviewUpdate(120);
-    scheduleDraftSave(60);
+    schedulePreviewUpdate(400);
+    scheduleDraftSave(1500);
   });
 
   // Clic sur une cartouche graphique [image] ou [mermaid] -> sélectionne l'objet graphique comme du texte
@@ -501,6 +741,17 @@ function initEventListeners() {
       range.selectNode(cartouche);
       sel.removeAllRanges();
       sel.addRange(range);
+    }
+    if (state.currentViewport === 'slide') {
+      syncSlideToCursor();
+    }
+  });
+
+  dom.mdEditor.addEventListener('keyup', (e) => {
+    if (state.currentViewport === 'slide') {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+        syncSlideToCursor();
+      }
     }
   });
 
@@ -639,31 +890,22 @@ function initEventListeners() {
     }
   });
 
-  // Synchronisation du défilement (Éditeur -> Iframe)
-  dom.mdEditor.addEventListener('scroll', () => {
-    if (isSyncingFromIframe || state.currentViewport !== 'report') return;
-    const iframeWin = dom.previewIframe.contentWindow;
-    const iframeDoc = dom.previewIframe.contentDocument;
-    if (!iframeWin || !iframeDoc?.documentElement) return;
-
-    const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
-    if (maxEditorScroll <= 0) return;
-
-    const ratio = dom.mdEditor.scrollTop / maxEditorScroll;
-    const maxIframeScroll =
-      iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
-
-    isSyncingFromEditor = true;
-    iframeWin.scrollTo(0, ratio * Math.max(0, maxIframeScroll));
-    clearTimeout(editorScrollTimer);
-    editorScrollTimer = setTimeout(() => {
-      isSyncingFromEditor = false;
-    }, 60);
+  // Bascule du défilement lié (Bouton dans l'en-tête ou touche F8)
+  dom.btnToggleSyncScroll?.addEventListener('click', () => {
+    toggleSyncScroll();
   });
 
   // F3 / F4 — Sélecteur de Vue (Rapport / Slide)
   dom.btnViewReport.addEventListener('click', () => setViewMode('report'));
   dom.btnViewSlide.addEventListener('click', () => setViewMode('slide'));
+
+  // Accès à la page de paramétrage des styles de balises
+  dom.btnOpenStyleSettings?.addEventListener('click', () => {
+    toggleStyleSettingsPage();
+  });
+  dom.btnMenuOpenStyleSettings?.addEventListener('click', () => {
+    openStyleSettingsPage();
+  });
 
   // Menus déroulants Configuration & Exporter
   dom.btnToggleConfig.addEventListener('click', (e) => {
@@ -735,10 +977,64 @@ function initEventListeners() {
     }
   });
 
+  dom.btnLoadTemplatePptx?.addEventListener('click', () => {
+    dom.templatePptxInput.value = '';
+    dom.templatePptxInput.click();
+  });
+
+  dom.templatePptxInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      state.pptTemplateBuffer = await readFileAsArrayBuffer(file);
+      state.pptTemplateFileName = file.name;
+      await saveCustomPptTemplate({
+        pptTemplateBuffer: state.pptTemplateBuffer,
+        pptTemplateFileName: state.pptTemplateFileName,
+      });
+      updateConfigStatusUI();
+      showToast(`Modèle PowerPoint chargé : ${file.name}`, 'success');
+    } catch (err) {
+      showToast(`Erreur modèle PowerPoint : ${err.message}`, 'error');
+    }
+  });
+
+  dom.btnLoadCustomCss?.addEventListener('click', () => {
+    dom.customCssInput.value = '';
+    dom.customCssInput.click();
+  });
+
+  dom.customCssInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const cssText = await readFileAsText(file);
+      const isSlide = state.currentViewport === 'slide';
+      if (isSlide) {
+        state.slideCss = cssText;
+        await saveCustomCss({ slideCss: cssText, fileName: file.name });
+        showToast(`CSS Diaporama chargé : ${file.name}`, 'success');
+      } else {
+        state.reportCss = cssText;
+        await saveCustomCss({ reportCss: cssText, fileName: file.name });
+        showToast(`CSS Rapport chargé : ${file.name}`, 'success');
+      }
+      state.customCssFileName = file.name;
+      updateConfigStatusUI();
+      updatePreview();
+    } catch (err) {
+      showToast(`Erreur CSS : ${err.message}`, 'error');
+    }
+  });
+
   dom.btnResetConfig?.addEventListener('click', async () => {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
-    showToast('Configuration et modèle Word réinitialisés par défaut');
+    if (styleSettingsManager) {
+      styleSettingsManager.handleResetDefaults();
+    }
+    updatePreview();
+    showToast('Configuration, modèles et styles CSS réinitialisés par défaut');
   });
 
   // Actions d'export (HTML, DOCX, PPTX)
@@ -883,20 +1179,152 @@ async function insertImageAsBase64(file, customAlt) {
   }
 }
 
-// --- Gestion de l'Aperçu Iframe, Debounce & Scroll Sync ---
+// --- Gestion de l'Aperçu Iframe, Debounce & Défilement Synchronisé ---
 
-let isSyncingFromEditor = false;
-let isSyncingFromIframe = false;
-let editorScrollTimer = null;
-let iframeScrollTimer = null;
+let isSyncingScroll = false;
+let syncScrollTimer = null;
 let previewDebounceTimer = null;
 
 /**
- * Planifie la mise à jour de l'iframe d'aperçu avec un debounce pour préserver la fluidité de frappe.
- * @param {number} [delay=120] - Délai en millisecondes avant régénération de l'iframe
+ * Calcule la position de défilement cible en interpolant les segments délimités par les titres (headings).
+ * En l'absence de titres, se replie de manière fluide sur un ratio proportionnel classique.
+ *
+ * @param {number} currentPos - Position de défilement actuelle (en pixels)
+ * @param {number} maxSource - Défilement maximal possible dans le conteneur source
+ * @param {number} maxTarget - Défilement maximal possible dans le conteneur cible
+ * @param {'editorToIframe'|'iframeToEditor'} direction - Sens de calcul
+ * @returns {number} Position de défilement calculée (arrondie à l'entier le plus proche)
+ */
+function computeSyncedScrollPosition(currentPos, maxSource, maxTarget, direction) {
+  if (currentPos <= 0 || maxSource <= 0) return 0;
+  if (currentPos >= maxSource) return maxTarget;
+
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  if (!iframeDoc || !iframeWin) {
+    return Math.round((currentPos / maxSource) * maxTarget);
+  }
+
+  const editorHeadings = Array.from(dom.mdEditor.querySelectorAll('.md-heading-line'));
+  const iframeHeadings = Array.from(iframeDoc.querySelectorAll('.doc-heading'));
+
+  if (editorHeadings.length === 0 || iframeHeadings.length === 0) {
+    return Math.round((currentPos / maxSource) * maxTarget);
+  }
+
+  const anchorCount = Math.min(editorHeadings.length, iframeHeadings.length);
+  const anchors = [{ source: 0, target: 0 }];
+
+  const editorRect = dom.mdEditor.getBoundingClientRect();
+  const iframeScrollY = iframeWin.scrollY || iframeWin.pageYOffset || 0;
+
+  for (let i = 0; i < anchorCount; i++) {
+    const eTop =
+      editorHeadings[i].getBoundingClientRect().top - editorRect.top + dom.mdEditor.scrollTop;
+    const iTop = iframeHeadings[i].getBoundingClientRect().top + iframeScrollY;
+
+    const sourceY = direction === 'editorToIframe' ? eTop : iTop;
+    const targetY = direction === 'editorToIframe' ? iTop : eTop;
+
+    const prev = anchors[anchors.length - 1];
+    if (sourceY > prev.source && targetY > prev.target) {
+      anchors.push({ source: sourceY, target: targetY });
+    }
+  }
+
+  // Borne terminale
+  const last = anchors[anchors.length - 1];
+  if (maxSource > last.source && maxTarget > last.target) {
+    anchors.push({ source: maxSource, target: maxTarget });
+  } else {
+    anchors.push({
+      source: Math.max(maxSource, last.source + 1),
+      target: Math.max(maxTarget, last.target + 1),
+    });
+  }
+
+  // Recherche du segment [k, k+1] englobant la position source
+  for (let k = 0; k < anchors.length - 1; k++) {
+    const p1 = anchors[k];
+    const p2 = anchors[k + 1];
+
+    if (currentPos >= p1.source && currentPos <= p2.source) {
+      const segSpan = p2.source - p1.source;
+      if (segSpan <= 0) return Math.round(p1.target);
+      const ratio = (currentPos - p1.source) / segSpan;
+      return Math.round(p1.target + ratio * (p2.target - p1.target));
+    }
+  }
+
+  return Math.round((currentPos / maxSource) * maxTarget);
+}
+
+/**
+ * Synchronise le défilement de l'iframe à partir de la position courante de l'éditeur.
  * @returns {void}
  */
-function schedulePreviewUpdate(delay = 120) {
+function syncScrollEditorToIframe() {
+  if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  if (!iframeWin || !iframeDoc?.documentElement) return;
+
+  const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
+  const maxIframeScroll =
+    iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
+  if (maxEditorScroll <= 0 || maxIframeScroll <= 0) return;
+
+  const targetY = computeSyncedScrollPosition(
+    dom.mdEditor.scrollTop,
+    maxEditorScroll,
+    maxIframeScroll,
+    'editorToIframe'
+  );
+
+  isSyncingScroll = true;
+  iframeWin.scrollTo(0, targetY);
+  clearTimeout(syncScrollTimer);
+  syncScrollTimer = setTimeout(() => {
+    isSyncingScroll = false;
+  }, 60);
+}
+
+/**
+ * Synchronise le défilement de l'éditeur à partir de la position courante de l'iframe.
+ * @returns {void}
+ */
+function syncScrollIframeToEditor() {
+  if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
+  const iframeWin = dom.previewIframe?.contentWindow;
+  const iframeDoc = dom.previewIframe?.contentDocument;
+  if (!iframeWin || !iframeDoc?.documentElement) return;
+
+  const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
+  const maxIframeScroll =
+    iframeDoc.documentElement.scrollHeight - iframeDoc.documentElement.clientHeight;
+  if (maxEditorScroll <= 0 || maxIframeScroll <= 0) return;
+
+  const targetY = computeSyncedScrollPosition(
+    iframeWin.scrollY || iframeWin.pageYOffset || 0,
+    maxIframeScroll,
+    maxEditorScroll,
+    'iframeToEditor'
+  );
+
+  isSyncingScroll = true;
+  dom.mdEditor.scrollTop = targetY;
+  clearTimeout(syncScrollTimer);
+  syncScrollTimer = setTimeout(() => {
+    isSyncingScroll = false;
+  }, 60);
+}
+
+/**
+ * Planifie la mise à jour de l'iframe d'aperçu avec un debounce optimisé pour préserver la fluidité de frappe.
+ * @param {number} [delay=400] - Délai en millisecondes avant régénération de l'iframe
+ * @returns {void}
+ */
+function schedulePreviewUpdate(delay = 400) {
   if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(() => {
     previewDebounceTimer = null;
@@ -913,6 +1341,9 @@ function setViewMode(mode) {
   state.currentViewport = mode;
   dom.btnViewReport.classList.toggle('active', mode === 'report');
   dom.btnViewSlide.classList.toggle('active', mode === 'slide');
+  if (styleSettingsManager && dom.pageStyleConfig && dom.pageStyleConfig.style.display === 'flex') {
+    styleSettingsManager.switchMode(mode);
+  }
   persistPreferencesNow();
   updatePreview();
 }
@@ -943,18 +1374,11 @@ async function updatePreview() {
   const iframe = dom.previewIframe;
   if (!iframe) return;
 
-  let prevScrollRatio = 0;
+  let prevIframeScroll = 0;
   try {
-    const prevDoc = iframe.contentDocument;
-    if (prevDoc?.documentElement) {
-      const maxPrev =
-        prevDoc.documentElement.scrollHeight - prevDoc.documentElement.clientHeight;
-      if (maxPrev > 0) {
-        prevScrollRatio = (iframe.contentWindow?.scrollY || 0) / maxPrev;
-      }
-    }
+    prevIframeScroll = iframe.contentWindow?.scrollY || 0;
   } catch {
-    prevScrollRatio = 0;
+    prevIframeScroll = 0;
   }
 
   const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
@@ -964,6 +1388,8 @@ async function updatePreview() {
     localImages: state.localImages,
     mermaidSvgMap,
     pptConfig: state.outputConfig,
+    reportCss: state.reportCss,
+    slideCss: state.slideCss,
   });
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -975,34 +1401,58 @@ async function updatePreview() {
 
   const iframeWin = iframe.contentWindow;
   if (iframeWin && state.currentViewport === 'report') {
-    setTimeout(() => {
-      const newDoc = iframe.contentDocument;
-      if (newDoc?.documentElement && prevScrollRatio > 0) {
-        const maxNew =
-          newDoc.documentElement.scrollHeight - newDoc.documentElement.clientHeight;
-        iframeWin.scrollTo(0, prevScrollRatio * Math.max(0, maxNew));
-      }
-    }, 0);
+    if (prevIframeScroll > 0) {
+      iframeWin.scrollTo(0, prevIframeScroll);
+    }
 
+    // Le défilement de la fenêtre WYSIWYG entraîne la fenêtre non-WYSIWYG (l'éditeur)
     iframeWin.addEventListener('scroll', () => {
-      if (isSyncingFromEditor || state.currentViewport !== 'report') return;
-      const curDoc = iframe.contentDocument;
-      if (!curDoc?.documentElement) return;
-
-      const maxIframeScroll =
-        curDoc.documentElement.scrollHeight - curDoc.documentElement.clientHeight;
-      if (maxIframeScroll <= 0) return;
-
-      const ratio = iframeWin.scrollY / maxIframeScroll;
-      const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
-
-      isSyncingFromIframe = true;
-      dom.mdEditor.scrollTop = ratio * Math.max(0, maxEditorScroll);
-      clearTimeout(iframeScrollTimer);
-      iframeScrollTimer = setTimeout(() => {
-        isSyncingFromIframe = false;
-      }, 60);
+      syncScrollIframeToEditor();
     });
+  } else if (iframeWin && state.currentViewport === 'slide') {
+    updatePlannedSlides();
+    syncSlideToCursor();
+  }
+}
+
+/**
+ * Met à jour la liste des diapositives planifiées à partir du Markdown courant.
+ * @returns {void}
+ */
+function updatePlannedSlides() {
+  state.plannedSlides = planSlides(state.markdown || '', resolveDocumentTitle(), {
+    pptConfig: state.outputConfig,
+    templateId: state.selectedPptTemplate,
+  });
+}
+
+/**
+ * En mode Slide, synchronise la diapositive affichée dans la fenêtre WYSIWYG
+ * avec l'emplacement actuel du curseur dans l'éditeur de texte.
+ * Si le curseur est déjà positionné dans la diapositive active, aucune action n'est effectuée ("sinon il ne se passe rien").
+ * @returns {void}
+ */
+function syncSlideToCursor() {
+  if (state.currentViewport !== 'slide') return;
+
+  const iframeWin = dom.previewIframe?.contentWindow;
+  if (!iframeWin || typeof iframeWin.showSlide !== 'function') return;
+
+  const offsets = getEditorSelectionOffsets(dom.mdEditor);
+  const textBefore = (state.markdown || '').substring(0, offsets?.start || 0);
+  const caretLineIndex = textBefore.split('\n').length - 1;
+
+  if (!state.plannedSlides || state.plannedSlides.length === 0) {
+    updatePlannedSlides();
+  }
+
+  const targetIndex = findSlideIndexForLine(state.plannedSlides, caretLineIndex);
+  const currentInIframe = typeof iframeWin.getCurrentSlideIndex === 'function'
+    ? iframeWin.getCurrentSlideIndex()
+    : -1;
+
+  if (targetIndex !== currentInIframe) {
+    iframeWin.showSlide(targetIndex);
   }
 }
 
@@ -1022,6 +1472,8 @@ async function handleExportHtml() {
     localImages: state.localImages,
     mermaidSvgMap,
     pptConfig: state.outputConfig,
+    reportCss: state.reportCss,
+    slideCss: state.slideCss,
   });
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const filename = `${toSlug(title)}.html`;
@@ -1072,16 +1524,16 @@ async function handleExportPptx() {
   }
 
   const title = resolveDocumentTitle();
-  const pptConfig = state.outputConfig || { templates: [] };
   showToast('Génération de la présentation PowerPoint (.pptx) en cours...');
 
   try {
     const blob = await generatePptx(
       state.markdown,
       title,
-      pptConfig,
-      'default',
-      state.localImages
+      state.pptTemplateBuffer,
+      state.outputConfig,
+      (msg) => showToast(msg, 'info'),
+      { localImages: state.localImages }
     );
     const filename = `${toSlug(title)}.pptx`;
     downloadBlob(blob, filename);

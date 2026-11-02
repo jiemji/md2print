@@ -1,6 +1,6 @@
 # md2print — Documentation Technique de Référence (PROJECT_KNOWLEDGE)
 
-> **Version courante : 1.3.0** --- Mise à jour : 2026-11-01
+> **Version courante : 1.4.0** --- Mise à jour : 2026-11-01
 
 ---
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | **HTML5 / CSS3** | Vanilla CSS avec variables CSS (`:root`, `[data-theme="dark"]`, `[data-theme="sepia"]`) | Structure Split-View et thèmes Sombre (Bleu/Gris) et Clair (Sépia) |
 | **JavaScript ES6+** | Vanilla JS modulaire (`<script type="module">`) sans framework ni bundler | Logique applicative, gestion de l'état, parsing et génération multi-formats |
-| **IndexedDB** | API native du navigateur encapsulée dans [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) | Persistance locale haute capacité du brouillon, des images Base64, des préférences UI et des modèles personnalisés |
+| **IndexedDB** | API native du navigateur encapsulée dans [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) | Persistance locale haute capacité du brouillon, des images Base64, des préférences UI, des styles et des modèles personnalisés |
 | **Marked.js** | `vendor/marked.min.js` | Parser Markdown vers HTML avec renderers personnalisés |
 | **Highlight.js** | `vendor/highlight.min.js` | Coloration syntaxique des blocs de code dans l'aperçu et l'export HTML |
 | **Mermaid.js** | `vendor/mermaid.min.js` | Moteur de rendu vectoriel (SVG) pour les schémas diagrammatiques (flux, architecture, séquences, états, classes) côté client |
@@ -22,29 +22,30 @@
 
 ## 2. Architecture Globale
 
-L'application est une SPA modulaire exécutée via un serveur HTTP local avec 100 % des dépendances embarquées localement.
+L'application est une SPA modulaire exécutée localement via navigateur avec 100 % des dépendances embarquées (fonctionnement autonome sans connexion internet et compatible avec le protocole `file:///`).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        SPA md2print (index.html)                        │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ Barre Supérieure : Fichier | Rapport/Slide | Config | Export | UI │  │
+│  │ Barre Supérieure : Fichier | Rapport/Slide | Styles | Config | UI │  │
 │  └───────────────┬───────────────────────────────────┬───────────────┘  │
 │                  │                                   │                  │
 │                  ▼                                   ▼                  │
 │  ┌───────────────────────────────┐   ┌───────────────────────────────┐  │
 │  │ Moitié Gauche : Éditeur (.md) │   │ Moitié Droite : Aperçu Iframe │  │
-│  │ - <div id="mdEditor">         │◄─►│ - Mode Rapport / Mode Slide   │  │
-│  │ - EditorEngine.js             │   │ - Sommaire repliable (TOC)    │  │
-│  │ - Cartouches [image] (2 lig.) │   │ - Schémas Mermaid vectoriels  │  │
-│  │ - Cartouches [mermaid] (▼/▲)  │   │ - Debounce 120 ms             │  │
+│  │ - <div id="mdEditor">         │◄─►│ - Mode Rapport (Word)         │  │
+│  │ - EditorEngine.js             │   │ - Mode Slide (PowerPoint 16:9)│  │
+│  │ - Cartouches [image] (2 lig.) │   │ - Sommaire repliable / drawer │  │
+│  │ - Cartouches [mermaid] (▼/▲)  │   │ - Cartouches métriques 5x     │  │
 │  └───────────────┬───────────────┘   └───────────────▲───────────────┘  │
 │                  │                                   │                  │
 │                  ▼                                   │                  │
 │    Objet `state` + StorageService (IndexedDB) ──► `SlidePlanner.js`     │
 │                  │                                   │                  │
-│                  │                                   ├──► `HtmlGen.js`  │
+│                  ├──────────► `StyleSettingsManager` │                  │
+│                  │            (Page paramétrage CSS) ├──► `HtmlGen.js`  │
 │                  │                                   └──► `PptxGen.js`  │
 │                  │                                                      │
 │                  ├──────────► `HtmlGenerator.js` ──► Export .html       │
@@ -55,15 +56,19 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 
 ### Fichiers Clés
 
-- [`index.html`](file:///g:/devapps/md2print/index.html) : Conteneur principal de la SPA (barre de menu supérieure, éditeur gauche, séparateur central, aperçu `iframe` droit).
-- [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css) : Styles de l'interface, layout Flexbox 50/50 redimensionnable, thèmes Sombre et Clair (Sépia), objets graphiques `.image-cartouche` et `.mermaid-cartouche` (modes replié/déplié).
-- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, persistance `IndexedDB`, gestion des fichiers/dossiers `.md`, raccourcis clavier, sélection des cartouches, synchronisation du défilement, `debounce` d'aperçu et déclenchement des exports).
+- [`index.html`](file:///g:/devapps/md2print/index.html) : Conteneur principal de la SPA (barre de menu supérieure, éditeur gauche, séparateur central, aperçu `iframe` droit, page de paramétrage des styles `#pageStyleConfig`).
+- [`css/styles.css`](file:///g:/devapps/md2print/css/styles.css) : Styles de l'interface, layout Flexbox 50/50 redimensionnable, thèmes Sombre et Clair (Sépia), objets graphiques `.image-cartouche` et `.mermaid-cartouche`, styles de la page de paramétrage des balises.
+- [`css/report.css`](file:///g:/devapps/md2print/css/report.css) : Feuille de style paramétrable de la Vision Rapport inspirée du modèle Word (`Modele_word.docx`) avec corps de texte centré A4, typographie Calibri, marges et titres `#C00000` / `#2F5496`.
+- [`css/slide.css`](file:///g:/devapps/md2print/css/slide.css) : Feuille de style paramétrable de la Vision Slide inspirée du modèle PowerPoint (`Modele_presentation.potx`) au format 16:9 avec palette Aptos/Bleu nuit `#0E2841`, bandeau supérieur, tiroir de sommaire escamotable et contrôles interactifs.
+- [`js/defaultThemeStyles.js`](file:///g:/devapps/md2print/js/defaultThemeStyles.js) : Feuilles de style CSS par défaut intégrées sous forme de constantes JavaScript (`DEFAULT_REPORT_CSS`, `DEFAULT_SLIDE_CSS`), garantissant un fonctionnement 100 % hors-ligne même sous restriction CORS du protocole `file:///`.
+- [`js/StyleSettingsManager.js`](file:///g:/devapps/md2print/js/StyleSettingsManager.js) : Contrôleur de la page interactive de paramétrage des styles de chaque balise (titres, corps, métriques 5x, callouts, citations, code, tableaux, liens, arrière-plans), génération dynamique de CSS et aperçu en direct (*Live Preview*).
+- [`js/app.js`](file:///g:/devapps/md2print/js/app.js) : Orchestrateur principal (état global, persistance `IndexedDB`, gestion des fichiers/dossiers `.md`, raccourcis clavier, sélection des cartouches, synchronisation du défilement, gestion de la page de styles, `debounce` d'aperçu et déclenchement des exports).
 - [`js/EditorEngine.js`](file:///g:/devapps/md2print/js/EditorEngine.js) : Moteur d'édition `contenteditable="true"` non-WYSIWYG (calcul et restauration des offsets de sélection, cartouches graphiques `.image-cartouche` et `.mermaid-cartouche` avec éditeur intégré et toggle `▼`/`▲`, suppression unifiée `Suppr`/`Backspace`, alignement CSS des colonnes de tableaux plafonné à 60 caractères, formatage syntaxique en direct).
 - [`js/SlidePlanner.js`](file:///g:/devapps/md2print/js/SlidePlanner.js) : Planificateur unifié de diapositives partagé par l'export PowerPoint (`.pptx`) et le mode Diaporama HTML (calcul prédictif de hauteur selon `area.y + area.h`, couverture, inter-titres, saut de diapositive forcé par `---`, répartition 1-pour-1 des blocs).
-- [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) : Service de persistance locale `IndexedDB` (`md2print_db`, stores `app_state` et `local_images`) stockant de manière atomique le brouillon Markdown, les images Base64, les préférences d'interface (`theme`, `viewport`, `editorWidthPct`) ainsi que les fichiers `output_config.json` et `Modele_word.docx` personnalisés.
+- [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) : Service de persistance locale `IndexedDB` (`md2print_db`, stores `app_state` et `local_images`) stockant de manière atomique le brouillon Markdown, les images Base64, les préférences d'interface (`theme`, `viewport`, `editorWidthPct`), les styles CSS personnalisés (`custom_css`) et les réglages de balises (`custom_theme_configs`).
 - [`js/utils.js`](file:///g:/devapps/md2print/js/utils.js) : Fonctions utilitaires (`toSlug`, `escapeHtml`, `extractTitle`, lecture de fichiers, `normalizeMarkdown`, `resolveImagePaths`, `pruneUnusedLocalImages`, `validateOutputConfig`, `ensureOfficeCompatibleImage`, `renderMermaidBlocksMap`, `renderMermaidToPngDataUrl`, `readSvgDiagramSize`, `fitDimensions`).
 - [`js/MarkdownParser.js`](file:///g:/devapps/md2print/js/MarkdownParser.js) : Parseur Markdown vers AST structuré avec mémorisation de la propriété `raw` par bloc et extraction récursive des styles inline pour les moteurs Word et PowerPoint.
-- [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : Générateur du document `.html` autonome (styles Azur, cadre ombré pour schémas Mermaid, sommaire repliable, ScrollSpy, modes Rapport et Diaporama alimenté par `SlidePlanner`).
+- [`js/HtmlGenerator.js`](file:///g:/devapps/md2print/js/HtmlGenerator.js) : Générateur du document `.html` autonome avec isolation stricte du DOM (Rapport centré ou Diaporama 16:9 interactif piloté par `SlidePlanner`), tiroir de sommaire escamotable, ScrollSpy et cartouches métriques 5x.
 - [`js/DocxGenerator.js`](file:///g:/devapps/md2print/js/DocxGenerator.js) : Générateur Word `.docx` avec support des images Base64, des diagrammes Mermaid (rastérisés en PNG haute résolution 2x), des blocs de code, citations, séparateurs et injection XML dans un modèle `.docx`.
 - [`js/PptxGenerator.js`](file:///g:/devapps/md2print/js/PptxGenerator.js) & [`js/PptxSlideBuilders.js`](file:///g:/devapps/md2print/js/PptxSlideBuilders.js) : Générateur PowerPoint `.pptx` piloté par `SlidePlanner` avec rendu des masques de titre/chapitre/contenu, blocs de code, citations, séparateurs, tableaux, schémas Mermaid encadrés et images Base64.
 
@@ -71,7 +76,7 @@ L'application est une SPA modulaire exécutée via un serveur HTTP local avec 10
 
 ## 3. Gestion de l'État Applicatif (`state`) & Persistance `IndexedDB`
 
-L'objet singleton `state` dans [`js/app.js`](file:///g:/devapps/md2print/js/app.js) centralise les données en mémoire et se synchronise de manière transactionnelle avec la base `IndexedDB` `md2print_db` via [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) (`saveDraftState`, `savePreferences`, `saveCustomConfig`, `saveCustomTemplate`, `clearCustomConfigAndTemplate`, `loadPersistedState`) :
+L'objet singleton `state` dans [`js/app.js`](file:///g:/devapps/md2print/js/app.js) centralise les données en mémoire et se synchronise de manière transactionnelle avec la base `IndexedDB` `md2print_db` via [`js/StorageService.js`](file:///g:/devapps/md2print/js/StorageService.js) :
 
 ```javascript
 const state = {
@@ -89,6 +94,13 @@ const state = {
   configFileName: 'output_config.json (défaut)',  // Libellé de la configuration active
   templateBuffer: null,                           // ArrayBuffer du modèle Word (.docx)
   templateFileName: 'Modele_word.docx (défaut)',  // Libellé du modèle Word actif
+  pptTemplateBuffer: null,                        // ArrayBuffer du modèle PowerPoint (.potx)
+  pptTemplateFileName: 'Modele_presentation.potx (défaut)',
+  reportCss: null,                                // Feuille de style active pour la Vision Rapport
+  slideCss: null,                                 // Feuille de style active pour la Vision Slide
+  customCssFileName: null,                        // Libellé du CSS personnalisé chargé
+  themeConfigs: null,                             // Paramétrages personnalisés des balises (Rapport & Slide)
+  syncScroll: true,                               // Défilement lié asymétrique activé/désactivé
 };
 ```
 
@@ -106,8 +118,26 @@ const state = {
 
 ---
 
-## 5. Moteurs d'Export
+## 5. Moteurs d'Export Multi-Formats
 
-- **Export HTML Autonome (`HtmlGenerator.js`)** : Produit un fichier `.html` unique intégrant la feuille de style CSS (thème Azur clair), le bandeau supérieur (`Sommaire`, titre, date, `Imprimer`), le menu de navigation latéral repliable (`H1`, `H2`, `H3` avec `ScrollSpy`) et le script IIFE gérant les modes `report` et `slide`.
+- **Export HTML Autonome (`HtmlGenerator.js`)** : Produit un fichier `.html` unique intégrant la feuille de style CSS (Rapport A4 ou Diaporama 16:9), le bandeau supérieur (`Sommaire`, titre, date, `Imprimer`), le sommaire (latéral en rapport ou tiroir escamotable en slide avec `ScrollSpy`) et le script autonome sans dépendance réseau.
 - **Export Word (`DocxGenerator.js`)** : Construit les paragraphes, titres, listes, tableaux, blocs de code (fond grisé, bordure gauche, police `Consolas`, sauts de ligne `break: 1`), citations, séparateurs et images (`ImageRun`) via `docx` (avec styles inline récursifs via `MarkdownParser.js`), puis injecte le corps XML et les relations médias dans `templateBuffer` via `JSZip`.
 - **Export PowerPoint (`PptxGenerator.js` & `PptxSlideBuilders.js`)** : Découpe le document en diapositives (`#` Couverture, `##` Chapitre, `###` Contenu) et génère les textes, listes, blocs de code, citations, séparateurs, tableaux et images Base64 selon les masques définis dans `output_config.json`.
+
+---
+
+## 6. Page de Paramétrage des Styles de Balises (`StyleSettingsManager.js`)
+
+L'application intègre une page interactive plein écran permettant de personnaliser finement l'apparence des documents sans manipulation de code :
+- **Bascule de mode** : Personnalisation distincte pour la **Vision Rapport (Word)** et la **Vision Slide (PowerPoint)**.
+- **Typologies de balises configurables** :
+  - Titre principal et titres 1 à 4 (police, taille, couleur).
+  - Corps de texte (`p`, `li`) et liens hypertextes (`a`).
+  - Cartouches de données métriques 5x (`> [!data]`) : valeur agrandie, liseré supérieur et légende.
+  - Encarts d'alerte et recommandations (`[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!important]`).
+  - Citations (`blockquote`), code inline et blocs de code (`pre`, `code`).
+  - Tableaux Markdown (en-têtes, cellules, alternance de rangées, bordures).
+  - Arrière-plans de scène et conteneurs de page.
+- **Aperçu en direct (*Live Preview*)** : Un panneau latéral affiche instantanément le rendu d'un échantillon complet de balises au fur et à mesure des modifications.
+- **Actions disponibles** : Application en temps réel, export du fichier CSS (`.css`), réinitialisation aux chartes officielles et persistance locale via `IndexedDB`.
+

@@ -1,0 +1,877 @@
+/* ==========================================================================
+   md2print — Thème par Défaut : Vision Slide (Inspiré de Modele_presentation.potx)
+   ==========================================================================
+   Ce fichier CSS paramétrable définit le style visuel de la vue Diaporama (Slide)
+   et de l'exportation de présentation interactive 16:9, calqué sur la charte
+   graphique, les masques et les palettes extraits du modèle PowerPoint
+   d'entreprise (Modele_presentation.potx).
+
+   Toutes les dimensions, couleurs, polices et marges sont personnalisables
+   ci-dessous via les variables CSS (:root).
+   ========================================================================== */
+
+:root {
+  /* ========================================================================
+     1. TYPOGRAPHIE (Extraite de Modele_presentation.potx : Aptos Display & Aptos)
+     ======================================================================== */
+  --slide-font-body: 'Aptos', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --slide-font-heading: 'Aptos Display', 'Segoe UI Semibold', 'Aptos', -apple-system, sans-serif;
+  --slide-font-mono: Consolas, 'JetBrains Mono', 'Courier New', monospace;
+
+  --slide-font-size-base: 1.25rem;       /* Taille confortable pour lecture sur écran projeté */
+  --slide-line-height-base: 1.6;
+
+  /* Échelle des titres de diapositives */
+  --slide-title-cover-size: clamp(2.4rem, 4.5vw, 3.4rem);   /* Titre de couverture (Couverture) */
+  --slide-title-chapter-size: clamp(2rem, 3.6vw, 2.6rem);   /* Titre d'inter-titre (Section) */
+  --slide-title-content-size: clamp(1.6rem, 2.6vw, 2.1rem); /* Titre de diapositive de contenu (Slide) */
+
+  /* ========================================================================
+     2. PALETTE DE COULEURS (Charte graphique Modele_presentation.potx)
+     ======================================================================== */
+  /* Couleurs signatures du modèle OpenXML */
+  --slide-brand-red: #C41718;            /* Rouge signature dégradé du bandeau de diapositive */
+  --slide-brand-red-alt: #C00000;        /* Rouge bordeaux plein (Couverture & Section) */
+  --slide-brand-amber: #FBAE40;          /* Ambre / Or chaleureux (liseré secondaire) */
+  --slide-brand-dark: #0E2841;           /* Bleu nuit ardoise profond (ClrScheme dk2) */
+
+  /* Accents secondaires du thème PowerPoint (ClrScheme Office) */
+  --slide-accent-teal: #156082;          /* Accent1 (Bleu canard / Sarcelle) */
+  --slide-accent-coral: #E97132;         /* Accent2 (Corail) */
+  --slide-accent-green: #196B24;         /* Accent3 (Vert forêt) */
+  --slide-accent-cyan: #0F9ED5;          /* Accent4 (Bleu cyan vif) */
+  --slide-accent-purple: #A02B93;        /* Accent5 (Pourpre / Magenta) */
+
+  /* Textes & contrastes */
+  --slide-text-main: #0E2841;            /* Titres & textes d'accent sombres */
+  --slide-text-body: #1e293b;            /* Corps de texte lisible */
+  --slide-text-muted: #64748b;           /* Métadonnées & sous-titres */
+  --slide-text-dim: #94a3b8;             /* Numéros de page & dates discrètes */
+
+  /* Arrière-plans & structure 16:9 */
+  --slide-stage-backdrop: #0b1120;       /* Fond de scène sombre (mode projection immersif) */
+  --slide-canvas-bg: #ffffff;            /* Fond blanc immaculé de la diapositive */
+  --slide-border-color: #cbd5e1;         /* Bordures douces */
+  --slide-shadow: 0 16px 48px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
+  --slide-radius: 8px;
+
+  /* ========================================================================
+     3. FORMAT & PROPORTIONS 16:9 (Widescreen standard 12192000 x 6858000 dxa)
+     ======================================================================== */
+  --slide-max-width: 1280px;             /* Largeur standard de la diapositive */
+  --slide-aspect-ratio: 16 / 9;          /* Ratio universel 16:9 */
+  --slide-padding-y: 44px;
+  --slide-padding-x: 56px;
+
+  /* ========================================================================
+     4. TABLEAUX DE DIAPOSITIVES
+     ======================================================================== */
+  --slide-table-header-bg: #0E2841;      /* En-tête bleu nuit ardoise */
+  --slide-table-header-color: #ffffff;
+  --slide-table-border: #cbd5e1;
+  --slide-table-border-light: #e2e8f0;
+  --slide-table-row-even: #f8fafc;
+  --slide-table-row-hover: #eef2f6;
+
+  /* ========================================================================
+     5. CALLOUTS & CITATIONS DE DIAPOSITIVES
+     ======================================================================== */
+  --slide-callout-border-width: 5px;
+
+  /* ========================================================================
+     6. CARTOUCHES MÉTRIQUES 5X & BADGES DE DIAPOSITIVES
+     ======================================================================== */
+  --slide-metric-val-size: clamp(3.6rem, 5.5rem, 6.5rem);
+  --slide-metric-accent: #C41718;        /* Liseré supérieur rouge signature */
+  --slide-metric-val-color: #0E2841;     /* Valeur en bleu nuit très contrasté */
+}
+
+/* ==========================================================================
+   RESET & SCÈNE DE PROJECTION DU DIAPORAMA
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--slide-stage-backdrop);
+  color: var(--slide-text-body);
+  font-family: var(--slide-font-body);
+  line-height: var(--slide-line-height-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================================
+   BANDEAU SUPÉRIEUR FIXE DU DIAPORAMA
+   ========================================================================== */
+.top-banner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: var(--slide-brand-dark);
+  border-bottom: 2px solid var(--slide-brand-red);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.banner-inner {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+}
+
+.banner-center {
+  text-align: center;
+  min-width: 0;
+}
+
+.banner-main-title {
+  font-family: var(--slide-font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.banner-date {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.banner-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.banner-btn:hover {
+  background: var(--slide-brand-red);
+  border-color: var(--slide-brand-red);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   SOMMAIRE LATÉRAL ESCAMOTABLE EN VISION SLIDE (TIROIR / DRAWER)
+   ========================================================================== */
+.toc-sidebar {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--slide-brand-dark);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  z-index: 1050;
+  overflow-y: auto;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toc-sidebar.collapsed {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toc-header-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.toc-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.toc-counter {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(196, 23, 24, 0.2);
+  color: var(--slide-brand-amber);
+}
+
+.toc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toc-link {
+  display: block;
+  padding: 7px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border-left: 3px solid transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toc-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--slide-brand-amber);
+}
+
+.toc-item.active > .toc-link {
+  color: #ffffff;
+  font-weight: 700;
+  background: rgba(196, 23, 24, 0.25);
+  border-left-color: var(--slide-brand-red);
+}
+
+.toc-h1 .toc-link {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.toc-h2 .toc-link {
+  padding-left: 18px;
+  font-weight: 600;
+}
+
+.toc-h3 .toc-link {
+  padding-left: 28px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.toc-empty {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-style: italic;
+  padding: 8px;
+}
+
+/* ==========================================================================
+   STRUCTURE GÉNÉRALE & SCÈNE DE PROJECTION 16:9
+   ========================================================================== */
+.document-layout {
+  height: calc(100vh - 48px);
+  width: 100vw;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.document-body {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* En mode slide, le contenu standard markdown est masqué au profit du conteneur de diapositives */
+.markdown-rendered-content {
+  display: none !important;
+}
+
+/* ==========================================================================
+   CONTENEUR ET CADRE DIAPOSITIVE 16:9
+   ========================================================================== */
+.slide-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: var(--slide-max-width);
+  max-height: calc(var(--slide-max-width) * 9 / 16);
+  aspect-ratio: var(--slide-aspect-ratio);
+  position: relative;
+  margin: auto;
+}
+
+.slide {
+  display: none;
+  width: 100%;
+  height: 100%;
+  background: var(--slide-canvas-bg);
+  border-radius: var(--slide-radius);
+  box-shadow: var(--slide-shadow);
+  overflow: hidden;
+  position: relative;
+  animation: slideFadeIn 0.25s ease-out;
+}
+
+.slide.active {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ==========================================================================
+   1. DIAPOSITIVE DE TITRE / COUVERTURE (Layout 1 : Couverture)
+   ========================================================================== */
+.slide.slide-title {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 60px 70px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  position: relative;
+}
+
+/* Bandeau signature rouge & ambre en bordure supérieure */
+.slide.slide-title::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 70%, var(--slide-brand-amber) 100%);
+  border-top-left-radius: var(--slide-radius);
+  border-top-right-radius: var(--slide-radius);
+}
+
+.slide-title-inner {
+  max-width: 960px;
+  width: 100%;
+  margin: auto;
+}
+
+.slide-title-card {
+  padding: 44px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.slide-main-title {
+  font-family: var(--slide-font-heading);
+  font-size: var(--slide-title-cover-size);
+  font-weight: 700;
+  color: var(--slide-text-main);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.slide-title-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.slide-title-date {
+  font-size: 1.05rem;
+  color: var(--slide-text-muted);
+  font-weight: 500;
+  padding: 6px 16px;
+  background: rgba(14, 40, 65, 0.06);
+  border-radius: 9999px;
+  border: 1px solid rgba(14, 40, 65, 0.12);
+}
+
+/* ==========================================================================
+   2. DIAPOSITIVE D'INTER-TITRE / SECTION (Layout 3 : Section)
+   ========================================================================== */
+.slide.slide-chapter {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 60px 70px;
+  background: linear-gradient(145deg, #f8fafc 0%, #edf2f7 100%);
+  position: relative;
+}
+
+.slide.slide-chapter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 10px;
+  background: var(--slide-brand-red);
+  border-top-left-radius: var(--slide-radius);
+  border-bottom-left-radius: var(--slide-radius);
+}
+
+.slide-chapter-inner {
+  max-width: 900px;
+  width: 100%;
+  margin: auto;
+}
+
+.slide-chapter-card {
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.slide-chapter-badge {
+  display: inline-block;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  background: var(--slide-brand-dark);
+  padding: 5px 16px;
+  border-radius: 4px;
+}
+
+.slide-chapter-title {
+  font-family: var(--slide-font-heading);
+  font-size: var(--slide-title-chapter-size);
+  font-weight: 700;
+  color: var(--slide-text-main);
+  line-height: 1.25;
+}
+
+.slide-chapter-date {
+  font-size: 0.95rem;
+  color: var(--slide-text-muted);
+}
+
+/* ==========================================================================
+   3. DIAPOSITIVE DE CONTENU (Layout 6 : Slide)
+   ========================================================================== */
+.slide.slide-content {
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: var(--slide-padding-y) var(--slide-padding-x);
+  position: relative;
+}
+
+/* Liseré supérieur bicolore signature Modele_presentation.potx */
+.slide.slide-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 78%, var(--slide-brand-amber) 100%);
+  border-top-left-radius: var(--slide-radius);
+  border-top-right-radius: var(--slide-radius);
+}
+
+.slide-content-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.slide-header {
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--slide-border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.slide-chapter-tag {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slide-brand-red);
+}
+
+.slide-header-title {
+  font-family: var(--slide-font-heading);
+  font-size: var(--slide-title-content-size);
+  font-weight: 700;
+  color: var(--slide-text-main);
+  line-height: 1.25;
+}
+
+.slide-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--slide-font-size-base);
+  color: var(--slide-text-body);
+  overflow: hidden;
+}
+
+.slide-body p, .slide-body li {
+  font-size: var(--slide-font-size-base);
+  line-height: var(--slide-line-height-base);
+  margin-bottom: 12px;
+}
+
+.slide-body ul, .slide-body ol {
+  margin-bottom: 18px;
+  padding-left: 32px;
+}
+
+.slide-body li {
+  margin-bottom: 8px;
+}
+
+.slide-body h3 {
+  font-family: var(--slide-font-heading);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--slide-brand-dark);
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.slide-body h4 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--slide-text-muted);
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+/* ==========================================================================
+   TABLEAUX EN VISION SLIDE
+   ========================================================================== */
+.slide-body .table-responsive-wrapper {
+  margin: 16px 0;
+  border: 1px solid var(--slide-table-border);
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.slide-body .doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.slide-body .doc-table thead {
+  background: var(--slide-table-header-bg);
+  color: var(--slide-table-header-color);
+}
+
+.slide-body .doc-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.slide-body .doc-table th:last-child {
+  border-right: none;
+}
+
+.slide-body .doc-table td {
+  padding: 9px 14px;
+  font-size: 0.92rem;
+  border-top: 1px solid var(--slide-table-border-light);
+  border-right: 1px solid var(--slide-table-border-light);
+  color: var(--slide-text-body);
+}
+
+.slide-body .doc-table td:last-child {
+  border-right: none;
+}
+
+.slide-body .doc-table tbody tr:nth-child(even) td {
+  background: var(--slide-table-row-even);
+}
+
+/* ==========================================================================
+   CARTOUCHES MÉTRIQUES 5X EN VISION SLIDE
+   ========================================================================== */
+.slide-body .metric-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 14px 14px 14px 0;
+  padding: 20px 32px;
+  min-width: 200px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--slide-table-border);
+  border-top: 6px solid var(--slide-metric-accent);
+  box-shadow: 0 4px 16px rgba(14, 40, 65, 0.08);
+}
+
+.slide-body .metric-value {
+  font-family: var(--slide-font-heading);
+  font-size: var(--slide-metric-val-size);
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--slide-metric-val-color);
+}
+
+.slide-body .metric-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slide-text-muted);
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   CALLOUTS, CITATIONS & SCHÉMAS MERMAID EN SLIDE
+   ========================================================================== */
+.slide-body blockquote {
+  margin: 16px 0;
+  padding: 12px 18px;
+  background: rgba(14, 40, 65, 0.05);
+  border-left: 5px solid var(--slide-brand-dark);
+  border-radius: 0 4px 4px 0;
+  color: var(--slide-text-body);
+  font-style: italic;
+}
+
+.slide-body .callout {
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-radius: 0 4px 4px 0;
+  border-left: var(--slide-callout-border-width) solid var(--callout-border, var(--slide-brand-red));
+  background: var(--callout-bg, rgba(196, 23, 24, 0.06));
+  color: var(--slide-text-body);
+}
+
+.slide-body .callout-note, .slide-body .callout-info {
+  --callout-border: var(--slide-brand-dark);
+  --callout-bg: rgba(14, 40, 65, 0.06);
+  --callout-title: var(--slide-brand-dark);
+}
+
+.slide-body .callout-tip, .slide-body .callout-success {
+  --callout-border: var(--slide-accent-green);
+  --callout-bg: rgba(25, 107, 36, 0.07);
+  --callout-title: var(--slide-accent-green);
+}
+
+.slide-body .callout-warning, .slide-body .callout-warn {
+  --callout-border: var(--slide-brand-amber);
+  --callout-bg: rgba(251, 174, 64, 0.1);
+  --callout-title: #995c00;
+}
+
+.slide-body .callout-danger, .slide-body .callout-caution {
+  --callout-border: var(--slide-brand-red);
+  --callout-bg: rgba(196, 23, 24, 0.07);
+  --callout-title: var(--slide-brand-red);
+}
+
+.slide-body .callout-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.slide-body .mermaid-card {
+  margin: 16px 0;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid var(--slide-table-border);
+  border-left: 4px solid var(--slide-brand-red);
+  border-radius: 4px;
+}
+
+.slide-body .mermaid-diagram svg {
+  max-width: 100%;
+  max-height: 380px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   IMAGES DANS LES DIAPOSITIVES (Ajustement strict au cadre 16:9 sans débordement)
+   ========================================================================== */
+.slide-image-box,
+.slide-body figure,
+.slide-body p:has(img) {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  max-height: 100%;
+  max-width: 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.slide-image,
+.slide-image-box img,
+.slide img,
+.slide-body img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: auto;
+  border-radius: var(--slide-radius-sm);
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   CONTRÔLES DE NAVIGATION INTERACTIFS DE DIAPOSITIVES
+   ========================================================================== */
+.slide-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  position: fixed;
+  bottom: 20px;
+  right: 28px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--slide-border-color);
+  padding: 6px 14px;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.banner-btn, .slide-controls button {
+  background: #ffffff;
+  border: 1px solid var(--slide-border-color);
+  color: var(--slide-text-main);
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.banner-btn:hover:not(:disabled), .slide-controls button:hover:not(:disabled) {
+  background: rgba(196, 23, 24, 0.08);
+  border-color: var(--slide-brand-red);
+  color: var(--slide-brand-red);
+}
+
+.banner-btn:disabled, .slide-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.slide-counter {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--slide-brand-dark);
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   IMPRESSION (1 DIAPOSITIVE PAR PAGE EN FORMAT PAYSAGE)
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+
+  body {
+    background: #ffffff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .slide-controls {
+    display: none !important;
+  }
+
+  .slide-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .slide {
+    display: block !important;
+    width: 100% !important;
+    height: 100vh !important;
+    page-break-after: always;
+    break-after: page;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 30mm 25mm !important;
+  }
+}

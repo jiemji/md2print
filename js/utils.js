@@ -1,5 +1,8 @@
 /**
- * utils.js — Fonctions utilitaires partagées (fichiers, slugs, normalisation Markdown, images)
+ * @module utils
+ * @description Fonctions utilitaires partagées : manipulation de fichiers, génération de slugs,
+ * normalisation Markdown, gestion et rastérisation d'images/schémas Mermaid,
+ * et résolutions de balises personnalisées (callouts, badges, métriques).
  */
 
 /**
@@ -1050,3 +1053,200 @@ export const renderMermaidToPngDataUrl = async (code) => {
   }
   return pngUrl;
 };
+
+/**
+ * Dictionnaire de configuration des types d'alertes / callouts Markdown (syntaxe > [!TYPE]).
+ * Associe chaque identifiant brut à un type normalisé et un titre par défaut en français.
+ * @type {Record<string, { type: string, defaultTitle: string }>}
+ */
+export const CALLOUT_CONFIGS = {
+  NOTE: { type: 'note', defaultTitle: 'NOTE' },
+  INFO: { type: 'info', defaultTitle: 'INFORMATION' },
+  INFORMATION: { type: 'info', defaultTitle: 'INFORMATION' },
+  TIP: { type: 'tip', defaultTitle: 'ASTUCE' },
+  ASTUCE: { type: 'tip', defaultTitle: 'ASTUCE' },
+  SUCCESS: { type: 'tip', defaultTitle: 'SUCCÈS' },
+  IMPORTANT: { type: 'important', defaultTitle: 'IMPORTANT' },
+  WARNING: { type: 'warning', defaultTitle: 'AVERTISSEMENT' },
+  AVERTISSEMENT: { type: 'warning', defaultTitle: 'AVERTISSEMENT' },
+  WARN: { type: 'warning', defaultTitle: 'AVERTISSEMENT' },
+  CAUTION: { type: 'danger', defaultTitle: 'ATTENTION' },
+  ATTENTION: { type: 'danger', defaultTitle: 'ATTENTION' },
+  DANGER: { type: 'danger', defaultTitle: 'DANGER' },
+  CRITIQUE: { type: 'danger', defaultTitle: 'CRITIQUE' },
+};
+
+/**
+ * @typedef {object} CalloutInfo
+ * @property {string} kind - Identifiant canonique du type (ex: 'note', 'tip', 'warning', 'danger', 'important')
+ * @property {string} title - Titre affiché (par défaut ou personnalisé)
+ * @property {string} rawType - Type brut en majuscules (ex: 'NOTE', 'AVERTISSEMENT')
+ */
+
+/**
+ * Résout le type normalisé et le libellé d'un callout Markdown.
+ * @param {string} rawType - Type brut (ex: 'NOTE', 'WARNING', 'ASTUCE')
+ * @param {string} [rawTitle] - Titre personnalisé optionnel
+ * @returns {CalloutInfo}
+ */
+export function resolveCallout(rawType, rawTitle) {
+  const upper = (rawType || '').trim().toUpperCase();
+  const conf = CALLOUT_CONFIGS[upper] || {
+    type: 'note',
+    defaultTitle: upper || 'NOTE',
+  };
+  const title = (rawTitle || '').trim() || conf.defaultTitle;
+  return {
+    kind: conf.type,
+    title,
+    rawType: upper,
+  };
+}
+
+/**
+ * Dictionnaire de correspondance des classes de badges inline (syntaxe [badge:type:texte]).
+ * @type {Record<string, string>}
+ */
+export const BADGE_CONFIGS = {
+  info: 'badge-info',
+  note: 'badge-info',
+  blue: 'badge-info',
+  success: 'badge-success',
+  tip: 'badge-success',
+  astuce: 'badge-success',
+  valide: 'badge-success',
+  ok: 'badge-success',
+  green: 'badge-success',
+  warning: 'badge-warning',
+  warn: 'badge-warning',
+  avertissement: 'badge-warning',
+  orange: 'badge-warning',
+  yellow: 'badge-warning',
+  danger: 'badge-danger',
+  error: 'badge-danger',
+  critical: 'badge-danger',
+  critique: 'badge-danger',
+  attention: 'badge-danger',
+  caution: 'badge-danger',
+  red: 'badge-danger',
+  important: 'badge-important',
+  purple: 'badge-important',
+  violet: 'badge-important',
+  neutral: 'badge-neutral',
+  neutre: 'badge-neutral',
+  gray: 'badge-neutral',
+  grey: 'badge-neutral',
+  default: 'badge-neutral',
+};
+
+/**
+ * Résout la classe CSS d'un badge inline.
+ * @param {string} rawType - Type brut (ex: 'info', 'success', 'danger')
+ * @returns {string} Classe CSS (ex: 'badge-info', 'badge-success')
+ */
+export function resolveBadgeClass(rawType) {
+  const key = (rawType || '').trim().toLowerCase();
+  return BADGE_CONFIGS[key] || 'badge-neutral';
+}
+
+/**
+ * Ensemble des variantes reconnues pour les cartouches de données/métriques.
+ * @type {Set<string>}
+ */
+export const KNOWN_METRIC_VARIANTS = new Set([
+  'success',
+  'danger',
+  'warning',
+  'info',
+  'important',
+  'neutral',
+  'vert',
+  'rouge',
+  'orange',
+  'jaune',
+  'bleu',
+  'violet',
+  'gris',
+  'ok',
+  'critique',
+  'urgent',
+  'warn',
+  'error',
+  'tip',
+  'note',
+]);
+
+/**
+ * Dictionnaire de correspondance des classes CSS pour les cartouches de données/métriques.
+ * @type {Record<string, string>}
+ */
+export const METRIC_VARIANT_MAP = {
+  success: 'metric-card-success',
+  vert: 'metric-card-success',
+  ok: 'metric-card-success',
+  tip: 'metric-card-success',
+  danger: 'metric-card-danger',
+  rouge: 'metric-card-danger',
+  critique: 'metric-card-danger',
+  urgent: 'metric-card-danger',
+  error: 'metric-card-danger',
+  warning: 'metric-card-warning',
+  warn: 'metric-card-warning',
+  orange: 'metric-card-warning',
+  jaune: 'metric-card-warning',
+  info: 'metric-card-info',
+  bleu: 'metric-card-info',
+  note: 'metric-card-info',
+  important: 'metric-card-important',
+  violet: 'metric-card-important',
+  purple: 'metric-card-important',
+  neutral: 'metric-card-neutral',
+  gris: 'metric-card-neutral',
+  gray: 'metric-card-neutral',
+  default: 'metric-card-default',
+};
+
+/**
+ * @typedef {object} MetricTagInfo
+ * @property {string} val - Valeur principale du chiffre ou pourcentage (ex: '98%', '1,2 M€')
+ * @property {string} label - Libellé explicatif optionnel
+ * @property {string} variant - Variante de style (ex: 'success', 'danger', 'info', 'warning', 'default')
+ */
+
+/**
+ * Analyse et extrait la valeur, le libellé et la variante d'une balise chiffre/métrique.
+ * Supporte les formats :
+ * - [chiffre:valeur:libellé:variante]
+ * - [chiffre:valeur:libellé]
+ * - [chiffre:valeur:variante]
+ * - [chiffre:valeur]
+ * ainsi que les alias [metric:...], [stat:...] et [kpi:...].
+ * @param {string} valStr - Valeur brute (ex: '98%', '1,2 M€', '+42%')
+ * @param {string} [part2] - Deuxième composante (libellé ou variante)
+ * @param {string} [part3] - Troisième composante (variante)
+ * @returns {MetricTagInfo}
+ */
+export function parseMetricTag(valStr, part2, part3) {
+  const val = (valStr || '').trim();
+  let label = (part2 || '').trim();
+  let variant = (part3 || '').trim().toLowerCase();
+
+  if (label && !variant && KNOWN_METRIC_VARIANTS.has(label.toLowerCase())) {
+    variant = label.toLowerCase();
+    label = '';
+  }
+
+  return { val, label, variant: variant || 'default' };
+}
+
+/**
+ * Résout la classe CSS d'une cartouche métrique.
+ * @param {string} rawVariant - Variante brute (ex: 'success', 'danger')
+ * @returns {string} Classe CSS de la carte
+ */
+export function resolveMetricClass(rawVariant) {
+  const k = (rawVariant || '').trim().toLowerCase();
+  return METRIC_VARIANT_MAP[k] || 'metric-card-default';
+}
+
+

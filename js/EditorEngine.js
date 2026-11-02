@@ -1,15 +1,22 @@
 /**
- * EditorEngine.js — Moteur de l'éditeur Markdown non-WYSIWYG (contenteditable="true")
- * Gère les objets graphiques .image-cartouche (2 lignes de hauteur), la préservation
+ * @module EditorEngine
+ * @description Moteur de l'éditeur Markdown non-WYSIWYG (contenteditable="true").
+ * Gère les objets graphiques .image-cartouche et .mermaid-cartouche, la préservation
  * exacte des offsets de sélection (1 caractère = 1 unité, 1 cartouche = 1 unité),
- * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS
- * et le formatage syntaxique en direct.
+ * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS,
+ * le retour à la ligne des colonnes de plus de 60 caractères, et le formatage syntaxique
+ * en direct (titres, citations, callouts, listes, inline, badges et métriques).
+ * @requires ./utils.js
  */
 import {
   createImageCartouche,
   collapseBase64ToCartouches,
   isMermaidHeaderLine,
   findUnfencedMermaidBlockEnd,
+  resolveBadgeClass,
+  parseMetricTag,
+  resolveMetricClass,
+  toSlug,
 } from './utils.js';
 
 /**
@@ -384,9 +391,11 @@ export function restoreEditorSelectionOffsets(editorEl, offsets) {
  * - Souligné (__...__ ou <u>...</u>)
  * - Barré (~~...~~)
  * - Italique (*...* ou _..._)
+ * - Badges inline ([badge:type:texte])
+ * - Cartouches de données / métriques ([chiffre:valeur:libellé])
  * tout en conservant l'ensemble des délimiteurs visibles.
  * L'invariant de longueur (1 caractère = 1 unité de sélection) est intégralement préservé.
- * @param {string} text
+ * @param {string} text - Segment de texte brut
  * @returns {DocumentFragment}
  */
 export function buildFormattedTextNodes(text) {
@@ -394,7 +403,7 @@ export function buildFormattedTextNodes(text) {
   if (!text) return fragment;
 
   const inlineFormatRegex =
-    /(`[^`\n]+?`)|((?<!\!)\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)/g;
+    /(`[^`\n]+?`)|((?<!\!)\[(?!image\s*:)([^\][\n]+)\]\(([^)\n]+)\))|(\*\*\*(?=\S)((?:(?!\*\*\*).)+?)(?<=\S)\*\*\*(?!\*))|(\*\*(?=\S)((?:(?!\*\*).)+?)(?<=\S)\*\*(?!\*))|(__(?=\S)((?:(?!__).)+?)(?<=\S)__(?!_))|(~~(?=\S)((?:(?!~~).)+?)(?<=\S)~~(?!~))|((?<!\*)\*(?!\*)(?=\S)((?:[^*]|\*\*)+?)(?<=\S)(?<!\*)\*(?!\*))|((?<![_\w])_(?!_)(?=\S)((?:[^_]|__)+?)(?<=\S)(?<!_)_(?![_\w]))|(<u>((?:(?!<\/u>).)+?)<\/u>)|(\[badge:(?:([a-zA-Z0-9_-]+):)?([^\]\n]+)\])|(\[(chiffre|metric|stat|kpi):([^:\]\n]+)(?::([^:\]\n]+))?(?::([^\]\n]+))?\])/g;
 
   let lastIndex = 0;
   let match;
@@ -473,6 +482,16 @@ export function buildFormattedTextNodes(text) {
       span.appendChild(document.createTextNode('<u>'));
       span.appendChild(buildFormattedTextNodes(match[18]));
       span.appendChild(document.createTextNode('</u>'));
+    } else if (match[19] !== undefined) {
+      const rawType = (match[20] || 'neutral').toLowerCase();
+      const badgeClass = resolveBadgeClass(rawType);
+      span.className = `md-badge ${badgeClass}`;
+      span.appendChild(document.createTextNode(match[19]));
+    } else if (match[22] !== undefined) {
+      const parsed = parseMetricTag(match[24], match[25], match[26]);
+      const metricClass = resolveMetricClass(parsed.variant);
+      span.className = `md-metric ${metricClass}`;
+      span.appendChild(document.createTextNode(match[22]));
     }
 
     span.normalize();
@@ -700,6 +719,7 @@ export function setEditorContent(
   const lines = normalizedText.split('\n');
   const fragment = document.createDocumentFragment();
   let inCodeBlock = false;
+  let activeCalloutType = null;
   let i = 0;
 
   // Mémorise les index des cartouches Mermaid qui étaient dépliées pour conserver leur état
@@ -716,6 +736,7 @@ export function setEditorContent(
 
     // Délimiteur de bloc de code (```) ou de schéma Mermaid (```mermaid)
     if (line.trimStart().startsWith('```')) {
+      activeCalloutType = null;
       const fenceLang = line.trimStart().replace(/^`+/, '').trim();
       let isMermaid = /^mermaid\b/i.test(fenceLang);
       if (!isMermaid && !fenceLang) {
@@ -802,6 +823,7 @@ export function setEditorContent(
 
     // Schéma Mermaid saisi directement sans délimiteurs ``` (ex: graph TB, flowchart LR, sequenceDiagram...)
     if (isMermaidHeaderLine(line)) {
+      activeCalloutType = null;
       const endMermaidIdx = findUnfencedMermaidBlockEnd(lines, i);
       if (endMermaidIdx >= i) {
         const mermaidLines = lines.slice(i, endMermaidIdx + 1);
@@ -822,6 +844,7 @@ export function setEditorContent(
 
     // Regroupement et alignement automatique des colonnes pour les blocs de tableaux Markdown
     if (isMarkdownTableLine(line)) {
+      activeCalloutType = null;
       const tableLines = [];
       let j = i;
       while (j < lines.length && isMarkdownTableLine(lines[j])) {
@@ -853,24 +876,38 @@ export function setEditorContent(
           : null;
 
       if (hrMatch) {
+        activeCalloutType = null;
         const hrSpan = document.createElement('span');
         hrSpan.className = 'md-hr-line';
         hrSpan.textContent = line;
         fragment.appendChild(hrSpan);
       } else if (headingMatch) {
+        activeCalloutType = null;
         const level = headingMatch[1].length;
         const headingSpan = document.createElement('span');
         headingSpan.className = `md-heading-line md-h${level}`;
+        const headingText = line.replace(/^#{1,6}\s+/, '').trim();
+        headingSpan.dataset.headingText = headingText;
+        headingSpan.dataset.slug = toSlug(headingText);
         headingSpan.appendChild(buildLineInlineNodes(line));
         fragment.appendChild(headingSpan);
       } else if (quoteMatch) {
         const quoteLevel = quoteMatch[2].length;
         const quoteSpan = document.createElement('span');
-        quoteSpan.className = 'md-quote-line';
+        const calloutHeaderMatch = line.match(/^([ \t]*>+[ \t]*)\[!([a-zA-Z0-9_-]+)\]/);
+        if (calloutHeaderMatch) {
+          activeCalloutType = calloutHeaderMatch[2].toLowerCase();
+          quoteSpan.className = `md-quote-line md-callout-header md-callout-${activeCalloutType}`;
+        } else if (activeCalloutType) {
+          quoteSpan.className = `md-quote-line md-callout-line md-callout-${activeCalloutType}`;
+        } else {
+          quoteSpan.className = 'md-quote-line';
+        }
         quoteSpan.style.paddingLeft = `${quoteLevel * 2}ch`;
         quoteSpan.appendChild(buildLineInlineNodes(line));
         fragment.appendChild(quoteSpan);
       } else if (listMatch) {
+        activeCalloutType = null;
         const rawIndent = listMatch[1];
         const indentSpaces = rawIndent.replace(/\t/g, '  ').length;
         const rawVisualWidth = rawIndent.length;
@@ -912,8 +949,11 @@ export function setEditorContent(
 
         fragment.appendChild(listSpan);
       } else {
+        activeCalloutType = null;
         fragment.appendChild(buildLineInlineNodes(line));
       }
+    } else {
+      activeCalloutType = null;
     }
 
     if (i < lines.length - 1) {

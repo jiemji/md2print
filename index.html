@@ -37,16 +37,20 @@
         <span class="current-filename" id="currentFileName">Sans titre.md</span>
       </div>
 
-      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) -->
+      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) et Défilement synchronisé -->
       <div class="header-group header-center">
         <div class="view-switcher">
           <button type="button" class="view-btn active" data-view="report" id="btnViewReport">Rapport</button>
           <button type="button" class="view-btn" data-view="slide" id="btnViewSlide">Slide</button>
         </div>
+        <button type="button" class="btn" id="btnToggleSyncScroll" title="Activer ou désactiver le défilement lié entre l'éditeur et l'aperçu (Raccourci : F8)">Défilement lié : Activé</button>
       </div>
 
       <!-- Zone Droite : Configuration, Export et Thème -->
       <div class="header-group header-right">
+        <!-- Bouton direct d'accès à la page de paramétrage des styles -->
+        <button type="button" class="btn" id="btnOpenStyleSettings" title="Personnaliser les polices, tailles et couleurs de chaque type de balise">Styles des balises</button>
+
         <!-- Menu déroulant Configuration -->
         <div class="dropdown" id="dropdownConfig">
           <button type="button" class="btn" id="btnToggleConfig">Configuration</button>
@@ -54,12 +58,17 @@
             <div class="dropdown-status" id="configStatusText">
               Config : par défaut<br>Modèle : par défaut
             </div>
+            <button type="button" class="dropdown-item" id="btnMenuOpenStyleSettings">Paramétrer les styles des balises</button>
             <button type="button" class="dropdown-item" id="btnLoadConfigJson">Charger configuration (.json)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplateDocx">Charger modèle Word (.docx)</button>
+            <button type="button" class="dropdown-item" id="btnLoadTemplatePptx">Charger modèle PowerPoint (.potx)</button>
+            <button type="button" class="dropdown-item" id="btnLoadCustomCss">Charger CSS personnalisé (.css)</button>
             <button type="button" class="dropdown-item" id="btnResetConfig">Réinitialiser par défaut</button>
           </div>
           <input type="file" id="configJsonInput" class="hidden-input" accept=".json">
           <input type="file" id="templateDocxInput" class="hidden-input" accept=".docx,.dotx">
+          <input type="file" id="templatePptxInput" class="hidden-input" accept=".potx">
+          <input type="file" id="customCssInput" class="hidden-input" accept=".css">
         </div>
 
         <!-- Menu déroulant Exporter -->
@@ -97,6 +106,9 @@
         <iframe id="previewIframe" class="preview-iframe" title="Aperçu du document formaté"></iframe>
       </section>
     </main>
+
+    <!-- Page de Paramétrage des Styles de Balises (Hors-ligne, sans icône) -->
+    <section class="style-config-page" id="pageStyleConfig" style="display: none;"></section>
   </div>
 
   <!-- Conteneur de Notifications Textuelles -->
