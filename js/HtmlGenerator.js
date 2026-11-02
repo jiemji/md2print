@@ -28,6 +28,9 @@ let markedExtensionsInitialized = false;
 
 /**
  * Enregistre les extensions personnalisées de Marked.js (badges [badge:...] et chiffres [chiffre:...]).
+ * Configure les tokenizers inline et les renderers HTML pour les balises de données.
+ * @function ensureMarkedExtensions
+ * @returns {void}
  */
 function ensureMarkedExtensions() {
   if (markedExtensionsInitialized || typeof window.marked === 'undefined') return;
@@ -375,6 +378,24 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
       return this.parser.parseInline(tokens);
     }
     const inner = this.parser && tokens ? this.parser.parseInline(tokens) : text;
+    // Si le paragraphe est composé exclusivement de balises métriques (séparées par des espaces ou retours),
+    // on l'enveloppe directement dans un conteneur flex horizontal pour garantir une hiérarchie DOM valide
+    if (
+      tokens &&
+      tokens.length > 0 &&
+      tokens.some((tok) => tok.type === 'metric') &&
+      tokens.every(
+        (tok) =>
+          tok.type === 'metric' ||
+          tok.type === 'badge' ||
+          tok.type === 'space' ||
+          tok.type === 'br' ||
+          (tok.type === 'text' && !tok.text.trim())
+      )
+    ) {
+      const cleaned = inner.replace(/<\/span>\s+<span class="metric-card/g, '</span><span class="metric-card');
+      return `<div class="metric-group-row">${cleaned}</div>\n`;
+    }
     return `<p>${inner}</p>\n`;
   };
 
@@ -421,11 +442,14 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     return `<div class="table-responsive-wrapper">${tableHtml}</div>`;
   });
 
-  // Envelopper les balises métriques d'une même ligne dans un conteneur flex dédié
-  processedHtml = processedHtml.replace(/<p\b[^>]*>([\s\S]*?<span class="metric-card[\s\S]*?)<\/p>/gi, (match, inner) => {
-    const cleaned = inner.replace(/<\/span>\s+<span class="metric-card/g, '</span><span class="metric-card');
-    return `<div class="metric-group-row">${cleaned}</div>`;
-  });
+  // Envelopper les balises métriques isolées dans un conteneur flex dédié sans déborder sur les balises voisines
+  processedHtml = processedHtml.replace(
+    /<p\b[^>]*>((?:(?!<\/?p\b)[\s\S])*?<span class="metric-card(?:(?!<\/?p\b)[\s\S])*)<\/p>/gi,
+    (match, inner) => {
+      const cleaned = inner.replace(/<\/span>\s+<span class="metric-card/g, '</span><span class="metric-card');
+      return `<div class="metric-group-row">${cleaned}</div>`;
+    }
+  );
 
   // Réinsertion des rangées de colonnes multi-colonnes générées
   if (rowHtmls && rowHtmls.length > 0) {

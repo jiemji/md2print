@@ -1221,9 +1221,11 @@ export const METRIC_VARIANT_MAP = {
  * - [chiffre:valeur:variante]
  * - [chiffre:valeur]
  * ainsi que les alias [metric:...], [stat:...] et [kpi:...].
+ * Tolère la présence de deux-points (':') dans les libellés descriptifs lorsque la
+ * troisième composante ne correspond pas à une variante de style prédéfinie.
  * @param {string} valStr - Valeur brute (ex: '98%', '1,2 M€', '+42%')
  * @param {string} [part2] - Deuxième composante (libellé ou variante)
- * @param {string} [part3] - Troisième composante (variante)
+ * @param {string} [part3] - Troisième composante (variante de style ou fragment de libellé)
  * @returns {MetricTagInfo}
  */
 export function parseMetricTag(valStr, part2, part3) {
@@ -1234,6 +1236,9 @@ export function parseMetricTag(valStr, part2, part3) {
   if (label && !variant && KNOWN_METRIC_VARIANTS.has(label.toLowerCase())) {
     variant = label.toLowerCase();
     label = '';
+  } else if (part3 && !KNOWN_METRIC_VARIANTS.has(variant)) {
+    label = `${label}:${part3}`.trim();
+    variant = 'default';
   }
 
   return { val, label, variant: variant || 'default' };

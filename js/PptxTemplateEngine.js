@@ -310,31 +310,39 @@ export async function detectSlidePrototypes(zip, parser, layoutConfig = {}) {
 }
 
 /**
- * Convertit des segments textuels enrichis (runs Markdown) en éléments DrawingML `<a:r>` OpenXML.
+ * Convertit des segments textuels enrichis (runs Markdown) en éléments DrawingML `<a:r>` et `<a:br>` OpenXML.
  * Préserve les styles typographiques : gras (`b="1"`), italique (`i="1"`), souligné (`u="sng"`),
- * barré (`strike="sngStrike"`) et police à espacement fixe Consolas pour le code inline.
+ * barré (`strike="sngStrike"`), police à espacement fixe Consolas pour le code inline,
+ * et sérialise fidèlement les sauts de ligne internes (`\n`) sous forme de balises `<a:br>` conformes ECMA-376.
  *
  * @function formatRunsToXml
  * @param {Array<{text: string, format: {bold?: boolean, italic?: boolean, underline?: boolean, strike?: boolean, code?: boolean}}>} runs - Segments textuels formatés
- * @returns {string} Fragments XML OpenXML DrawingML (<a:r>)
+ * @returns {string} Fragments XML OpenXML DrawingML (`<a:r>` et `<a:br>`)
  */
 function formatRunsToXml(runs) {
   if (!runs || runs.length === 0) return '';
-  return runs
-    .map((r) => {
-      const bAttr = r.format?.bold ? ' b="1"' : '';
-      const iAttr = r.format?.italic ? ' i="1"' : '';
-      const uAttr = r.format?.underline ? ' u="sng"' : '';
-      const sAttr = r.format?.strike ? ' strike="sngStrike"' : '';
-      const codeFont = r.format?.code
-        ? '<a:latin typeface="Consolas"/><a:cs typeface="Consolas"/>'
-        : '';
+  const out = [];
+  for (const r of runs) {
+    const bAttr = r.format?.bold ? ' b="1"' : '';
+    const iAttr = r.format?.italic ? ' i="1"' : '';
+    const uAttr = r.format?.underline ? ' u="sng"' : '';
+    const sAttr = r.format?.strike ? ' strike="sngStrike"' : '';
+    const codeFont = r.format?.code
+      ? '<a:latin typeface="Consolas"/><a:cs typeface="Consolas"/>'
+      : '';
+    const rPr = `<a:rPr lang="fr-FR"${bAttr}${iAttr}${uAttr}${sAttr}>${codeFont}</a:rPr>`;
 
-      return `<a:r><a:rPr lang="fr-FR"${bAttr}${iAttr}${uAttr}${sAttr}>${codeFont}</a:rPr><a:t>${escapeXml(
-        r.text
-      )}</a:t></a:r>`;
-    })
-    .join('');
+    const lines = String(r.text ?? '').split('\n');
+    lines.forEach((line, idx) => {
+      if (idx > 0) {
+        out.push(`<a:br>${rPr}</a:br>`);
+      }
+      if (line.length > 0) {
+        out.push(`<a:r>${rPr}<a:t>${escapeXml(line)}</a:t></a:r>`);
+      }
+    });
+  }
+  return out.join('');
 }
 
 /**
@@ -502,6 +510,35 @@ function fitBoundsToAspectRatio(targetBounds, imgW, imgH) {
     cx: String(finalW),
     cy: String(finalH),
   };
+}
+
+/**
+ * Extrait le texte brut sans balisage d'un bloc AST pour l'injection dans les métadonnées de présentation.
+ * Filtre les balises de structure ([colonne], [/colonne]) et concatène les segments de texte enrichi (runs).
+ *
+ * @function blockToPlainText
+ * @param {object} block - Bloc AST (paragraph, list_item, etc.)
+ * @returns {string} Texte brut extrait et nettoyé
+ */
+export function blockToPlainText(block) {
+  if (!block) return '';
+  const rawTrim = (block.raw || block.text || '').trim();
+  if (
+    /^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) ||
+    /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)
+  ) {
+    return '';
+  }
+  if (typeof block.text === 'string' && block.text.trim()) {
+    return block.text.trim();
+  }
+  if (Array.isArray(block.runs) && block.runs.length > 0) {
+    return block.runs.map((r) => r.text || '').join('').trim();
+  }
+  if (typeof block.raw === 'string' && block.raw.trim()) {
+    return block.raw.trim();
+  }
+  return '';
 }
 
 /**
