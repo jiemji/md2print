@@ -259,6 +259,7 @@ async function buildDocxBlocks(cleanMd, docConfig) {
       );
     } else if (block.type === 'paragraph') {
       const rawTrim = (block.raw || '').trim();
+      // Omettre les balises de colonnes ([colonne], [/colonne]) pour ne pas insérer de paragraphes résiduels dans le document Word
       if (/^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) || /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)) {
         continue;
       }

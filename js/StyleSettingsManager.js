@@ -190,9 +190,13 @@ function formatHeadingCss(h, fallbackFont, defaultSize, defaultColor) {
 
 /**
  * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
- * @param {'report'|'slide'} mode - Mode cible
- * @param {object} config - Configuration des balises
- * @returns {string} Code CSS prêt à l'emploi
+ * Injecte les variables personnalisées (typographies, couleurs, liserés, fonds, métriques),
+ * ainsi que les règles impératives de confinement de diapositive et de disposition multi-colonnes flexible.
+ *
+ * @function generateThemeCss
+ * @param {'report'|'slide'} mode - Mode cible d'affichage ('report' ou 'slide')
+ * @param {object} [config] - Configuration des balises et styles (utilise la configuration par défaut si omis)
+ * @returns {string} Code CSS prêt à l'emploi et compilé
  */
 export function generateThemeCss(mode, config) {
   const isSlide = mode === 'slide';

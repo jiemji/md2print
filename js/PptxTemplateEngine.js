@@ -696,6 +696,8 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       currentSlide.isExplicit = false;
     } else if (block.type === 'paragraph') {
       const rawTrim = (block.raw || block.text || '').trim();
+      // Filtrer les balises structurelles de colonnes ([colonne], [/colonne], etc.)
+      // afin qu'elles ne soient pas injectées sous forme de texte brut dans la diapositive PowerPoint
       if (/^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) || /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)) {
         continue;
       }

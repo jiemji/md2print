@@ -3,10 +3,12 @@
  * @description Génération du document HTML autonome et du flux de prévisualisation iframe.
  * Intègre le CSS (thème Azur classique), le sommaire latéral repliable avec ScrollSpy,
  * les schémas Mermaid vectoriels, les alertes/callouts GitHub, les badges inline,
- * les cartouches de données/métriques agrandies (5x), et le support des modes
- * Rapport continu et Diaporama interactif.
+ * les cartouches de données/métriques agrandies (5x), la disposition multi-colonnes flexible
+ * ([colonne]...[/colonne]) avec partage horizontal de l'espace, et le support des modes
+ * Rapport continu et Diaporama interactif 16:9.
  * @requires utils
  * @requires SlidePlanner
+ * @requires defaultThemeStyles
  */
 import {
   toSlug,
@@ -126,12 +128,37 @@ export const extractTOC = (normalizedMarkdown) => {
 };
 
 /**
- * Extrait et regroupe les blocs de colonnes Markdown en rangées flex.
- * Supporte la syntaxe [colonne]...[/colonne] (alias [col]...[/col]),
- * le ratio optionnel [colonne:2], les conteneurs optionnels [colonnes]...[/colonnes],
- * et la syntaxe alternative :::colonne ... :::
- * @param {string} md - Texte Markdown
- * @returns {{ cleaned: string, groups: Array<Array<{ start: number, end: number, ratio: number, content: string }>>, maskedMd?: string, restoreCodeBlocks?: (text: string) => string }}
+ * @typedef {Object} ColumnBlock
+ * @property {number} start - Position de départ de la balise colonne dans le Markdown
+ * @property {number} end - Position de fin de la balise fermante dans le Markdown
+ * @property {number} ratio - Facteur de dimensionnement proportionnel (défaut : 1)
+ * @property {string} content - Contenu Markdown interne de la colonne
+ * @property {string} raw - Markdown source complet du bloc colonne
+ */
+
+/**
+ * @typedef {Object} ColumnExtractionResult
+ * @property {string} cleaned - Texte Markdown débarrassé des balises conteneurs globales
+ * @property {Array<Array<ColumnBlock>>} groups - Liste des rangées de colonnes adjacentes regroupées
+ * @property {string} [maskedMd] - Texte Markdown temporairement masqué de ses blocs de code
+ * @property {function(string): string} [restoreCodeBlocks] - Fonction de restauration des blocs de code
+ */
+
+/**
+ * Extrait et regroupe les blocs de colonnes Markdown en rangées flex horizontales.
+ *
+ * Syntaxes reconnues :
+ * - Balises simples : `[colonne]` ... `[/colonne]` (alias `[col]` ... `[/col]`)
+ * - Proportions personnalisées : `[colonne:2]` ... `[/colonne]`
+ * - Conteneurs globaux optionnels : `[colonnes]` ... `[/colonnes]` (alias `[cols]` ... `[/cols]`)
+ * - Syntaxe alternative à triple deux-points : `:::colonne` ... `:::`
+ *
+ * Les blocs de code (```) sont temporairement sanctuarisés sous forme de jetons opaques
+ * pour éviter toute fausse détection de balises ou de fermetures imbriquées dans des exemples.
+ *
+ * @function extractAndGroupColumns
+ * @param {string} md - Texte Markdown brut à analyser
+ * @returns {ColumnExtractionResult} Résultat contenant le Markdown nettoyé et les groupes de colonnes
  */
 export function extractAndGroupColumns(md) {
   if (!md) return { cleaned: '', groups: [] };
@@ -192,10 +219,15 @@ export function extractAndGroupColumns(md) {
 }
 
 /**
- * Convertit le Markdown normalisé en HTML via Marked.js, Highlight.js et Mermaid.js.
- * @param {string} cleanMarkdown
- * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
- * @returns {string}
+ * Convertit le Markdown normalisé en fragment HTML via Marked.js, Highlight.js et Mermaid.js.
+ * Gère récursivement les colonnes multiples (`[colonne]...[/colonne]`), les schémas Mermaid pré-rendus,
+ * les titres hiérarchiques avec ancrage slug, le souligné (`__texte__`), les callouts GitHub,
+ * les listes de tâches, les cartouches métriques/KPI et les tableaux responsives.
+ *
+ * @function parseMarkdownToHTML
+ * @param {string} cleanMarkdown - Contenu Markdown normalisé à convertir
+ * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire associant le code source d'un schéma Mermaid à son SVG vectoriel pré-rendu
+ * @returns {string} Fragment HTML prêt pour l'injection dans le corps de page ou de diapositive
  */
 const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
