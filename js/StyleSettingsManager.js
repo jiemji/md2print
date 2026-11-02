@@ -65,8 +65,14 @@ export const DEFAULT_STYLE_CONFIG = {
       rowAltBg: '#f8fafc',
       border: '#cbd5e1',
     },
-    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100 },
-    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100 },
+    mermaid: {
+      bg: '#f8fafc',
+      border: '#cbd5e1',
+      borderLeft: '#2F5496',
+    },
+    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 8 },
+    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C00000', borderLeftWidth: 10 },
+    contentSlide: { headerBg: '#ffffff', borderTopColor: '#C00000', borderTopWidth: 6 },
     page: { bgBackdrop: '#f1f5f9', bgPaper: '#ffffff', border: '#d1d5db' },
   },
   slide: {
@@ -122,8 +128,14 @@ export const DEFAULT_STYLE_CONFIG = {
       rowAltBg: '#f8fafc',
       border: '#cbd5e1',
     },
-    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100 },
-    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100 },
+    mermaid: {
+      bg: '#f8fafc',
+      border: '#cbd5e1',
+      borderLeft: '#C41718',
+    },
+    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 8 },
+    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C41718', borderLeftWidth: 10 },
+    contentSlide: { headerBg: '#ffffff', borderTopColor: '#C41718', borderTopWidth: 6 },
     page: { bgBackdrop: '#0b1120', bgPaper: '#ffffff', border: '#cbd5e1' },
   },
 };
@@ -208,6 +220,16 @@ export function generateThemeCss(mode, config) {
   --slide-metric-val-size: ${cfg.metric.size};
   --slide-metric-accent: ${cfg.metric.accentColor};
   --slide-metric-val-color: ${cfg.metric.valColor};
+  --slide-cover-border-top-width: ${cfg.coverSlide?.borderTopWidth !== undefined ? cfg.coverSlide.borderTopWidth + 'px' : '8px'};
+  --slide-cover-border-top-color: ${cfg.coverSlide?.borderTopColor || '#C41718'};
+  --slide-chapter-border-left-width: ${cfg.chapterSlide?.borderLeftWidth !== undefined ? cfg.chapterSlide.borderLeftWidth + 'px' : '10px'};
+  --slide-chapter-border-left-color: ${cfg.chapterSlide?.borderLeftColor || '#C41718'};
+  --slide-content-border-top-width: ${cfg.contentSlide?.borderTopWidth !== undefined ? cfg.contentSlide.borderTopWidth + 'px' : '6px'};
+  --slide-content-border-top-color: ${cfg.contentSlide?.borderTopColor || '#C41718'};
+  --slide-header-bg: ${cfg.contentSlide?.headerBg || '#ffffff'};
+  --slide-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
+  --slide-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
+  --slide-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#C41718'};
 }
 
 /* === Titres & Hiérarchie === */
@@ -231,6 +253,44 @@ export function generateThemeCss(mode, config) {
 }
 .slide-body h6 {
   ${formatHeadingCss(cfg.h5, cfg.h5?.font || cfg.h4.font, cfg.h5?.size || '1.05rem', cfg.h5?.color || cfg.h4.color)}
+}
+
+/* === Liserés et Bandeau spécifiques Vision Slide === */
+.slide.slide-title::before {
+  background: ${cfg.coverSlide?.borderTopColor || '#C41718'} !important;
+  height: ${Number(cfg.coverSlide?.borderTopWidth ?? 8)}px !important;
+  display: ${Number(cfg.coverSlide?.borderTopWidth ?? 8) > 0 ? 'block' : 'none'} !important;
+}
+
+.slide.slide-chapter::before {
+  background: ${cfg.chapterSlide?.borderLeftColor || '#C41718'} !important;
+  width: ${Number(cfg.chapterSlide?.borderLeftWidth ?? 10)}px !important;
+  display: ${Number(cfg.chapterSlide?.borderLeftWidth ?? 10) > 0 ? 'block' : 'none'} !important;
+}
+
+.slide.slide-content::before {
+  background: ${cfg.contentSlide?.borderTopColor || '#C41718'} !important;
+  height: ${Number(cfg.contentSlide?.borderTopWidth ?? 6)}px !important;
+  display: ${Number(cfg.contentSlide?.borderTopWidth ?? 6) > 0 ? 'block' : 'none'} !important;
+}
+
+.slide.slide-content {
+  padding: 0 !important;
+}
+
+.slide.slide-content .slide-header {
+  background-color: ${cfg.contentSlide?.headerBg || '#ffffff'} !important;
+  padding-top: 24px !important;
+  padding-bottom: 14px !important;
+  padding-left: 56px !important;
+  padding-right: 56px !important;
+  margin-bottom: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.slide.slide-content .slide-body {
+  padding: 24px 56px 44px 56px !important;
 }
 
 /* === Fonds spécifiques Couverture (#) et Chapitre (##) === */
@@ -295,6 +355,11 @@ ${cfg.chapterSlide?.bgImage ? `
 .slide-body p:has(img) {
   margin-bottom: 0;
 }
+.mermaid-card, .slide-body .mermaid-card {
+  background-color: ${cfg.mermaid?.bg || '#f8fafc'} !important;
+  border-color: ${cfg.mermaid?.border || '#cbd5e1'} !important;
+  border-left-color: ${cfg.mermaid?.borderLeft || (isSlide ? '#C41718' : '#2F5496')} !important;
+}
 .slide img, .slide-body img {
   max-width: 100%;
   max-height: 100%;
@@ -308,8 +373,37 @@ ${cfg.chapterSlide?.bgImage ? `
 .slide-body a:hover {
   color: ${cfg.link.hoverColor};
 }
+.metric-group-row,
+.slide-body p:has(.metric-card) {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+  width: 100% !important;
+  margin: 14px 0 !important;
+  box-sizing: border-box !important;
+}
+.metric-group-row > br {
+  display: none !important;
+}
+.slide-body p:has(.metric-card) > br {
+  display: none !important;
+}
 .slide-body .metric-card {
-  border-top-color: ${cfg.metric.accentColor};
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 1 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  border-top-color: ${cfg.metric.accentColor} !important;
+}
+.slide-body > .metric-card {
+  width: 100% !important;
+  margin: 14px 0 !important;
 }
 .slide-body .metric-value {
   font-family: '${cfg.metric.font}', sans-serif;
@@ -919,6 +1013,29 @@ export class StyleSettingsManager {
                     </div>
                   </div>
                 </div>
+
+                <div class="config-row">
+                  <div class="config-label-col">
+                    <span class="config-tag-label">Cadre Mermaid (schémas)</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Filet vertical gauche</label>
+                      <input type="color" class="color-picker-input" data-bind="mermaid.borderLeft">
+                      <input type="text" class="text-input color-hex-input" data-bind="mermaid.borderLeft" spellcheck="false">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Fond</label>
+                      <input type="color" class="color-picker-input" data-bind="mermaid.bg">
+                      <input type="text" class="text-input color-hex-input" data-bind="mermaid.bg" spellcheck="false">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Bordure</label>
+                      <input type="color" class="color-picker-input" data-bind="mermaid.border">
+                      <input type="text" class="text-input color-hex-input" data-bind="mermaid.border" spellcheck="false">
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -988,6 +1105,72 @@ export class StyleSettingsManager {
                 <div id="slideBackgroundsSection" class="slide-bg-section">
                   ${this.renderSlideBackgroundControlRow('coverSlide', 'Diapositive de Couverture (Slide #)')}
                   ${this.renderSlideBackgroundControlRow('chapterSlide', 'Diapositive de Chapitre (Slide ##)')}
+                  <div class="config-row config-bg-row">
+                    <div class="config-label-col">
+                      <span class="config-tag-label">Bandeau de titre (Slide Contenu ###)</span>
+                    </div>
+                    <div class="config-inputs-col">
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Couleur du bandeau</label>
+                        <input type="color" class="color-picker-input" data-bind="contentSlide.headerBg">
+                        <input type="text" class="text-input color-hex-input" data-bind="contentSlide.headerBg" spellcheck="false">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section spécifique Vision Slide : Liserés -->
+                <div id="slideBordersSection" class="slide-borders-section">
+                  <div class="config-row">
+                    <div class="config-label-col">
+                      <span class="config-tag-label">Liseré supérieur Couverture</span>
+                    </div>
+                    <div class="config-inputs-col">
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Couleur</label>
+                        <input type="color" class="color-picker-input" data-bind="coverSlide.borderTopColor">
+                        <input type="text" class="text-input color-hex-input" data-bind="coverSlide.borderTopColor" spellcheck="false">
+                      </div>
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Épaisseur (px)</label>
+                        <input type="number" min="0" max="40" class="text-input size-input" style="width: 75px;" data-bind="coverSlide.borderTopWidth" placeholder="8">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="config-row">
+                    <div class="config-label-col">
+                      <span class="config-tag-label">Liseré gauche Chapitre</span>
+                    </div>
+                    <div class="config-inputs-col">
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Couleur</label>
+                        <input type="color" class="color-picker-input" data-bind="chapterSlide.borderLeftColor">
+                        <input type="text" class="text-input color-hex-input" data-bind="chapterSlide.borderLeftColor" spellcheck="false">
+                      </div>
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Épaisseur (px)</label>
+                        <input type="number" min="0" max="40" class="text-input size-input" style="width: 75px;" data-bind="chapterSlide.borderLeftWidth" placeholder="10">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="config-row">
+                    <div class="config-label-col">
+                      <span class="config-tag-label">Liseré supérieur Contenu</span>
+                    </div>
+                    <div class="config-inputs-col">
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Couleur</label>
+                        <input type="color" class="color-picker-input" data-bind="contentSlide.borderTopColor">
+                        <input type="text" class="text-input color-hex-input" data-bind="contentSlide.borderTopColor" spellcheck="false">
+                      </div>
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Épaisseur (px)</label>
+                        <input type="number" min="0" max="40" class="text-input size-input" style="width: 75px;" data-bind="contentSlide.borderTopWidth" placeholder="6">
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="config-row">
@@ -1402,6 +1585,10 @@ export class StyleSettingsManager {
     if (slideBgSection) {
       slideBgSection.style.display = mode === 'slide' ? 'block' : 'none';
     }
+    const slideBordersSection = this.container.querySelector('#slideBordersSection');
+    if (slideBordersSection) {
+      slideBordersSection.style.display = mode === 'slide' ? 'block' : 'none';
+    }
 
     this.updateFormValues();
     this.updateLivePreview();
@@ -1476,9 +1663,7 @@ export class StyleSettingsManager {
           <div class="slide slide-chapter active" style="display: flex; width: 100%; min-height: 200px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
             <div class="slide-inner slide-chapter-inner">
               <div class="slide-chapter-card">
-                <span class="slide-chapter-badge">Chapitre</span>
                 <h2 class="slide-chapter-title">1. Contexte & Orientations</h2>
-                <span class="slide-chapter-date">02/11/2026</span>
               </div>
             </div>
           </div>
@@ -1502,10 +1687,16 @@ export class StyleSettingsManager {
                 <h6>Sous-titre de niveau 6 (######)</h6>
                 <p>Dernier niveau de titre hiérarchique.</p>
 
-                <div class="metric-card">
-                  <span class="metric-value">14.8M€</span>
-                  <span class="metric-label">Chiffre d'Affaires (+18%)</span>
-                </div>
+                <p style="display: flex; gap: 16px; width: 100%; margin: 14px 0;">
+                  <span class="metric-card" style="flex: 1;">
+                    <span class="metric-value">14.8M€</span>
+                    <span class="metric-label">Chiffre d'Affaires (+18%)</span>
+                  </span>
+                  <span class="metric-card metric-card-success" style="flex: 1;">
+                    <span class="metric-value">99.9%</span>
+                    <span class="metric-label">Disponibilité Système</span>
+                  </span>
+                </p>
 
                 <p style="margin: 10px 0;">
                   <span class="badge badge-info">Q4 2026</span>
@@ -1517,6 +1708,19 @@ export class StyleSettingsManager {
                 <blockquote>
                   La clarté et la concision garantissent l'impact des présentations de direction.
                 </blockquote>
+
+                <figure class="mermaid-card" style="margin: 12px 0;">
+                  <div class="mermaid-diagram" style="padding: 10px; display: flex; justify-content: center; align-items: center;">
+                    <svg viewBox="0 0 360 80" style="width: 100%; max-height: 80px; display: block; margin: auto;">
+                      <rect x="10" y="20" width="90" height="40" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+                      <text x="55" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#0369a1">Gitlab</text>
+                      <line x1="100" y1="40" x2="250" y2="40" stroke="#0284c7" stroke-width="2"/>
+                      <polygon points="250,36 260,40 250,44" fill="#0284c7"/>
+                      <rect x="260" y="20" width="90" height="40" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+                      <text x="305" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#92400e">Runner</text>
+                    </svg>
+                  </div>
+                </figure>
 
                 <div class="table-responsive-wrapper">
                   <table class="doc-table">

@@ -384,8 +384,8 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  height: 8px;
-  background: linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 70%, var(--slide-brand-amber) 100%);
+  height: var(--slide-cover-border-top-width, 8px);
+  background: var(--slide-cover-border-top-color, linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 70%, var(--slide-brand-amber) 100%));
   border-top-left-radius: var(--slide-radius);
   border-top-right-radius: var(--slide-radius);
   z-index: 2;
@@ -460,8 +460,8 @@ html, body {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 10px;
-  background: var(--slide-brand-red);
+  width: var(--slide-chapter-border-left-width, 10px);
+  background: var(--slide-chapter-border-left-color, var(--slide-brand-red));
   border-top-left-radius: var(--slide-radius);
   border-bottom-left-radius: var(--slide-radius);
   z-index: 2;
@@ -512,7 +512,7 @@ html, body {
 .slide.slide-content {
   justify-content: flex-start;
   align-items: stretch;
-  padding: var(--slide-padding-y) var(--slide-padding-x);
+  padding: 0;
   position: relative;
 }
 
@@ -523,10 +523,11 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  height: 6px;
-  background: linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 78%, var(--slide-brand-amber) 100%);
+  height: var(--slide-content-border-top-width, 6px);
+  background: var(--slide-content-border-top-color, linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 78%, var(--slide-brand-amber) 100%));
   border-top-left-radius: var(--slide-radius);
   border-top-right-radius: var(--slide-radius);
+  z-index: 2;
 }
 
 .slide-content-inner {
@@ -540,13 +541,21 @@ html, body {
 }
 
 .slide-header {
-  padding-bottom: 12px;
-  margin-bottom: 20px;
+  padding-top: 24px;
+  padding-bottom: 14px;
+  padding-left: var(--slide-padding-x);
+  padding-right: var(--slide-padding-x);
+  margin-bottom: 0;
+  background-color: var(--slide-header-bg, #ffffff);
   border-bottom: 2px solid var(--slide-border-color);
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
 }
 
 .slide-chapter-tag {
@@ -570,6 +579,7 @@ html, body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 24px var(--slide-padding-x) var(--slide-padding-y) var(--slide-padding-x);
   font-size: var(--slide-font-size-base);
   color: var(--slide-text-body);
   overflow: hidden;
@@ -656,21 +666,68 @@ html, body {
 }
 
 /* ==========================================================================
-   CARTOUCHES MÉTRIQUES 5X EN VISION SLIDE
+   CARTOUCHES MÉTRIQUES 5X EN VISION SLIDE (Pleine largeur & partage horizontal)
    ========================================================================== */
+.metric-group-row,
+.slide-body p:has(.metric-card) {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  margin: 14px 0;
+  box-sizing: border-box;
+}
+
+.metric-group-row > br {
+  display: none;
+}
+
+.slide-body p:has(.metric-card) > br {
+  display: none;
+}
+
 .slide-body .metric-card {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 14px 14px 14px 0;
-  padding: 20px 32px;
-  min-width: 200px;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 20px 24px;
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid var(--slide-table-border);
   border-top: 6px solid var(--slide-metric-accent);
   box-shadow: 0 4px 16px rgba(14, 40, 65, 0.08);
+  box-sizing: border-box;
+}
+
+.slide-body > .metric-card {
+  width: 100%;
+  margin: 14px 0;
+}
+
+.slide-body .metric-card.metric-card-success {
+  border-top-color: var(--slide-accent-green);
+}
+
+.slide-body .metric-card.metric-card-danger {
+  border-top-color: var(--slide-brand-red);
+}
+
+.slide-body .metric-card.metric-card-warning {
+  border-top-color: var(--slide-brand-amber);
+}
+
+.slide-body .metric-card.metric-card-important {
+  border-top-color: var(--slide-accent-purple);
+}
+
+.slide-body .metric-card.metric-card-info {
+  border-top-color: var(--slide-accent-cyan);
 }
 
 .slide-body .metric-value {
@@ -745,20 +802,37 @@ html, body {
 }
 
 .slide-body .mermaid-card {
-  margin: 16px 0;
+  margin: 8px 0;
   padding: 16px 20px;
-  background: #f8fafc;
-  border: 1px solid var(--slide-table-border);
-  border-left: 4px solid var(--slide-brand-red);
+  background: var(--slide-mermaid-bg, #f8fafc);
+  border: 1px solid var(--slide-mermaid-border, var(--slide-table-border));
+  border-left: 4px solid var(--slide-mermaid-border-left, var(--slide-brand-red));
   border-radius: 4px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.slide-body .mermaid-diagram {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .slide-body .mermaid-diagram svg {
-  max-width: 100%;
-  max-height: 380px;
-  height: auto;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
   display: block;
-  margin: 0 auto;
+  margin: auto;
 }
 
 /* ==========================================================================

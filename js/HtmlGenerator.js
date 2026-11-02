@@ -280,7 +280,7 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
 
   const parsed = window.marked.parse(markedReadyMarkdown);
 
-  return parsed.replace(/(<table\b[^>]*>[\s\S]*?<\/table>)/gi, (match) => {
+  let processedHtml = parsed.replace(/(<table\b[^>]*>[\s\S]*?<\/table>)/gi, (match) => {
     let tableHtml = match;
     if (!/class=["'][^"']*doc-table[^"']*["']/i.test(tableHtml)) {
       if (/class=["']/i.test(tableHtml)) {
@@ -291,6 +291,14 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
     return `<div class="table-responsive-wrapper">${tableHtml}</div>`;
   });
+
+  // Envelopper les balises métriques d'une même ligne dans un conteneur flex dédié
+  processedHtml = processedHtml.replace(/<p\b[^>]*>([\s\S]*?<span class="metric-card[\s\S]*?)<\/p>/gi, (match, inner) => {
+    const cleaned = inner.replace(/<\/span>\s+<span class="metric-card/g, '</span><span class="metric-card');
+    return `<div class="metric-group-row">${cleaned}</div>`;
+  });
+
+  return processedHtml;
 };
 
 /**
@@ -360,9 +368,7 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
             <div class="slide slide-chapter ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
               <div class="slide-inner slide-chapter-inner">
                 <div class="slide-chapter-card">
-                  <span class="slide-chapter-badge">Chapitre</span>
                   <h2 class="slide-chapter-title">${escapeHtml(slide.title)}</h2>
-                  <span class="slide-chapter-date">${escapeHtml(slide.date)}</span>
                 </div>
               </div>
             </div>
@@ -440,6 +446,38 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+}
+/* === Dimensionnement pleine largeur et partage horizontal des KPI / Chiffres clés === */
+.metric-group-row,
+.slide-body p:has(.metric-card) {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+  width: 100% !important;
+  margin: 14px 0 !important;
+  box-sizing: border-box !important;
+}
+.metric-group-row > br,
+.slide-body p:has(.metric-card) > br {
+  display: none !important;
+}
+.slide-body .metric-group-row .metric-card,
+.slide-body .metric-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 20px 24px !important;
+  box-sizing: border-box !important;
+}
+.slide-body > .metric-card {
+  width: 100% !important;
+  margin: 14px 0 !important;
 }
 .slide-image-box,
 .slide-body figure,

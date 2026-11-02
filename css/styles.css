@@ -1314,7 +1314,8 @@ body.resizing-active .style-settings-iframe {
   accent-color: var(--color-primary);
 }
 
-.slide-bg-section {
+.slide-bg-section,
+.slide-borders-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
