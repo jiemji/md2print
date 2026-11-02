@@ -1253,6 +1253,12 @@ html, body {
   background: linear-gradient(90deg, var(--slide-brand-red) 0%, var(--slide-brand-red) 70%, var(--slide-brand-amber) 100%);
   border-top-left-radius: var(--slide-radius);
   border-top-right-radius: var(--slide-radius);
+  z-index: 2;
+}
+
+.slide.slide-title > *, .slide.slide-chapter > * {
+  position: relative;
+  z-index: 1;
 }
 
 .slide-title-inner {
@@ -1283,6 +1289,12 @@ html, body {
   align-items: center;
   gap: 16px;
   margin-top: 10px;
+}
+
+.slide-title-metadata {
+  font-size: 1.15rem;
+  color: var(--slide-text-main);
+  font-weight: 500;
 }
 
 .slide-title-date {
@@ -1317,6 +1329,7 @@ html, body {
   background: var(--slide-brand-red);
   border-top-left-radius: var(--slide-radius);
   border-bottom-left-radius: var(--slide-radius);
+  z-index: 2;
 }
 
 .slide-chapter-inner {

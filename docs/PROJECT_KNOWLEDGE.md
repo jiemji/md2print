@@ -122,22 +122,42 @@ const state = {
 
 - **Export HTML Autonome (`HtmlGenerator.js`)** : Produit un fichier `.html` unique intégrant la feuille de style CSS (Rapport A4 ou Diaporama 16:9), le bandeau supérieur (`Sommaire`, titre, date, `Imprimer`), le sommaire (latéral en rapport ou tiroir escamotable en slide avec `ScrollSpy`) et le script autonome sans dépendance réseau.
 - **Export Word (`DocxGenerator.js`)** : Construit les paragraphes, titres, listes, tableaux, blocs de code (fond grisé, bordure gauche, police `Consolas`, sauts de ligne `break: 1`), citations, séparateurs et images (`ImageRun`) via `docx` (avec styles inline récursifs via `MarkdownParser.js`), puis injecte le corps XML et les relations médias dans `templateBuffer` via `JSZip`.
-- **Export PowerPoint (`PptxGenerator.js` & `PptxSlideBuilders.js`)** : Découpe le document en diapositives (`#` Couverture, `##` Chapitre, `###` Contenu) et génère les textes, listes, blocs de code, citations, séparateurs, tableaux et images Base64 selon les masques définis dans `output_config.json`.
+- **Export PowerPoint (`PptxGenerator.js` & `PptxSlideBuilders.js`)** : Découpe le document en diapositives selon les 5 règles unifiées de synchronisation et génère les textes, sous-titres H4+, listes, blocs de code, citations, séparateurs, tableaux et images Base64 selon les masques définis dans `output_config.json`.
 
 ---
 
-## 6. Page de Paramétrage des Styles de Balises (`StyleSettingsManager.js`)
+## 6. Règles Unifiées de Découpage des Diapositives (`SlidePlanner.js` & `PptxTemplateEngine.js`)
+
+Le découpage du texte Markdown en diapositives en vision Slide et export PPTX obéit à 5 règles déterministes :
+1. **Titre `#` (Niveau 1)** : Déclenche une diapositive de couverture (type `title` / `cover`). Les métadonnées immédiates (sous-titre, auteur, date) sont automatiquement capturées sous le titre.
+2. **Titre `##` (Niveau 2)** : Déclenche une diapositive d'intercalaire de chapitre (type `chapter`).
+3. **Titre `###` (Niveau 3)** : Crée une diapositive standard de contenu (type `content`) et mémorise son libellé.
+4. **Titres supérieurs à `###` (`####`, `#####`, `######`)** : Ne créent pas de nouveau slide ; ils s'insèrent comme des sous-sections de contenu dans la diapositive courante.
+5. **Séparateur horizontal `---`** : Force la création d'une nouvelle diapositive en reprenant automatiquement le titre du dernier `###` qui précède.
+
+La navigation au sein des diapositives s'effectue au clavier (flèches gauche/droite), via le sommaire escamotable, ou à la molette de la souris (haut/bas) avec throttling protecteur de 350 ms.
+
+---
+
+## 7. Page de Paramétrage des Styles de Balises (`StyleSettingsManager.js`)
 
 L'application intègre une page interactive plein écran permettant de personnaliser finement l'apparence des documents sans manipulation de code :
 - **Bascule de mode** : Personnalisation distincte pour la **Vision Rapport (Word)** et la **Vision Slide (PowerPoint)**.
-- **Typologies de balises configurables** :
-  - Titre principal et titres 1 à 4 (police, taille, couleur).
+- **Fonds distincts pour slides Couverture et Chapitre (Vision Slide)** :
+  - Choix de la couleur de fond (`coverSlide.bgColor`, `chapterSlide.bgColor`).
+  - Importation d'image locale autonome (encodée en Base64 data URL dans le CSS et stockée dans IndexedDB).
+  - Réglage fin de l'opacité / transparence de l'image de fond (slider 0-100 %) via le pseudo-élément `::after` garantissant une lisibilité optimale du texte et préservant le bandeau décoratif (`z-index: 2`).
+- **Typographie des titres (Niveaux 1 à 6)** :
+  - Police, taille et couleur.
+  - Choix de la casse : Normal, Majuscule (`text-transform: uppercase`), Première lettre en majuscule (`capitalize`).
+  - Options combinables : Gras (`bold`) et Souligné (`underline`).
+- **Autres typologies de balises configurables** :
   - Corps de texte (`p`, `li`) et liens hypertextes (`a`).
   - Cartouches de données métriques 5x (`> [!data]`) : valeur agrandie, liseré supérieur et légende.
   - Encarts d'alerte et recommandations (`[!note]`, `[!tip]`, `[!warning]`, `[!danger]`, `[!important]`).
   - Citations (`blockquote`), code inline et blocs de code (`pre`, `code`).
   - Tableaux Markdown (en-têtes, cellules, alternance de rangées, bordures).
   - Arrière-plans de scène et conteneurs de page.
-- **Aperçu en direct (*Live Preview*)** : Un panneau latéral affiche instantanément le rendu d'un échantillon complet de balises au fur et à mesure des modifications.
+- **Aperçu en direct (*Live Preview*)** : Un panneau latéral affiche instantanément le rendu d'un échantillon complet de balises au fur et à mesure des modifications (incluant une diapositive de couverture, une diapositive de chapitre et une diapositive de contenu).
 - **Actions disponibles** : Application en temps réel, export du fichier CSS (`.css`), réinitialisation aux chartes officielles et persistance locale via `IndexedDB`.
 

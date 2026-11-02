@@ -198,18 +198,18 @@ export function blockToMarkdown(block) {
  * Découpe un document Markdown en diapositives selon les règles unifiées de synchronisation
  * avec le moteur de présentation PowerPoint (.potx) {@link module:PptxTemplateEngine}.
  *
- * Règles partagées :
- *  - Niveau 1 (#) ou document global : Couverture (type 'title')
- *  - Niveau 2 (##) : Intercalaire de chapitre (type 'chapter')
- *  - Niveau 3+ (###..) : Diapositive de contenu (type 'content')
- *  - Séparateur horizontal (---) : Force la création d'une nouvelle diapositive
- *  - Tableaux, images et diagrammes Mermaid : Isolés sur une diapositive dédiée si nécessaire
- *  - Dépassement : Pagination en "(suite)" dès que 7 puces ou 6 paragraphes sont atteints
+ * Règles unifiées de découpage :
+ *  - Titre # (Niveau 1) : Déclenche une diapositive de couverture (type 'title').
+ *  - Titre ## (Niveau 2) : Déclenche une diapositive de chapitre (type 'chapter').
+ *  - Titre ### (Niveau 3) : Crée une diapositive de contenu (type 'content') et mémorise son titre.
+ *  - Titres supérieurs à ### (####, #####, ######) : N'entraînent aucun saut de diapositive et sont intégrés comme sous-sections dans le corps de la diapositive courante.
+ *  - Séparateur horizontal (---) : Force la création d'une nouvelle diapositive en reprenant le titre du dernier ### qui précède.
  *
  * @function planSlides
  * @param {string} mdText - Texte Markdown normalisé
  * @param {string} [docTitle='Document'] - Titre du document
  * @param {object} [options={}] - Options de planification
+ * @param {string} [options.date] - Date optionnelle au format texte
  * @returns {PlannedSlide[]} Liste des diapositives planifiées
  */
 export function planSlides(mdText, docTitle = 'Document', options = {}) {
@@ -221,44 +221,13 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
   const slides = [];
 
   let globalTitle = docTitle || 'Document';
-  let astStartIndex = 0;
-
-  // 1. Détection du titre global (#)
-  if (ast.length > 0 && ast[0].type === 'header' && ast[0].level === 1) {
-    globalTitle = ast[0].text;
-    astStartIndex = 1;
-  }
-
-  // Passer les éventuelles métadonnées du premier bloc
-  while (astStartIndex < ast.length) {
-    const block = ast[astStartIndex];
-    if (block.type === 'header') break;
-    astStartIndex++;
-  }
-
-  // Diapositive 1 : Couverture (type 'title')
-  slides.push({
-    id: `slide-1`,
-    slideNumber: 1,
-    type: 'title',
-    title: globalTitle,
-    chapter: '',
-    date: formattedDate,
-    sectionIndex: -1,
-    slideIndex: 0,
-    slug: toSlug(globalTitle) || 'title',
-    blocks: [],
-    markdown: '',
-    startLine: 0,
-    endLine: 0,
-  });
-
   let currentSection = null;
+  let lastH3Title = null;
   let sectionIndex = 0;
   let currentSlide = null;
 
   const flushSlide = () => {
-    if (currentSlide && currentSlide.blocks.length > 0) {
+    if (currentSlide && (currentSlide.blocks.length > 0 || currentSlide.isExplicit)) {
       currentSlide.markdown = currentSlide.blocks.map(blockToMarkdown).join('\n\n').trim();
       slides.push(currentSlide);
       currentSlide = null;
@@ -267,7 +236,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
 
   const ensureContentSlide = (title, blockStartLine = null) => {
     if (!currentSlide) {
-      const slideTitle = title || currentSection || 'Contenu';
+      const slideTitle = title || lastH3Title || currentSection || globalTitle || 'Contenu';
       currentSlide = {
         id: `slide-${slides.length + 1}`,
         slideNumber: slides.length + 1,
@@ -287,21 +256,29 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
     return currentSlide;
   };
 
-  for (let i = astStartIndex; i < ast.length; i++) {
+  for (let i = 0; i < ast.length; i++) {
     const block = ast[i];
 
     if (block.type === 'header') {
-      flushSlide();
-
       if (block.level === 1) {
-        // Nouveau titre principal de niveau 1
-        slides.push({
+        // Règle 1 : Un titre # déclenche un slide de couverture
+        if (currentSlide && currentSlide.blocks.length === 0) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
+        globalTitle = block.text;
+        lastH3Title = null;
+
+        const coverSlide = {
           id: `slide-${slides.length + 1}`,
           slideNumber: slides.length + 1,
           type: 'title',
           title: block.text,
           chapter: '',
           date: formattedDate,
+          metadata: '',
           sectionIndex: ++sectionIndex,
           slideIndex: slides.length,
           slug: toSlug(block.text) || `title-${slides.length + 1}`,
@@ -309,58 +286,129 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
           markdown: '',
           startLine: block.startLine ?? 0,
           endLine: block.endLine ?? block.startLine ?? 0,
-        });
+        };
+
+        // Capturer d'éventuelles métadonnées (sous-titre, auteur) immédiatement sous le titre #
+        const metaTexts = [];
+        let j = i + 1;
+        while (j < ast.length && ast[j].type !== 'header' && ast[j].type !== 'separator') {
+          if (ast[j].type === 'paragraph' || ast[j].type === 'list_item') {
+            const txt = ast[j].text || ast[j].runs?.map((r) => r.text).join('') || '';
+            if (txt) metaTexts.push(txt);
+            coverSlide.endLine = ast[j].endLine ?? ast[j].startLine ?? coverSlide.endLine;
+          }
+          j++;
+        }
+        if (metaTexts.length > 0) {
+          coverSlide.metadata = metaTexts.join('  •  ');
+          i = j - 1;
+        }
+
+        slides.push(coverSlide);
+        currentSlide = null;
         continue;
       }
 
       if (block.level === 2) {
-        // Titre de section / chapitre
+        // Règle 2 : Un titre ## déclenche un slide de chapitre
+        if (currentSlide && currentSlide.blocks.length === 0) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
         currentSection = block.text;
+        lastH3Title = null;
+
         slides.push({
           id: `slide-${slides.length + 1}`,
           slideNumber: slides.length + 1,
           type: 'chapter',
-          title: currentSection,
-          chapter: currentSection,
+          title: block.text,
+          chapter: block.text,
           date: formattedDate,
           sectionIndex: ++sectionIndex,
           slideIndex: slides.length,
-          slug: toSlug(currentSection) || `chapter-${slides.length + 1}`,
+          slug: toSlug(block.text) || `chapter-${slides.length + 1}`,
           blocks: [],
           markdown: '',
           startLine: block.startLine ?? 0,
           endLine: block.endLine ?? block.startLine ?? 0,
         });
+        currentSlide = null;
         continue;
       }
 
-      // Niveau 3 ou supérieur (###, etc.)
-      currentSlide = {
-        id: `slide-${slides.length + 1}`,
-        slideNumber: slides.length + 1,
-        type: 'content',
-        title: block.text,
-        chapter: currentSection || globalTitle,
-        date: formattedDate,
-        sectionIndex,
-        slideIndex: slides.length,
-        slug: toSlug(block.text) || `slide-${slides.length + 1}`,
-        blocks: [],
-        markdown: '',
-        startLine: block.startLine ?? 0,
-        endLine: block.endLine ?? block.startLine ?? 0,
-      };
+      if (block.level === 3) {
+        // Règle 3 : Un titre ### crée un slide de type slide
+        if (currentSlide && currentSlide.blocks.length === 0) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
+        lastH3Title = block.text;
+
+        currentSlide = {
+          id: `slide-${slides.length + 1}`,
+          slideNumber: slides.length + 1,
+          type: 'content',
+          title: block.text,
+          chapter: currentSection || globalTitle,
+          date: formattedDate,
+          sectionIndex,
+          slideIndex: slides.length,
+          slug: toSlug(block.text) || `slide-${slides.length + 1}`,
+          blocks: [],
+          markdown: '',
+          startLine: block.startLine ?? 0,
+          endLine: block.endLine ?? block.startLine ?? 0,
+        };
+        continue;
+      }
+
+      // Règle 4 : Les titres supérieurs à ### ne créent pas de nouveaux slides
+      // Ils deviennent des sous-sections de contenu dans la diapositive courante
+      if (!currentSlide) {
+        ensureContentSlide(lastH3Title || currentSection || globalTitle || 'Contenu', block.startLine ?? 0);
+      }
+      if (currentSlide.startLine === undefined) {
+        currentSlide.startLine = block.startLine ?? 0;
+      }
+      if (block.endLine !== undefined) {
+        currentSlide.endLine = block.endLine;
+      }
+      currentSlide.blocks.push(block);
+      currentSlide.isExplicit = false;
       continue;
     }
 
     if (block.type === 'separator') {
-      // Délimiteur explicite de diapositive (---)
+      // Règle 5 : Saut de slide avec --- reprenant le titre du ### qui précède
       flushSlide();
+      const inheritedTitle = lastH3Title || currentSection || globalTitle || 'Contenu';
+      currentSlide = {
+        id: `slide-${slides.length + 1}`,
+        slideNumber: slides.length + 1,
+        type: 'content',
+        title: inheritedTitle,
+        chapter: currentSection || globalTitle,
+        date: formattedDate,
+        sectionIndex,
+        slideIndex: slides.length,
+        slug: toSlug(inheritedTitle) || `slide-${slides.length + 1}`,
+        blocks: [],
+        markdown: '',
+        startLine: block.endLine !== undefined ? block.endLine + 1 : (block.startLine ?? 0) + 1,
+        endLine: block.endLine !== undefined ? block.endLine + 1 : (block.startLine ?? 0) + 1,
+        isExplicit: true,
+      };
       continue;
     }
 
+    // Autres blocs de contenu (paragraphes, listes, tableaux, diagrammes, images)
     if (!currentSlide) {
-      ensureContentSlide(null, block.startLine ?? 0);
+      ensureContentSlide(lastH3Title || currentSection || globalTitle || 'Contenu', block.startLine ?? 0);
     }
 
     if (currentSlide.startLine === undefined) {
@@ -370,37 +418,8 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
       currentSlide.endLine = block.endLine;
     }
 
-    if (block.type === 'table') {
-      if (currentSlide.blocks.length > 2) {
-        flushSlide();
-        ensureContentSlide(currentSection ? `${currentSection} - Données` : 'Données', block.startLine ?? 0);
-      }
-      currentSlide.blocks.push(block);
-      flushSlide();
-    } else if (block.type === 'image' || block.type === 'mermaid') {
-      if (currentSlide.blocks.length > 2) {
-        flushSlide();
-        ensureContentSlide(currentSection ? `${currentSection} - Schéma` : 'Schéma', block.startLine ?? 0);
-      }
-      currentSlide.blocks.push(block);
-      flushSlide();
-    } else if (block.type === 'list_item') {
-      currentSlide.blocks.push(block);
-      const listCount = currentSlide.blocks.filter((b) => b.type === 'list_item').length;
-      if (listCount >= 7) {
-        const prevTitle = currentSlide.title;
-        flushSlide();
-        ensureContentSlide(`${prevTitle} (suite)`, block.endLine ?? 0);
-      }
-    } else if (block.type === 'paragraph') {
-      currentSlide.blocks.push(block);
-      const paraCount = currentSlide.blocks.filter((b) => b.type === 'paragraph').length;
-      if (paraCount >= 6) {
-        const prevTitle = currentSlide.title;
-        flushSlide();
-        ensureContentSlide(`${prevTitle} (suite)`, block.endLine ?? 0);
-      }
-    }
+    currentSlide.blocks.push(block);
+    currentSlide.isExplicit = false;
   }
 
   flushSlide();

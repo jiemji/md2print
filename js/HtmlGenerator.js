@@ -345,8 +345,9 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
             <div class="slide slide-title ${activeClass}" data-slide-index="${idx}" data-slug="${escapeHtml(slide.slug)}">
               <div class="slide-inner slide-title-inner">
                 <div class="slide-title-card">
-                  <h1 class="slide-main-title">${escapeHtml(docTitle || 'Document')}</h1>
+                  <h1 class="slide-main-title">${escapeHtml(slide.title || docTitle || 'Document')}</h1>
                   <div class="slide-title-meta">
+                    ${slide.metadata ? `<span class="slide-title-metadata">${escapeHtml(slide.metadata)}</span>` : ''}
                     <span class="slide-title-date">${escapeHtml(slide.date)}</span>
                   </div>
                 </div>
@@ -598,6 +599,64 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
             window.prevSlide();
           }
         });
+
+        let lastWheelTime = 0;
+        const WHEEL_COOLDOWN = 350;
+
+        /**
+         * Détermine récursivement si un élément ou l'un de ses ancêtres peut défiler verticalement.
+         * @param {EventTarget} target - Élément source sous le pointeur
+         * @param {number} deltaY - Amplitude du déplacement de la molette
+         * @returns {boolean} true si l'élément possède une marge de défilement actif
+         */
+        function canElementScroll(target, deltaY) {
+          let el = target;
+          while (el && el !== document.body && el !== document.documentElement) {
+            if (el.id === 'tocSidebar') {
+              return !el.classList.contains('collapsed');
+            }
+            const style = window.getComputedStyle(el);
+            const overflowY = style.overflowY;
+            if (overflowY === 'auto' || overflowY === 'scroll') {
+              if (deltaY > 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1) {
+                return true;
+              }
+              if (deltaY < 0 && el.scrollTop > 1) {
+                return true;
+              }
+            }
+            el = el.parentElement;
+          }
+          return false;
+        }
+
+        window.addEventListener(
+          'wheel',
+          (e) => {
+            if (document.body.getAttribute('data-view-mode') !== 'slide') return;
+            if (e.ctrlKey) return;
+            if (canElementScroll(e.target, e.deltaY)) return;
+
+            if (Math.abs(e.deltaY) < 15) return;
+
+            const now = Date.now();
+            if (now - lastWheelTime < WHEEL_COOLDOWN) {
+              e.preventDefault();
+              return;
+            }
+
+            if (e.deltaY > 0) {
+              e.preventDefault();
+              lastWheelTime = now;
+              window.nextSlide();
+            } else if (e.deltaY < 0) {
+              e.preventDefault();
+              lastWheelTime = now;
+              window.prevSlide();
+            }
+          },
+          { passive: false }
+        );
       }
 
       function initScrollSpy() {

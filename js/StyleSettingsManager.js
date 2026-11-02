@@ -13,11 +13,12 @@ import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
  */
 export const DEFAULT_STYLE_CONFIG = {
   report: {
-    hMain: { font: 'Calibri Light', size: '2.4rem', color: '#C00000' },
-    h1: { font: 'Calibri Light', size: '1.65rem', color: '#C00000' },
-    h2: { font: 'Calibri Light', size: '1.35rem', color: '#2F5496' },
-    h3: { font: 'Calibri Light', size: '1.18rem', color: '#2F5496' },
-    h4: { font: 'Calibri Light', size: '1.05rem', color: '#2F5496' },
+    hMain: { font: 'Calibri Light', size: '2.4rem', color: '#C00000', transform: 'none', bold: true, underline: false },
+    h1: { font: 'Calibri Light', size: '1.65rem', color: '#C00000', transform: 'none', bold: true, underline: false },
+    h2: { font: 'Calibri Light', size: '1.35rem', color: '#2F5496', transform: 'none', bold: true, underline: false },
+    h3: { font: 'Calibri Light', size: '1.18rem', color: '#2F5496', transform: 'none', bold: true, underline: false },
+    h4: { font: 'Calibri Light', size: '1.05rem', color: '#2F5496', transform: 'none', bold: true, underline: false },
+    h5: { font: 'Calibri Light', size: '0.98rem', color: '#2F5496', transform: 'none', bold: true, underline: false },
     body: {
       font: 'Calibri',
       size: '1rem',
@@ -64,14 +65,17 @@ export const DEFAULT_STYLE_CONFIG = {
       rowAltBg: '#f8fafc',
       border: '#cbd5e1',
     },
+    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100 },
+    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100 },
     page: { bgBackdrop: '#f1f5f9', bgPaper: '#ffffff', border: '#d1d5db' },
   },
   slide: {
-    hMain: { font: 'Aptos Display', size: '2.8rem', color: '#0E2841' },
-    h1: { font: 'Aptos Display', size: '2.3rem', color: '#0E2841' },
-    h2: { font: 'Aptos Display', size: '1.85rem', color: '#0E2841' },
-    h3: { font: 'Aptos Display', size: '1.35rem', color: '#0E2841' },
-    h4: { font: 'Aptos Display', size: '1.15rem', color: '#64748b' },
+    hMain: { font: 'Aptos Display', size: '2.8rem', color: '#0E2841', transform: 'none', bold: true, underline: false },
+    h1: { font: 'Aptos Display', size: '2.3rem', color: '#0E2841', transform: 'none', bold: true, underline: false },
+    h2: { font: 'Aptos Display', size: '1.85rem', color: '#0E2841', transform: 'none', bold: true, underline: false },
+    h3: { font: 'Aptos Display', size: '1.35rem', color: '#0E2841', transform: 'none', bold: true, underline: false },
+    h4: { font: 'Aptos Display', size: '1.15rem', color: '#64748b', transform: 'none', bold: true, underline: false },
+    h5: { font: 'Aptos Display', size: '1.05rem', color: '#64748b', transform: 'none', bold: true, underline: false },
     body: {
       font: 'Aptos',
       size: '1.25rem',
@@ -118,6 +122,8 @@ export const DEFAULT_STYLE_CONFIG = {
       rowAltBg: '#f8fafc',
       border: '#cbd5e1',
     },
+    coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100 },
+    chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100 },
     page: { bgBackdrop: '#0b1120', bgPaper: '#ffffff', border: '#cbd5e1' },
   },
 };
@@ -143,6 +149,32 @@ export const FONT_OPTIONS = [
   'JetBrains Mono',
   'Courier New',
 ];
+
+/**
+ * Formate les propriétés CSS d'un titre (police, taille, couleur, casse, gras, souligné).
+ * @param {object} h - Propriétés du titre
+ * @param {string} fallbackFont - Police de secours
+ * @param {string} defaultSize - Taille de secours
+ * @param {string} defaultColor - Couleur de secours
+ * @returns {string} Lignes CSS formatées
+ */
+function formatHeadingCss(h, fallbackFont, defaultSize, defaultColor) {
+  const font = h?.font || fallbackFont || 'sans-serif';
+  const size = h?.size || defaultSize || '1rem';
+  const color = h?.color || defaultColor || '#000000';
+  const transform = h?.transform && h.transform !== 'none' ? `text-transform: ${h.transform};` : '';
+  const weight = h?.bold !== undefined ? (h.bold ? 'font-weight: 700;' : 'font-weight: 400;') : 'font-weight: 700;';
+  const decoration = h?.underline ? 'text-decoration: underline;' : (h?.underline === false ? 'text-decoration: none;' : '');
+
+  return [
+    `font-family: '${font}', sans-serif;`,
+    `font-size: ${size};`,
+    `color: ${color};`,
+    transform,
+    weight,
+    decoration,
+  ].filter(Boolean).join('\n  ');
+}
 
 /**
  * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
@@ -178,31 +210,78 @@ export function generateThemeCss(mode, config) {
   --slide-metric-val-color: ${cfg.metric.valColor};
 }
 
+/* === Titres & Hiérarchie === */
 .slide-main-title {
-  font-family: '${cfg.hMain.font}', sans-serif;
-  font-size: ${cfg.hMain.size};
-  color: ${cfg.hMain.color};
+  ${formatHeadingCss(cfg.hMain, cfg.hMain.font, cfg.hMain.size, cfg.hMain.color)}
 }
 .slide-chapter-title {
-  font-family: '${cfg.h1.font}', sans-serif;
-  font-size: ${cfg.h1.size};
-  color: ${cfg.h1.color};
+  ${formatHeadingCss(cfg.h1, cfg.h1.font, cfg.h1.size, cfg.h1.color)}
 }
 .slide-header-title {
-  font-family: '${cfg.h2.font}', sans-serif;
-  font-size: ${cfg.h2.size};
-  color: ${cfg.h2.color};
+  ${formatHeadingCss(cfg.h2, cfg.h2.font, cfg.h2.size, cfg.h2.color)}
 }
 .slide-body h3 {
-  font-family: '${cfg.h3.font}', sans-serif;
-  font-size: ${cfg.h3.size};
-  color: ${cfg.h3.color};
+  ${formatHeadingCss(cfg.h3, cfg.h3.font, cfg.h3.size, cfg.h3.color)}
 }
 .slide-body h4 {
-  font-family: '${cfg.h4.font}', sans-serif;
-  font-size: ${cfg.h4.size};
-  color: ${cfg.h4.color};
+  ${formatHeadingCss(cfg.h3, cfg.h3.font, cfg.h3.size, cfg.h3.color)}
 }
+.slide-body h5 {
+  ${formatHeadingCss(cfg.h4, cfg.h4.font, cfg.h4.size, cfg.h4.color)}
+}
+.slide-body h6 {
+  ${formatHeadingCss(cfg.h5, cfg.h5?.font || cfg.h4.font, cfg.h5?.size || '1.05rem', cfg.h5?.color || cfg.h4.color)}
+}
+
+/* === Fonds spécifiques Couverture (#) et Chapitre (##) === */
+.slide.slide-title {
+  background-color: ${cfg.coverSlide?.bg || '#ffffff'} !important;
+  background-image: none !important;
+  position: relative;
+}
+${cfg.coverSlide?.bgImage ? `
+.slide.slide-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('${cfg.coverSlide.bgImage}') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  opacity: ${(Number(cfg.coverSlide.bgOpacity ?? 100) / 100).toFixed(2)} !important;
+  pointer-events: none;
+  z-index: 0;
+}
+.slide.slide-title > * {
+  position: relative;
+  z-index: 1;
+}
+` : ''}
+
+.slide.slide-chapter {
+  background-color: ${cfg.chapterSlide?.bg || '#f8fafc'} !important;
+  background-image: none !important;
+  position: relative;
+}
+${cfg.chapterSlide?.bgImage ? `
+.slide.slide-chapter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('${cfg.chapterSlide.bgImage}') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  opacity: ${(Number(cfg.chapterSlide.bgOpacity ?? 100) / 100).toFixed(2)} !important;
+  pointer-events: none;
+  z-index: 0;
+}
+.slide.slide-chapter > * {
+  position: relative;
+  z-index: 1;
+}
+` : ''}
+
 .slide-body, .slide-body p, .slide-body li {
   font-family: '${cfg.body.font}', sans-serif;
   font-size: ${cfg.body.size};
@@ -339,32 +418,27 @@ export function generateThemeCss(mode, config) {
   --report-metric-val-color: ${cfg.metric.valColor};
 }
 
+/* === Titres & Hiérarchie === */
 .doc-main-title {
-  font-family: '${cfg.hMain.font}', sans-serif;
-  font-size: ${cfg.hMain.size};
-  color: ${cfg.hMain.color};
+  ${formatHeadingCss(cfg.hMain, cfg.hMain.font, cfg.hMain.size, cfg.hMain.color)}
   border-bottom-color: ${cfg.hMain.color};
 }
 .doc-h2 {
-  font-family: '${cfg.h1.font}', sans-serif;
-  font-size: ${cfg.h1.size};
-  color: ${cfg.h1.color};
+  ${formatHeadingCss(cfg.h1, cfg.h1.font, cfg.h1.size, cfg.h1.color)}
 }
 .doc-h3 {
-  font-family: '${cfg.h2.font}', sans-serif;
-  font-size: ${cfg.h2.size};
-  color: ${cfg.h2.color};
+  ${formatHeadingCss(cfg.h2, cfg.h2.font, cfg.h2.size, cfg.h2.color)}
 }
 .doc-h4 {
-  font-family: '${cfg.h3.font}', sans-serif;
-  font-size: ${cfg.h3.size};
-  color: ${cfg.h3.color};
+  ${formatHeadingCss(cfg.h3, cfg.h3.font, cfg.h3.size, cfg.h3.color)}
 }
 .doc-h5 {
-  font-family: '${cfg.h4.font}', sans-serif;
-  font-size: ${cfg.h4.size};
-  color: ${cfg.h4.color};
+  ${formatHeadingCss(cfg.h4, cfg.h4.font, cfg.h4.size, cfg.h4.color)}
 }
+.doc-h6 {
+  ${formatHeadingCss(cfg.h5, cfg.h5?.font || cfg.h4.font, cfg.h5?.size || '0.98rem', cfg.h5?.color || cfg.h4.color)}
+}
+
 .markdown-rendered-content p, .markdown-rendered-content li {
   font-family: '${cfg.body.font}', sans-serif;
   font-size: ${cfg.body.size};
@@ -557,6 +631,10 @@ export class StyleSettingsManager {
     if (!this.container) return;
     this.render();
     this.bindEvents();
+    const slideBgSection = this.container.querySelector('#slideBackgroundsSection');
+    if (slideBgSection) {
+      slideBgSection.style.display = this.activeMode === 'slide' ? 'block' : 'none';
+    }
     this.updateFormValues();
     this.updateLivePreview();
   }
@@ -595,11 +673,12 @@ export class StyleSettingsManager {
                 <span class="config-card-title">Titres et Hiérarchie</span>
               </div>
               <div class="config-card-content">
-                ${this.renderTagControlRow('hMain', 'Titre principal (# / Couverture)')}
-                ${this.renderTagControlRow('h1', 'Titre 1 (## / Chapitre)')}
-                ${this.renderTagControlRow('h2', 'Titre 2 (### / Sous-chapitre)')}
-                ${this.renderTagControlRow('h3', 'Titre 3 (#### / Section)')}
-                ${this.renderTagControlRow('h4', 'Titre 4 (##### / Sous-section)')}
+                ${this.renderTitleControlRow('hMain', 'Titre # (Couverture / Titre principal)')}
+                ${this.renderTitleControlRow('h1', 'Titre ## (Chapitre / Titre 1)')}
+                ${this.renderTitleControlRow('h2', 'Titre ### (Slide de contenu / Titre 2)')}
+                ${this.renderTitleControlRow('h3', 'Titre #### (Sous-titre de niveau 4 / Titre 3)')}
+                ${this.renderTitleControlRow('h4', 'Titre ##### (Sous-titre de niveau 5 / Titre 4)')}
+                ${this.renderTitleControlRow('h5', 'Titre ###### (Sous-titre de niveau 6 / Titre 5)')}
               </div>
             </div>
 
@@ -766,7 +845,7 @@ export class StyleSettingsManager {
               </div>
             </div>
 
-            <!-- 5. Citations & Extraits -->
+            <!-- 6. Citations & Extraits -->
             <div class="config-card">
               <div class="config-card-header">
                 <span class="config-card-title">Citations et Extraits (>)</span>
@@ -804,7 +883,7 @@ export class StyleSettingsManager {
               </div>
             </div>
 
-            <!-- 6. Code & Monospace -->
+            <!-- 7. Code & Monospace -->
             <div class="config-card">
               <div class="config-card-header">
                 <span class="config-card-title">Code et Monospace (pre, code)</span>
@@ -843,7 +922,7 @@ export class StyleSettingsManager {
               </div>
             </div>
 
-            <!-- 7. Tableaux -->
+            <!-- 8. Tableaux -->
             <div class="config-card">
               <div class="config-card-header">
                 <span class="config-card-title">Tableaux (table, th, td)</span>
@@ -899,15 +978,21 @@ export class StyleSettingsManager {
               </div>
             </div>
 
-            <!-- 8. Arrière-plans globaux -->
+            <!-- 9. Arrière-plans globaux et de diapositives -->
             <div class="config-card">
               <div class="config-card-header">
                 <span class="config-card-title">Arrière-plans et Structure</span>
               </div>
               <div class="config-card-content">
+                <!-- Section spécifique Vision Slide : Couverture et Chapitre -->
+                <div id="slideBackgroundsSection" class="slide-bg-section">
+                  ${this.renderSlideBackgroundControlRow('coverSlide', 'Diapositive de Couverture (Slide #)')}
+                  ${this.renderSlideBackgroundControlRow('chapterSlide', 'Diapositive de Chapitre (Slide ##)')}
+                </div>
+
                 <div class="config-row">
                   <div class="config-label-col">
-                    <span class="config-tag-label">Couleurs de scène</span>
+                    <span class="config-tag-label">Scène et Diapositives standard</span>
                   </div>
                   <div class="config-inputs-col">
                     <div class="input-inline-group">
@@ -916,7 +1001,7 @@ export class StyleSettingsManager {
                       <input type="text" class="text-input color-hex-input" data-bind="page.bgBackdrop" spellcheck="false">
                     </div>
                     <div class="input-inline-group">
-                      <label class="input-sublabel">Fond document/diapo</label>
+                      <label class="input-sublabel">Fond document/diapo standard</label>
                       <input type="color" class="color-picker-input" data-bind="page.bgPaper">
                       <input type="text" class="text-input color-hex-input" data-bind="page.bgPaper" spellcheck="false">
                     </div>
@@ -953,7 +1038,87 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML d'une ligne de réglage pour un titre ou paragraphe.
+   * Génère le HTML d'une ligne de réglage pour un titre avec police, taille, couleur, casse, gras et souligné.
+   */
+  renderTitleControlRow(bindKey, labelText) {
+    return `
+      <div class="config-row config-title-row">
+        <div class="config-label-col">
+          <span class="config-tag-label">${labelText}</span>
+        </div>
+        <div class="config-inputs-col">
+          <div class="input-inline-group">
+            <label class="input-sublabel">Police</label>
+            ${this.renderFontSelect(`${bindKey}.font`)}
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Taille</label>
+            <input type="text" class="text-input size-input" data-bind="${bindKey}.size" placeholder="1.4rem">
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Couleur</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.color">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.color" spellcheck="false">
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Casse</label>
+            <select class="select-input font-select" data-bind="${bindKey}.transform">
+              <option value="none">Normal</option>
+              <option value="uppercase">Majuscules</option>
+              <option value="capitalize">Capitalisé</option>
+            </select>
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Format</label>
+            <div class="checkbox-inline-row">
+              <label class="checkbox-inline-label">
+                <input type="checkbox" class="config-checkbox" data-bind="${bindKey}.bold"> Gras
+              </label>
+              <label class="checkbox-inline-label">
+                <input type="checkbox" class="config-checkbox" data-bind="${bindKey}.underline"> Souligné
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Génère le HTML d'une ligne de réglage pour un fond de slide (couleur, image et transparence).
+   */
+  renderSlideBackgroundControlRow(bindKey, labelText) {
+    return `
+      <div class="config-row config-bg-row">
+        <div class="config-label-col">
+          <span class="config-tag-label">${labelText}</span>
+        </div>
+        <div class="config-inputs-col">
+          <div class="input-inline-group">
+            <label class="input-sublabel">Couleur de fond</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.bg">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.bg" spellcheck="false">
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Image de fond</label>
+            <div class="file-picker-group">
+              <input type="file" id="${bindKey}FileInput" class="hidden-input" accept="image/*">
+              <button type="button" class="btn btn-sm" id="btnUpload_${bindKey}">Choisir image...</button>
+              <button type="button" class="btn btn-sm" id="btnClear_${bindKey}">Supprimer</button>
+            </div>
+            <span class="file-name-indicator" id="${bindKey}_fileName">Aucune image</span>
+          </div>
+          <div class="input-inline-group">
+            <label class="input-sublabel">Transparence (<span id="${bindKey}_opacityVal">100 %</span>)</label>
+            <input type="range" min="0" max="100" class="range-slider" data-bind="${bindKey}.bgOpacity" id="${bindKey}_opacityRange">
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Génère le HTML d'une ligne de réglage simple (paragraphe, etc.).
    */
   renderTagControlRow(bindKey, labelText) {
     return `
@@ -1080,6 +1245,42 @@ export class StyleSettingsManager {
       this.onClose();
     });
 
+    // Gestion du chargement d'image pour fond de couverture et de chapitre
+    ['coverSlide', 'chapterSlide'].forEach((key) => {
+      const fileInput = this.container.querySelector(`#${key}FileInput`);
+      const uploadBtn = this.container.querySelector(`#btnUpload_${key}`);
+      const clearBtn = this.container.querySelector(`#btnClear_${key}`);
+      const fileNameLabel = this.container.querySelector(`#${key}_fileName`);
+
+      uploadBtn?.addEventListener('click', () => {
+        if (fileInput) {
+          fileInput.value = '';
+          fileInput.click();
+        }
+      });
+
+      fileInput?.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          const dataUrl = evt.target.result;
+          this.setBindValue(`${key}.bgImage`, dataUrl);
+          this.setBindValue(`${key}.bgImageName`, file.name);
+          if (fileNameLabel) fileNameLabel.textContent = file.name;
+          this.updateLivePreview();
+        };
+        reader.readAsDataURL(file);
+      });
+
+      clearBtn?.addEventListener('click', () => {
+        this.setBindValue(`${key}.bgImage`, '');
+        this.setBindValue(`${key}.bgImageName`, '');
+        if (fileNameLabel) fileNameLabel.textContent = 'Aucune image';
+        this.updateLivePreview();
+      });
+    });
+
     // Slider vertical : redimensionnement interactif entre panneau de paramètres et aperçu
     const resizer = this.container.querySelector('#styleConfigResizer');
     const configBody = this.container.querySelector('#styleConfigBody');
@@ -1114,16 +1315,15 @@ export class StyleSettingsManager {
       });
     }
 
-    // Synchronisation en temps réel des inputs (color picker, hex text, font, size)
+    // Synchronisation en temps réel des inputs (color picker, hex text, font, size, checkbox, range)
     this.container.addEventListener('input', (e) => {
       const target = e.target;
       const bind = target.getAttribute('data-bind');
       if (!bind) return;
 
-      const val = target.value;
+      const val = target.type === 'checkbox' ? target.checked : target.value;
       this.setBindValue(bind, val);
 
-      // Si c'est un sélecteur de couleur natif ou un texte hex, synchroniser son alter-ego
       if (target.classList.contains('color-picker-input')) {
         const textInput = this.container.querySelector(`.color-hex-input[data-bind="${bind}"]`);
         if (textInput) textInput.value = val.toUpperCase();
@@ -1132,6 +1332,10 @@ export class StyleSettingsManager {
           const picker = this.container.querySelector(`.color-picker-input[data-bind="${bind}"]`);
           if (picker) picker.value = val;
         }
+      } else if (target.classList.contains('range-slider')) {
+        const key = bind.split('.')[0];
+        const valSpan = this.container.querySelector(`#${key}_opacityVal`);
+        if (valSpan) valSpan.textContent = `${val} %`;
       }
 
       this.updateLivePreview();
@@ -1141,7 +1345,15 @@ export class StyleSettingsManager {
       const target = e.target;
       const bind = target.getAttribute('data-bind');
       if (!bind) return;
-      this.setBindValue(bind, target.value);
+      const val = target.type === 'checkbox' ? target.checked : target.value;
+      this.setBindValue(bind, val);
+
+      if (target.classList.contains('range-slider')) {
+        const key = bind.split('.')[0];
+        const valSpan = this.container.querySelector(`#${key}_opacityVal`);
+        if (valSpan) valSpan.textContent = `${val} %`;
+      }
+
       this.updateLivePreview();
     });
   }
@@ -1186,6 +1398,11 @@ export class StyleSettingsManager {
       badge.textContent = mode === 'slide' ? 'Vision Slide (16:9)' : 'Vision Rapport (Word)';
     }
 
+    const slideBgSection = this.container.querySelector('#slideBackgroundsSection');
+    if (slideBgSection) {
+      slideBgSection.style.display = mode === 'slide' ? 'block' : 'none';
+    }
+
     this.updateFormValues();
     this.updateLivePreview();
   }
@@ -1199,7 +1416,31 @@ export class StyleSettingsManager {
       const path = input.getAttribute('data-bind');
       const val = this.getBindValue(path);
       if (val !== undefined) {
-        input.value = val;
+        if (input.type === 'checkbox') {
+          input.checked = Boolean(val);
+        } else {
+          input.value = val;
+        }
+      }
+    });
+
+    // Mettre à jour les indicateurs d'images et de curseurs d'opacité
+    ['coverSlide', 'chapterSlide'].forEach((key) => {
+      const fileNameLabel = this.container.querySelector(`#${key}_fileName`);
+      const opacityVal = this.container.querySelector(`#${key}_opacityVal`);
+      const opacityRange = this.container.querySelector(`#${key}_opacityRange`);
+      const imgName = this.getBindValue(`${key}.bgImageName`);
+      const hasImg = Boolean(this.getBindValue(`${key}.bgImage`));
+      const opacity = this.getBindValue(`${key}.bgOpacity`) ?? 100;
+
+      if (fileNameLabel) {
+        fileNameLabel.textContent = imgName || (hasImg ? 'Image configurée' : 'Aucune image');
+      }
+      if (opacityVal) {
+        opacityVal.textContent = `${opacity} %`;
+      }
+      if (opacityRange) {
+        opacityRange.value = opacity;
       }
     });
   }
@@ -1216,56 +1457,94 @@ export class StyleSettingsManager {
 
     const sampleHtml = isSlide
       ? `
-        <div class="slide slide-content active" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-shadow: none;">
-          <div class="slide-inner slide-content-inner">
-            <header class="slide-header">
-              <span class="slide-chapter-tag">Stratégie 2026</span>
-              <h2 class="slide-header-title">Évolution des Indicateurs Clés</h2>
-            </header>
-            <div class="slide-body">
-              <p>Voici l'analyse trimestrielle des résultats avec <a href="#">un lien hypertexte interactif</a> et du code <code>const kpi = 100;</code>.</p>
-              
-              <div class="metric-card">
-                <span class="metric-value">14.8M€</span>
-                <span class="metric-label">Chiffre d'Affaires (+18%)</span>
-              </div>
-
-              <p style="margin: 10px 0;">
-                <span class="badge badge-info">Q4 2026</span>
-                <span class="badge badge-success">Objectif Atteint</span>
-                <span class="badge badge-warning">À surveiller</span>
-                <span class="badge badge-danger">Bloquant</span>
-              </p>
-
-              <blockquote>
-                La clarté et la concision garantissent l'impact des présentations de direction.
-              </blockquote>
-
-              <div class="table-responsive-wrapper">
-                <table class="doc-table">
-                  <thead>
-                    <tr>
-                      <th>Catégorie</th>
-                      <th>Objectif</th>
-                      <th>Réalisé</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Performances</td>
-                      <td>12 000</td>
-                      <td>14 850</td>
-                    </tr>
-                    <tr>
-                      <td>Disponibilité</td>
-                      <td>99.9%</td>
-                      <td>99.98%</td>
-                    </tr>
-                  </tbody>
-                </table>
+        <div class="preview-slides-stack" style="display: flex; flex-direction: column; gap: 24px; padding: 12px; box-sizing: border-box;">
+          
+          <!-- Diapositive 1 : Couverture (#) -->
+          <div class="slide slide-title active" style="display: flex; width: 100%; min-height: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
+            <div class="slide-inner slide-title-inner">
+              <div class="slide-title-card">
+                <h1 class="slide-main-title">Présentation Stratégique</h1>
+                <div class="slide-title-meta">
+                  <span class="slide-title-metadata">Sous-titre et métadonnées</span>
+                  <span class="slide-title-date">02/11/2026</span>
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- Diapositive 2 : Chapitre (##) -->
+          <div class="slide slide-chapter active" style="display: flex; width: 100%; min-height: 200px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
+            <div class="slide-inner slide-chapter-inner">
+              <div class="slide-chapter-card">
+                <span class="slide-chapter-badge">Chapitre</span>
+                <h2 class="slide-chapter-title">1. Contexte & Orientations</h2>
+                <span class="slide-chapter-date">02/11/2026</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diapositive 3 : Contenu standard (###) avec sous-titres #### et ##### -->
+          <div class="slide slide-content active" style="display: flex; flex-direction: column; width: 100%; min-height: 380px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
+            <div class="slide-inner slide-content-inner">
+              <header class="slide-header">
+                <span class="slide-chapter-tag">Stratégie 2026</span>
+                <h2 class="slide-header-title">Évolution des Indicateurs Clés</h2>
+              </header>
+              <div class="slide-body">
+                <p>Voici l'analyse des résultats avec <a href="#">un lien hypertexte interactif</a> et du code <code>const kpi = 100;</code>.</p>
+                
+                <h4>Sous-titre de niveau 4 (####)</h4>
+                <p>Détail de la sous-section pour valider la typographie et la casse.</p>
+
+                <h5>Sous-titre de niveau 5 (#####)</h5>
+                <p>Précision opérationnelle affichée dans la diapositive.</p>
+
+                <h6>Sous-titre de niveau 6 (######)</h6>
+                <p>Dernier niveau de titre hiérarchique.</p>
+
+                <div class="metric-card">
+                  <span class="metric-value">14.8M€</span>
+                  <span class="metric-label">Chiffre d'Affaires (+18%)</span>
+                </div>
+
+                <p style="margin: 10px 0;">
+                  <span class="badge badge-info">Q4 2026</span>
+                  <span class="badge badge-success">Objectif Atteint</span>
+                  <span class="badge badge-warning">À surveiller</span>
+                  <span class="badge badge-danger">Bloquant</span>
+                </p>
+
+                <blockquote>
+                  La clarté et la concision garantissent l'impact des présentations de direction.
+                </blockquote>
+
+                <div class="table-responsive-wrapper">
+                  <table class="doc-table">
+                    <thead>
+                      <tr>
+                        <th>Catégorie</th>
+                        <th>Objectif</th>
+                        <th>Réalisé</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Performances</td>
+                        <td>12 000</td>
+                        <td>14 850</td>
+                      </tr>
+                      <tr>
+                        <td>Disponibilité</td>
+                        <td>99.9%</td>
+                        <td>99.98%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       `
       : `
@@ -1276,6 +1555,16 @@ export class StyleSettingsManager {
           <p>Ce document illustre la mise en page paramétrée du rapport avec un <a href="#">lien hypertexte cliquable</a> et du code inline <code>data.status = 200</code>.</p>
           
           <h3 class="doc-heading doc-h3">1.1 Indicateurs de Performance</h3>
+          <p>Détails des indicateurs clés de la période.</p>
+
+          <h4 class="doc-heading doc-h4">1.1.1 Tableau récapitulatif</h4>
+          <p>Sous-section de niveau 4.</p>
+
+          <h5 class="doc-heading doc-h5">1.1.1.1 Sous-section de niveau 5</h5>
+          <p>Point opérationnel pour tester le titre de niveau 5.</p>
+
+          <h6 class="doc-heading doc-h6">1.1.1.1.1 Sous-section de niveau 6</h6>
+          <p>Point de conformité de niveau 6.</p>
           
           <div class="metric-card">
             <span class="metric-value">14.8M€</span>
@@ -1300,7 +1589,6 @@ export class StyleSettingsManager {
             L'excellence opérationnelle commence par la rigueur documentaire.
           </blockquote>
 
-          <h4 class="doc-heading doc-h4">1.1.1 Tableau récapitulatif</h4>
           <div class="table-responsive-wrapper">
             <table class="doc-table">
               <thead>

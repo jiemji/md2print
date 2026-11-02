@@ -899,6 +899,37 @@ function initEventListeners() {
   dom.btnViewReport.addEventListener('click', () => setViewMode('report'));
   dom.btnViewSlide.addEventListener('click', () => setViewMode('slide'));
 
+  // Navigation molette en vue Slide sur le panneau d'aperçu
+  let lastPreviewWheelTime = 0;
+  dom.panePreview?.addEventListener(
+    'wheel',
+    (e) => {
+      if (state.currentViewport !== 'slide') return;
+      if (e.ctrlKey) return;
+      const iframeWin = dom.previewIframe?.contentWindow;
+      if (!iframeWin || typeof iframeWin.nextSlide !== 'function') return;
+
+      if (Math.abs(e.deltaY) < 15) return;
+
+      const now = Date.now();
+      if (now - lastPreviewWheelTime < 350) {
+        e.preventDefault();
+        return;
+      }
+
+      if (e.deltaY > 0) {
+        e.preventDefault();
+        lastPreviewWheelTime = now;
+        iframeWin.nextSlide();
+      } else if (e.deltaY < 0) {
+        e.preventDefault();
+        lastPreviewWheelTime = now;
+        iframeWin.prevSlide();
+      }
+    },
+    { passive: false }
+  );
+
   // Accès à la page de paramétrage des styles de balises
   dom.btnOpenStyleSettings?.addEventListener('click', () => {
     toggleStyleSettingsPage();

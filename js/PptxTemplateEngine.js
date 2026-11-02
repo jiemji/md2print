@@ -507,15 +507,12 @@ function fitBoundsToAspectRatio(targetBounds, imgW, imgH) {
 /**
  * Découpe et organise l'AST Markdown en diapositives structurées en fonction des masques OpenXML configurés.
  *
- * Logique de découpage appliquée :
- *  - En-tête de niveau 1 (`#`) ou premier paragraphe : diapositive de couverture (`cover` ou `h1`).
- *  - En-tête de niveau 2 (`##`) : transition de chapitre ou de section (`chapter` ou `h2`).
- *  - En-tête de niveau 3 ou supérieur (`###`..`######`) : diapositive de contenu avec le masque
- *    spécifique `h3`..`h6` configuré (ou le masque de contenu par défaut).
- *  - Séparateur horizontal (`---`) : force la création d'une nouvelle diapositive.
- *  - Pagination automatique : scinde automatiquement la diapositive en "(suite)" si elle dépasse
- *    7 éléments de liste à puces ou 6 paragraphes, tout en préservant le masque de niveau initial.
- *  - Tableaux, images et schémas Mermaid : isolés proprement sur une diapositive dédiée si nécessaire.
+ * Logique de découpage unifiée :
+ *  - Titre `#` (Niveau 1) : Déclenche une diapositive de couverture (`cover` ou `h1`).
+ *  - Titre `##` (Niveau 2) : Déclenche une diapositive de chapitre (`chapter` ou `h2`).
+ *  - Titre `###` (Niveau 3) : Crée une diapositive de contenu (`content` ou `h3`) et mémorise son titre.
+ *  - Titres supérieurs à `###` (`####`..`######`) : N'entraînent aucun saut de diapositive et sont intégrés comme sous-sections dans la diapositive courante.
+ *  - Séparateur horizontal (`---`) : Force la création d'une nouvelle diapositive en reprenant le titre du dernier `###` qui précède.
  *
  * @function segmentMarkdownToSlides
  * @param {string} mdText - Texte source Markdown brut
@@ -528,37 +525,9 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
   const ast = parseToAST(mdText);
   const slides = [];
 
-  let globalTitle = docTitle;
-  const metadataLines = [];
-  let astStartIndex = 0;
-
-  // 1. Détection du titre global (#) et des métadonnées initiales (date, auteur, blockquotes)
-  if (ast.length > 0 && ast[0].type === 'header' && ast[0].level === 1) {
-    globalTitle = ast[0].text;
-    astStartIndex = 1;
-  }
-
-  while (astStartIndex < ast.length) {
-    const block = ast[astStartIndex];
-    if (block.type === 'header') break;
-    if (block.type === 'paragraph' || block.type === 'list_item') {
-      const lineText = block.text || block.runs?.map((r) => r.text).join('') || '';
-      if (lineText) metadataLines.push(lineText);
-    }
-    astStartIndex++;
-  }
-
-  // Diapositive de Couverture (# ou titre global)
-  slides.push({
-    type: 'cover',
-    proto: prototypes.h1 || prototypes.cover,
-    title: globalTitle || 'Présentation',
-    metadata: metadataLines.join('  •  '),
-    items: [],
-  });
-
-  // 2. Découpage par niveaux de titre Markdown et diapositives de contenu
+  let globalTitle = docTitle || 'Présentation';
   let currentSection = null;
+  let lastH3Title = null;
   let currentSlide = null;
 
   const flushSlide = () => {
@@ -567,151 +536,171 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       (currentSlide.items.length > 0 ||
         currentSlide.table ||
         currentSlide.images?.length > 0 ||
-        currentSlide.mermaids?.length > 0)
+        currentSlide.mermaids?.length > 0 ||
+        currentSlide.isExplicit)
     ) {
       slides.push(currentSlide);
       currentSlide = null;
     }
   };
 
-  for (let i = astStartIndex; i < ast.length; i++) {
+  for (let i = 0; i < ast.length; i++) {
     const block = ast[i];
 
     if (block.type === 'header') {
-      flushSlide();
-
       if (block.level === 1) {
-        slides.push({
+        // Règle 1 : Titre # déclenche un slide de couverture
+        if (currentSlide && !currentSlide.items.length && !currentSlide.table && !currentSlide.images?.length && !currentSlide.mermaids?.length) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
+        globalTitle = block.text;
+        lastH3Title = null;
+
+        const coverSlide = {
           type: 'cover',
           proto: prototypes.h1 || prototypes.cover,
           title: block.text,
           metadata: '',
           items: [],
-        });
+        };
+
+        const metaTexts = [];
+        let j = i + 1;
+        while (j < ast.length && ast[j].type !== 'header' && ast[j].type !== 'separator') {
+          if (ast[j].type === 'paragraph' || ast[j].type === 'list_item') {
+            const lineText = blockToPlainText(ast[j]);
+            if (lineText) metaTexts.push(lineText);
+          }
+          j++;
+        }
+        if (metaTexts.length > 0) {
+          coverSlide.metadata = metaTexts.join('  •  ');
+          i = j - 1;
+        }
+
+        slides.push(coverSlide);
+        currentSlide = null;
         continue;
       }
 
       if (block.level === 2) {
+        // Règle 2 : Titre ## déclenche un slide de chapitre
+        if (currentSlide && !currentSlide.items.length && !currentSlide.table && !currentSlide.images?.length && !currentSlide.mermaids?.length) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
         currentSection = block.text;
+        lastH3Title = null;
+
         slides.push({
           type: 'chapter',
           proto: prototypes.h2 || prototypes.chapter,
-          title: currentSection,
+          title: block.text,
+          section: block.text,
           items: [],
         });
+        currentSlide = null;
         continue;
       }
 
-      // Niveau 3 ou supérieur (###, ####, etc.)
-      const levelProto = prototypes[`h${block.level}`] || prototypes.content;
-      currentSlide = {
-        type: 'content',
+      if (block.level === 3) {
+        // Règle 3 : Titre ### crée un slide de contenu
+        if (currentSlide && !currentSlide.items.length && !currentSlide.table && !currentSlide.images?.length && !currentSlide.mermaids?.length) {
+          currentSlide = null;
+        } else {
+          flushSlide();
+        }
+
+        lastH3Title = block.text;
+
+        currentSlide = {
+          type: 'content',
+          proto: prototypes.h3 || prototypes.content,
+          section: currentSection || globalTitle,
+          title: block.text,
+          items: [],
+        };
+        continue;
+      }
+
+      // Règle 4 : Les titres supérieurs à ### ne créent pas de nouveaux slides
+      if (!currentSlide) {
+        const fallbackTitle = lastH3Title || currentSection || globalTitle || 'Contenu';
+        currentSlide = {
+          type: 'content',
+          proto: prototypes.content,
+          section: currentSection || globalTitle,
+          title: fallbackTitle,
+          items: [],
+        };
+      }
+      currentSlide.items.push({
+        type: 'header',
         level: block.level,
-        proto: levelProto,
-        section: currentSection || globalTitle,
-        title: block.text,
-        items: [],
-      };
+        text: block.text,
+        runs: block.runs || [{ text: block.text, format: { bold: true } }],
+      });
+      currentSlide.isExplicit = false;
       continue;
     }
 
     if (block.type === 'separator') {
-      // Délimiteur explicite de diapositive (---)
+      // Règle 5 : Saut de slide avec --- reprenant le titre du ### qui précède
       flushSlide();
-      continue;
-    }
-
-    // Assurer qu'une diapositive active existe si du contenu apparaît
-    if (!currentSlide) {
+      const nextTitle = lastH3Title || currentSection || globalTitle || 'Contenu';
       currentSlide = {
         type: 'content',
         proto: prototypes.content,
         section: currentSection || globalTitle,
-        title: currentSection || 'Contenu',
+        title: nextTitle,
+        items: [],
+        isExplicit: true,
+      };
+      continue;
+    }
+
+    if (!currentSlide) {
+      const fallbackTitle = lastH3Title || currentSection || globalTitle || 'Contenu';
+      currentSlide = {
+        type: 'content',
+        proto: prototypes.content,
+        section: currentSection || globalTitle,
+        title: fallbackTitle,
         items: [],
       };
     }
 
     if (block.type === 'table') {
-      if (currentSlide.items.length > 2) {
-        flushSlide();
-        currentSlide = {
-          type: 'content',
-          proto: prototypes.content,
-          section: currentSection || globalTitle,
-          title: currentSection || 'Données',
-          items: [],
-        };
-      }
       currentSlide.table = block.rows;
-      flushSlide();
+      currentSlide.isExplicit = false;
     } else if (block.type === 'image') {
-      if (currentSlide.items.length > 2) {
-        flushSlide();
-        currentSlide = {
-          type: 'content',
-          proto: prototypes.content,
-          section: currentSection || globalTitle,
-          title: currentSection || 'Illustration',
-          items: [],
-        };
-      }
-      currentSlide.images = currentSlide.images || [];
-      currentSlide.images.push({ alt: block.alt || 'Image', src: block.src });
-      flushSlide();
+      if (!currentSlide.images) currentSlide.images = [];
+      currentSlide.images.push(block);
+      currentSlide.isExplicit = false;
     } else if (block.type === 'mermaid') {
-      if (currentSlide.items.length > 2) {
-        flushSlide();
-        currentSlide = {
-          type: 'content',
-          proto: prototypes.content,
-          section: currentSection || globalTitle,
-          title: currentSection || 'Schéma',
-          items: [],
-        };
-      }
-      currentSlide.mermaids = currentSlide.mermaids || [];
-      currentSlide.mermaids.push({ code: block.code });
-      flushSlide();
+      if (!currentSlide.mermaids) currentSlide.mermaids = [];
+      currentSlide.mermaids.push(block);
+      currentSlide.isExplicit = false;
     } else if (block.type === 'list_item') {
       currentSlide.items.push({
         type: 'list_item',
         level: block.level || 0,
-        runs: block.runs || [{ text: block.text, format: {} }],
+        text: block.text,
+        runs: block.runs || [{ text: block.text }],
       });
-
-      // Pagination automatique : 7 items max par slide
-      if (currentSlide.items.length >= 7) {
-        const prevTitle = currentSlide.title;
-        const prevProto = currentSlide.proto;
-        flushSlide();
-        currentSlide = {
-          type: 'content',
-          proto: prevProto || prototypes.content,
-          section: currentSection || globalTitle,
-          title: `${prevTitle} (suite)`,
-          items: [],
-        };
-      }
+      currentSlide.isExplicit = false;
     } else if (block.type === 'paragraph') {
       currentSlide.items.push({
         type: 'paragraph',
-        runs: block.runs || [{ text: block.text, format: {} }],
+        text: block.text,
+        runs: block.runs || [{ text: block.text }],
       });
-
-      // Pagination automatique : 6 paragraphes max par slide
-      if (currentSlide.items.length >= 6) {
-        const prevTitle = currentSlide.title;
-        const prevProto = currentSlide.proto;
-        flushSlide();
-        currentSlide = {
-          type: 'content',
-          proto: prevProto || prototypes.content,
-          section: currentSection || globalTitle,
-          title: `${prevTitle} (suite)`,
-          items: [],
-        };
-      }
+      currentSlide.isExplicit = false;
     }
   }
 

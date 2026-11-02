@@ -4,6 +4,37 @@ Toutes les modifications notables apportées à ce projet sont documentées dans
 
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.5.0] - 2026-11-02
+
+### Feature
+- **Navigation à la molette de la souris en vue Slide** :
+  - Défilement fluide de diapositive en diapositive via `wheel` (haut/bas) avec throttling de 350 ms pour prévenir les sauts intempestifs.
+  - Détection automatique des conteneurs défilables internes (comme le tiroir de sommaire `#tocSidebar`) afin de ne pas intercepter leur défilement naturel.
+  - Prise en charge à la fois dans l'application principale (volet d'aperçu) et dans l'export HTML autonome généré par `HtmlGenerator.js`.
+  - Fichiers impactés : [`js/HtmlGenerator.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/HtmlGenerator.js), [`js/app.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/app.js).
+
+- **Découpage unifié et déterministe des diapositives en 5 règles strictes** :
+  - **Règle 1** : Titre `#` (Niveau 1) déclenche une diapositive de couverture (`title`). Capture des métadonnées immédiates (sous-titre, auteur, date) sous le titre.
+  - **Règle 2** : Titre `##` (Niveau 2) déclenche une diapositive d'intercalaire de chapitre (`chapter`).
+  - **Règle 3** : Titre `###` (Niveau 3) crée une diapositive standard de contenu (`content`) et mémorise son libellé comme référence.
+  - **Règle 4** : Titres supérieurs à `###` (`####`, `#####`, `######`) ne créent pas de nouveau slide mais restent intégrés comme sous-sections dans le corps de la diapositive courante.
+  - **Règle 5** : Saut forcé avec séparateur horizontal `---` créant une nouvelle diapositive qui reprend automatiquement le titre du dernier `###` qui précède.
+  - Synchronisation rigoureuse entre la visualisation Web/HTML (`SlidePlanner.js`) et la génération PowerPoint OpenXML (`PptxTemplateEngine.js`).
+  - Fichiers impactés : [`js/SlidePlanner.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/SlidePlanner.js), [`js/PptxTemplateEngine.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/PptxTemplateEngine.js), [`js/HtmlGenerator.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/HtmlGenerator.js).
+
+- **Paramétrage CSS avancé des fonds de diapositives et de la typographie des titres (`StyleSettingsManager.js`)** :
+  - **Fonds distincts pour slides Couverture et Chapitre** :
+    - Sélection de couleur d'arrière-plan personnalisée (`coverSlide.bgColor`, `chapterSlide.bgColor`).
+    - Importation d'une image de fond locale encodée de manière autonome en Base64 data URL (`coverSlide.bgImage`, `chapterSlide.bgImage`), stockée dans IndexedDB et exportée dans le CSS sans dépendance externe.
+    - Contrôle de la transparence / opacité de l'image de fond via un curseur slider (0 % à 100 %) appliqué par un pseudo-élément `::after` afin de préserver l'opacité et la lisibilité totale des textes et du bandeau supérieur.
+    - Bouton textuel de suppression d'image pour réinitialiser le fond.
+  - **Typographie étendue des titres** :
+    - Prise en charge des titres jusqu'à `#####` et `######` (Titres 5 et 6).
+    - Choix de la casse : Normal, Majuscule (`text-transform: uppercase`), Première lettre en majuscule (`capitalize`).
+    - Options de style combinables : Gras (`font-weight: bold`), Souligné (`text-decoration: underline`).
+  - **Live Preview étendu** : Le panneau d'aperçu affiche simultanément la slide de couverture, la slide de chapitre et la slide de contenu avec leurs fonds et styles respectifs.
+  - Fichiers impactés : [`js/StyleSettingsManager.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/StyleSettingsManager.js), [`css/styles.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/styles.css), [`css/slide.css`](file:///c:/Users/jet/Documents/Site%20Web/md2print/css/slide.css), [`js/defaultThemeStyles.js`](file:///c:/Users/jet/Documents/Site%20Web/md2print/js/defaultThemeStyles.js).
+
 ## [1.4.0] - 2026-11-01
 
 ### Feature

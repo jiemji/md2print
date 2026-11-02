@@ -1259,6 +1259,67 @@ body.resizing-active .style-settings-iframe {
   color: var(--text-primary);
 }
 
+.checkbox-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.config-checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  margin: 0;
+}
+
+.file-picker-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-sm {
+  padding: 2px 8px;
+  font-size: 0.76rem;
+  height: 26px;
+  line-height: 1.2;
+}
+
+.file-name-indicator {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.range-slider {
+  width: 100px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.slide-bg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .style-config-preview-pane {
   flex: 1;
   height: 100%;
