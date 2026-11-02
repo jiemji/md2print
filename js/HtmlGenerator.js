@@ -126,6 +126,72 @@ export const extractTOC = (normalizedMarkdown) => {
 };
 
 /**
+ * Extrait et regroupe les blocs de colonnes Markdown en rangées flex.
+ * Supporte la syntaxe [colonne]...[/colonne] (alias [col]...[/col]),
+ * le ratio optionnel [colonne:2], les conteneurs optionnels [colonnes]...[/colonnes],
+ * et la syntaxe alternative :::colonne ... :::
+ * @param {string} md - Texte Markdown
+ * @returns {{ cleaned: string, groups: Array<Array<{ start: number, end: number, ratio: number, content: string }>>, maskedMd?: string, restoreCodeBlocks?: (text: string) => string }}
+ */
+export function extractAndGroupColumns(md) {
+  if (!md) return { cleaned: '', groups: [] };
+
+  // Nettoyer les conteneurs optionnels [colonnes] / [/colonnes] ou [cols] / [/cols]
+  const cleaned = md.replace(/\[\s*\/?\s*(?:colonnes|cols)\s*\]/gi, '');
+
+  // Masquer temporairement les blocs de code pour éviter toute fausse détection à l'intérieur
+  const codeBlocks = [];
+  const maskedMd = cleaned.replace(/```[\s\S]*?```/g, (match) => {
+    const token = `%%MD2PRINT_CODE_FENCE_${codeBlocks.length}%%`;
+    codeBlocks.push(match);
+    return token;
+  });
+
+  const restoreCodeBlocks = (text) =>
+    text.replace(/%%MD2PRINT_CODE_FENCE_(\d+)%%/g, (_, idx) => codeBlocks[Number(idx)] || '');
+
+  const colRegex = /(?:\[\s*col(?:onne)?(?::([0-9.]+))?\s*\]([\s\S]*?)\[\s*\/\s*col(?:onne)?\s*\]|:::\s*col(?:onne)?(?::([0-9.]+))?\s*\r?\n([\s\S]*?)\r?\n:::)/gi;
+  const matches = [];
+  let m;
+  while ((m = colRegex.exec(maskedMd)) !== null) {
+    const ratioStr = m[1] || m[3];
+    const content = m[2] !== undefined ? m[2] : m[4];
+    matches.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      ratio: ratioStr ? parseFloat(ratioStr) : 1,
+      content: restoreCodeBlocks((content || '').trim()),
+      raw: restoreCodeBlocks(m[0]),
+    });
+  }
+
+  if (matches.length === 0) {
+    return { cleaned, groups: [] };
+  }
+
+  const groups = [];
+  let currentGroup = [];
+  for (let i = 0; i < matches.length; i++) {
+    const cur = matches[i];
+    if (currentGroup.length === 0) {
+      currentGroup.push(cur);
+    } else {
+      const prev = currentGroup[currentGroup.length - 1];
+      const between = maskedMd.substring(prev.end, cur.start);
+      if (/^\s*$/.test(between)) {
+        currentGroup.push(cur);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [cur];
+      }
+    }
+  }
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  return { cleaned: restoreCodeBlocks(maskedMd), groups, restoreCodeBlocks, maskedMd };
+}
+
+/**
  * Convertit le Markdown normalisé en HTML via Marked.js, Highlight.js et Mermaid.js.
  * @param {string} cleanMarkdown
  * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
@@ -134,6 +200,37 @@ export const extractTOC = (normalizedMarkdown) => {
 const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
     return '<p>Erreur : La bibliothèque Marked.js n\'est pas chargée.</p>';
+  }
+
+  const { cleaned: colCleanedMd, groups: colGroups, maskedMd, restoreCodeBlocks } = extractAndGroupColumns(cleanMarkdown);
+
+  let targetMarkdown = colCleanedMd;
+  let rowHtmls = [];
+
+  if (colGroups && colGroups.length > 0) {
+    rowHtmls = colGroups.map((group) => {
+      const colsHtml = group
+        .map((col) => {
+          const innerHtml = parseMarkdownToHTML(col.content, mermaidSvgMap);
+          const ratioStyle = col.ratio !== 1 ? ` style="flex: ${col.ratio} 1 0%;"` : '';
+          return `<div class="slide-column"${ratioStyle}><div class="slide-column-content">${innerHtml}</div></div>`;
+        })
+        .join('\n');
+      return `<div class="slide-columns-row">\n${colsHtml}\n</div>`;
+    });
+
+    let transformedMd = maskedMd;
+    for (let i = colGroups.length - 1; i >= 0; i--) {
+      const g = colGroups[i];
+      const firstCol = g[0];
+      const lastCol = g[g.length - 1];
+      const placeholder = `\n\n%%SLIDE_COLUMNS_ROW_${i}%%\n\n`;
+      transformedMd =
+        transformedMd.substring(0, firstCol.start) +
+        placeholder +
+        transformedMd.substring(lastCol.end);
+    }
+    targetMarkdown = restoreCodeBlocks(transformedMd);
   }
 
   const renderer = new window.marked.Renderer();
@@ -260,7 +357,7 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   // Normalise l'indentation des sous-listes (4 espaces par niveau) pour que Marked.js
   // imbrique uniformément les listes à puces (- *) et les listes numérotées (1.)
   let inFence = false;
-  const markedReadyMarkdown = cleanMarkdown
+  const markedReadyMarkdown = targetMarkdown
     .split('\n')
     .map((line) => {
       if (line.trimStart().startsWith('```')) {
@@ -297,6 +394,17 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     const cleaned = inner.replace(/<\/span>\s+<span class="metric-card/g, '</span><span class="metric-card');
     return `<div class="metric-group-row">${cleaned}</div>`;
   });
+
+  // Réinsertion des rangées de colonnes multi-colonnes générées
+  if (rowHtmls && rowHtmls.length > 0) {
+    for (let i = 0; i < rowHtmls.length; i++) {
+      const regex = new RegExp(
+        `<p>\\s*%%SLIDE_COLUMNS_ROW_${i}%%\\s*<\\/p>|%%SLIDE_COLUMNS_ROW_${i}%%`,
+        'g'
+      );
+      processedHtml = processedHtml.replace(regex, rowHtmls[i]);
+    }
+  }
 
   return processedHtml;
 };
@@ -510,6 +618,69 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   margin: auto !important;
   box-sizing: border-box !important;
 }
+/* === Colonnes multiples côte à côte en mode Slide === */
+.slide-columns-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 20px !important;
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  margin: 12px 0 !important;
+  box-sizing: border-box !important;
+}
+.slide-column {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0%;
+  min-width: 0 !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+}
+.slide-column-content {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  gap: 10px;
+}
+.slide-column-content > *:first-child {
+  margin-top: 0 !important;
+}
+.slide-column-content > *:last-child {
+  margin-bottom: 0 !important;
+}
+.slide-column .mermaid-card {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+.slide-column .metric-group-row {
+  width: 100% !important;
+  margin: 6px 0 !important;
+}
+.slide-column .metric-card {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+}
+.slide-column .slide-image-box {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+}
+.slide-column .slide-image {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+.slide-column table.doc-table {
+  width: 100% !important;
+}
 `
     : `
 /* === Rendu propre des images en vision Rapport === */
@@ -525,6 +696,55 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   border: 1px solid var(--report-border-color, #e2e8f0);
   margin: 0 auto;
   display: block;
+}
+/* === Colonnes multiples côte à côte en mode Rapport === */
+.slide-columns-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 24px;
+  width: 100%;
+  margin: 18px 0;
+  box-sizing: border-box;
+}
+.slide-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.slide-column-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 12px;
+}
+.slide-column-content > *:first-child {
+  margin-top: 0;
+}
+.slide-column-content > *:last-child {
+  margin-bottom: 0;
+}
+.slide-column .metric-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+.slide-column .slide-image-box {
+  max-width: 100%;
+  margin: 8px 0;
+}
+.slide-column .slide-image {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 768px) {
+  .slide-columns-row {
+    flex-direction: column !important;
+    gap: 16px;
+  }
 }
 `;
 

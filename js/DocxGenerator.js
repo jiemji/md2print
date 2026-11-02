@@ -258,6 +258,10 @@ async function buildDocxBlocks(cleanMd, docConfig) {
         })
       );
     } else if (block.type === 'paragraph') {
+      const rawTrim = (block.raw || '').trim();
+      if (/^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) || /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)) {
+        continue;
+      }
       const styleP = docConfig?.styles?.p;
       blocks.push(
         new window.docx.Paragraph({

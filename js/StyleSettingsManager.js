@@ -483,6 +483,68 @@ ${cfg.chapterSlide?.bgImage ? `
 .slide-body .doc-table tbody tr:nth-child(even) td {
   background-color: ${cfg.table.rowAltBg};
 }
+.slide-columns-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 20px !important;
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  margin: 12px 0 !important;
+  box-sizing: border-box !important;
+}
+.slide-column {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0%;
+  min-width: 0 !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+}
+.slide-column-content {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  gap: 10px;
+}
+.slide-column-content > *:first-child {
+  margin-top: 0 !important;
+}
+.slide-column-content > *:last-child {
+  margin-bottom: 0 !important;
+}
+.slide-column .mermaid-card {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+.slide-column .metric-group-row {
+  width: 100% !important;
+  margin: 6px 0 !important;
+}
+.slide-column .metric-card {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+}
+.slide-column .slide-image-box {
+  width: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+}
+.slide-column .slide-image {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+.slide-column table.doc-table {
+  width: 100% !important;
+}
 `
     : `
 /* === Surcharges personnalisées Rapport === */
@@ -659,6 +721,54 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 .markdown-rendered-content .doc-table tbody tr:nth-child(even) td {
   background-color: ${cfg.table.rowAltBg};
+}
+.slide-columns-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 24px;
+  width: 100%;
+  margin: 18px 0;
+  box-sizing: border-box;
+}
+.slide-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.slide-column-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 12px;
+}
+.slide-column-content > *:first-child {
+  margin-top: 0;
+}
+.slide-column-content > *:last-child {
+  margin-bottom: 0;
+}
+.slide-column .metric-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+.slide-column .slide-image-box {
+  max-width: 100%;
+  margin: 8px 0;
+}
+.slide-column .slide-image {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 768px) {
+  .slide-columns-row {
+    flex-direction: column !important;
+    gap: 16px;
+  }
 }
 `;
 

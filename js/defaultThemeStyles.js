@@ -658,6 +658,86 @@ blockquote p:last-child {
   line-height: 1.3;
 }
 
+.metric-group-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  margin: 16px 0;
+  box-sizing: border-box;
+}
+
+.metric-group-row > br {
+  display: none;
+}
+
+.metric-group-row .metric-card {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+/* ==========================================================================
+   COLONNES MULTIPLES CÔTE À CÔTE ([colonne]...[/colonne])
+   ========================================================================== */
+.slide-columns-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 24px;
+  width: 100%;
+  margin: 18px 0;
+  box-sizing: border-box;
+}
+
+.slide-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.slide-column-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 12px;
+}
+
+.slide-column-content > *:first-child {
+  margin-top: 0;
+}
+
+.slide-column-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.slide-column .metric-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.slide-column .slide-image-box {
+  max-width: 100%;
+  margin: 8px 0;
+}
+
+.slide-column .slide-image {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 768px) {
+  .slide-columns-row {
+    flex-direction: column !important;
+    gap: 16px;
+  }
+}
+
 /* ==========================================================================
    TABLEAUX (TABLEAUNORMAL & CONFIG OUTPUT_CONFIG.JSON)
    ========================================================================== */
@@ -1739,6 +1819,82 @@ html, body {
   margin: auto;
   border-radius: var(--slide-radius-sm);
   box-sizing: border-box;
+}
+
+/* ==========================================================================
+   COLONNES MULTIPLES CÔTE À CÔTE ([colonne]...[/colonne])
+   ========================================================================== */
+.slide-columns-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 20px;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 12px 0;
+  box-sizing: border-box;
+}
+
+.slide-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.slide-column-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 10px;
+}
+
+.slide-column-content > *:first-child {
+  margin-top: 0;
+}
+
+.slide-column-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.slide-column .mermaid-card {
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.slide-column .metric-group-row {
+  width: 100%;
+  margin: 6px 0;
+}
+
+.slide-column .metric-card {
+  width: 100%;
+  flex: 1 1 0;
+}
+
+.slide-column .slide-image-box {
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.slide-column .slide-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.slide-column table.doc-table {
+  width: 100%;
 }
 
 /* ==========================================================================
