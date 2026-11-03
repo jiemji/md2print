@@ -1,15 +1,90 @@
 /**
  * @module StyleSettingsManager
  * @description Contrôleur de la page de paramétrage interactif des styles, couleurs,
- * polices et tailles de police pour chaque type de balise (Vision Rapport et Vision Slide).
+ * polices et dimensions pour chaque type de balise (Vision Rapport et Vision Slide).
+ * Gère également les arrière-plans d'images, l'opacité, la transparence des bandeaux,
+ * les marges latérales et l'import/export de thèmes personnalisés.
  * 
  * Fonctionne 100 % hors-ligne, sans dépendance externe ni icône.
+ * @requires module:defaultThemeStyles
  */
 
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 
 /**
+ * @typedef {Object} StyleHeadingConfig
+ * @property {string} font - Nom de la police de caractères
+ * @property {string} size - Taille de police CSS (ex: '2.4rem', '1.85rem')
+ * @property {string} color - Couleur hexadécimale du texte
+ * @property {'none'|'uppercase'|'lowercase'|'capitalize'} transform - Transformation de casse
+ * @property {boolean} bold - Indique si le texte est en gras
+ * @property {boolean} underline - Indique si le texte est souligné
+ */
+
+/**
+ * @typedef {Object} StyleBodyConfig
+ * @property {string} font - Nom de la police de caractères
+ * @property {string} size - Taille de police de base (ex: '1rem', '1.25rem')
+ * @property {string} color - Couleur hexadécimale du texte principal
+ * @property {string} lineHeight - Hauteur de ligne (ex: '1.55', '1.6')
+ * @property {string} spacing - Marge inférieure entre paragraphes (ex: '14px')
+ * @property {'left'|'justify'|'center'|'right'} textAlign - Alignement du texte
+ */
+
+/**
+ * @typedef {Object} SlideBackgroundConfig
+ * @property {string} bg - Couleur de fond hexadécimale
+ * @property {string} bgImage - Image de fond encodée en data-URL base64 ou URL
+ * @property {string} bgImageName - Nom lisible du fichier de l'image de fond
+ * @property {number} bgOpacity - Pourcentage d'opacité de l'image de fond (0 à 100)
+ * @property {string} [borderTopColor] - Couleur du liseré supérieur (couverture)
+ * @property {number} [borderTopWidth] - Épaisseur en pixels du liseré supérieur (couverture)
+ * @property {string} [borderLeftColor] - Couleur du liseré gauche (chapitre)
+ * @property {number} [borderLeftWidth] - Épaisseur en pixels du liseré gauche (chapitre)
+ */
+
+/**
+ * @typedef {Object} SlideContentConfig
+ * @property {string} bg - Couleur de fond de la zone principale du slide
+ * @property {string} bgImage - Image de fond encodée en data-URL ou URL
+ * @property {string} bgImageName - Nom du fichier de l'image de fond
+ * @property {number} bgOpacity - Pourcentage d'opacité de l'image de fond (0 à 100)
+ * @property {string} headerBg - Couleur de fond du bandeau supérieur (hexadécimal ou 'transparent')
+ * @property {string} headerBgImage - Image de fond du bandeau supérieur (data-URL)
+ * @property {string} headerBgImageName - Nom du fichier de l'image du bandeau supérieur
+ * @property {number} headerBgOpacity - Pourcentage d'opacité de l'image du bandeau (0 à 100)
+ * @property {string} borderTopColor - Couleur du liseré supérieur
+ * @property {number} borderTopWidth - Épaisseur en pixels du liseré supérieur
+ * @property {number|string} paddingX - Marge latérale intérieure gauche et droite en pixels (défaut 56)
+ */
+
+/**
+ * @typedef {Object} StyleThemeConfig
+ * @property {StyleHeadingConfig} hMain - Titre principal de document ou couverture (#)
+ * @property {StyleHeadingConfig} h1 - Titre de niveau 1 ou titre de chapitre (##)
+ * @property {StyleHeadingConfig} h2 - Titre de niveau 2 ou titre de bandeau slide (###)
+ * @property {StyleHeadingConfig} h3 - Titre de niveau 3 (####)
+ * @property {StyleHeadingConfig} h4 - Titre de niveau 4 (#####)
+ * @property {StyleHeadingConfig} h5 - Titre de niveau 5 (######)
+ * @property {StyleBodyConfig} body - Corps de texte principal
+ * @property {Object} link - Couleurs des liens (color, hoverColor)
+ * @property {Object} metric - Paramètres des blocs chiffres clés ([chiffre:...])
+ * @property {Object} chapterTag - Paramètres des étiquettes de chapitre
+ * @property {Object} badge - Police et taille générique des badges
+ * @property {Object} quote - Paramètres des citations (>)
+ * @property {Object} code - Paramètres des blocs et extraits de code
+ * @property {Object} table - Couleurs et bordures des tableaux
+ * @property {Object} mermaid - Couleurs et bordures des diagrammes Mermaid
+ * @property {Object} column - Couleurs et marges des conteneurs multi-colonnes
+ * @property {SlideBackgroundConfig} [coverSlide] - Spécifique diaporama : slide de couverture
+ * @property {SlideBackgroundConfig} [chapterSlide] - Spécifique diaporama : slide de chapitre
+ * @property {SlideContentConfig} [contentSlide] - Spécifique diaporama : slide de contenu
+ * @property {Object} page - Arrière-plan et bordures de la page ou du canvas
+ */
+
+/**
  * Configuration par défaut des styles de balises extraite des chartes Word et PowerPoint.
+ * @type {{ report: StyleThemeConfig, slide: StyleThemeConfig }}
  */
 export const DEFAULT_STYLE_CONFIG = {
   report: {
@@ -186,9 +261,14 @@ function cleanFontName(val) {
 }
 
 /**
- * Normalise une chaîne de couleur hexadécimale.
+ * Normalise une chaîne de couleur hexadécimale ou un mot-clé de transparence.
+ * - Convertit les codes hexadécimaux courts (#rgb) en code complet (#rrggbb).
+ * - Préserve les codes hexadécimaux valides à 6 caractères (#rrggbb).
+ * - Retourne 'transparent' pour les valeurs 'transparent' ou 'none'.
+ * - Retourne la chaîne d'origine si le format n'est pas convertible.
+ * 
  * @param {string} val - Chaîne de couleur brute (hexadécimale, nom ou rgb)
- * @returns {string} Couleur normalisée en hexadécimal 6 caractères (#rrggbb) ou valeur brute si non convertible
+ * @returns {string} Couleur normalisée en hexadécimal 6 caractères (#rrggbb), 'transparent' ou valeur brute
  */
 function normalizeColor(val) {
   if (!val) return '';
@@ -207,13 +287,14 @@ function normalizeColor(val) {
  * Extrait la configuration complète des styles depuis un texte CSS (Vision Rapport ou Slide).
  * 1. Recherche prioritaire du bloc JSON intégré sous commentaire :
  *    /\* [md2print-config:mode=...] {JSON} [\/md2print-config] *\/
- * 2. Si absent (ex: fichier CSS édité manuellement ou issu d'une version précédente),
- *    analyse exhaustive des variables :root et des sélecteurs CSS.
+ * 2. Si absent (ex: fichier CSS édité manuellement ou issu d'une version antérieure),
+ *    analyse exhaustive des variables :root (typographies, liserés, fonds, marges)
+ *    et des règles CSS (sélecteurs spécifiques, pseudo-éléments d'arrière-plan, padding).
  *
  * @function parseConfigFromCss
  * @param {string} css - Contenu brut de la feuille CSS
  * @param {'report'|'slide'} [defaultMode='slide'] - Mode par défaut si non détecté
- * @returns {{ mode: 'report'|'slide', config: object }|null}
+ * @returns {{ mode: 'report'|'slide', config: StyleThemeConfig }|null} Configuration extraite et normalisée, ou null
  */
 export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (!css || typeof css !== 'string') return null;
@@ -265,7 +346,13 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
     }
   }
 
-  // Helper pour extraire une propriété d'une règle CSS en appliquant la cascade (dernière occurrence)
+  /**
+   * Helper interne pour extraire une propriété d'une règle CSS en appliquant la cascade (dernière occurrence)
+   * et en résolvant les éventuelles références `var(--variable, fallback)`.
+   * @param {string} selectorRegex - Expression régulière ciblant le sélecteur CSS
+   * @param {string} propName - Nom de la propriété CSS (ex: 'background-color', 'padding-left')
+   * @returns {string|null} Valeur résolue ou null si introuvable
+   */
   function extractRuleProp(selectorRegex, propName) {
     const matches = [...css.matchAll(new RegExp('(?:' + selectorRegex + ')\\s*\\{([^}]+)\\}', 'g'))];
     if (matches.length === 0) return null;
@@ -464,12 +551,14 @@ function formatHeadingCss(h, fallbackFont, defaultSize, defaultColor) {
 
 /**
  * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
- * Injecte les variables personnalisées (typographies, couleurs, liserés, fonds, métriques),
- * ainsi que les règles impératives de confinement de diapositive et de disposition multi-colonnes flexible.
+ * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales).
+ * - Applique les règles impératives de confinement de diapositive, superposition d'images d'arrière-plan,
+ *   transparence des bandeaux et disposition multi-colonnes flexible.
+ * - Intègre en tête le bloc de métadonnées JSON standard [md2print-config:mode=...] assurant la persistance.
  *
  * @function generateThemeCss
  * @param {'report'|'slide'} mode - Mode cible d'affichage ('report' ou 'slide')
- * @param {object} [config] - Configuration des balises et styles (utilise la configuration par défaut si omis)
+ * @param {StyleThemeConfig} [config] - Configuration des balises et styles (utilise la configuration par défaut si omis)
  * @returns {string} Code CSS prêt à l'emploi et compilé
  */
 export function generateThemeCss(mode, config) {
@@ -1129,10 +1218,11 @@ ${cfg.chapterSlide?.bgImage ? `
  */
 export class StyleSettingsManager {
   /**
-   * @param {object} options
-   * @param {HTMLElement} options.container - Conteneur principal de la page de styles
-   * @param {function} options.onApply - Callback appelé lors de l'application des styles
-   * @param {function} options.onClose - Callback appelé lors de la fermeture
+   * Crée une instance du gestionnaire de configuration des styles.
+   * @param {Object} [options={}] - Options d'initialisation
+   * @param {HTMLElement} [options.container] - Conteneur DOM principal de la vue de styles
+   * @param {function({ reportCss: string, slideCss: string, configs: { report: StyleThemeConfig, slide: StyleThemeConfig } }): void} [options.onApply] - Callback appelé lors de l'application des styles
+   * @param {function(): void} [options.onClose] - Callback appelé lors du retour à l'éditeur
    */
   constructor(options = {}) {
     this.container = options.container;
@@ -1150,9 +1240,11 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Définit une configuration personnalisée existante.
-   * @param {'report'|'slide'} mode
-   * @param {object} customConfig
+   * Définit et fusionne une configuration personnalisée pour le mode spécifié.
+   * Complète les clés absentes avec les valeurs par défaut de la charte.
+   * @param {'report'|'slide'} mode - Mode ciblé ('report' ou 'slide')
+   * @param {Partial<StyleThemeConfig>} customConfig - Objet de configuration à appliquer
+   * @returns {void}
    */
   setConfig(mode, customConfig) {
     if (this.configs[mode] && customConfig && typeof customConfig === 'object') {
@@ -1169,16 +1261,18 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Récupère la configuration courante pour un mode.
-   * @param {'report'|'slide'} mode
-   * @returns {object}
+   * Récupère l'objet de configuration complet du mode demandé.
+   * @param {'report'|'slide'} mode - Mode ciblé ('report' ou 'slide')
+   * @returns {StyleThemeConfig} Objet de configuration courant
    */
   getConfig(mode) {
     return this.configs[mode];
   }
 
   /**
-   * Initialise le composant dans le DOM.
+   * Initialise le composant dans le DOM : rendu initial, attachement des écouteurs,
+   * mise à jour des champs de formulaire et génération de l'aperçu dynamique.
+   * @returns {void}
    */
   init() {
     if (!this.container) return;
@@ -1193,7 +1287,9 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Construit la structure HTML complète de la page de paramétrage.
+   * Construit et injecte la structure HTML complète de la page de paramétrage
+   * (barre d'outils, onglets de mode, cartes de contrôle des balises et panneau d'aperçu).
+   * @returns {void}
    */
   render() {
     this.container.innerHTML = `
@@ -1711,7 +1807,12 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML d'une ligne de réglage pour un titre avec police, taille, couleur, casse, gras et souligné.
+   * Génère le fragment HTML d'une ligne de réglage pour un titre.
+   * Propose les contrôles pour la police, taille, couleur, casse, mise en gras et soulignement.
+   * 
+   * @param {string} bindKey - Clé de configuration liée (ex: 'hMain', 'h1', 'h2')
+   * @param {string} labelText - Libellé descriptif du titre affiché dans la colonne d'en-tête
+   * @returns {string} Fragment HTML de la ligne de configuration
    */
   renderTitleControlRow(bindKey, labelText) {
     return `
@@ -1758,7 +1859,19 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML d'une ligne de réglage pour un fond de slide (couleur, image et transparence).
+   * Génère le fragment HTML d'une ligne de réglage pour un fond de diapositive ou un bandeau
+   * (sélecteur de couleur avec synchronisation hex, bascule de transparence facultative,
+   * téléversement d'image encodée en base64, suppression et curseur d'opacité).
+   * 
+   * @param {string} bindKey - Clé racine de configuration (ex: 'coverSlide', 'chapterSlide', 'contentSlide')
+   * @param {string} labelText - Libellé affiché pour la section
+   * @param {string} [colorProp='bg'] - Propriété de couleur cible (ex: 'bg', 'headerBg')
+   * @param {string} [imgProp='bgImage'] - Propriété d'image cible (ex: 'bgImage', 'headerBgImage')
+   * @param {string} [opacityProp='bgOpacity'] - Propriété d'opacité cible (ex: 'bgOpacity', 'headerBgOpacity')
+   * @param {string} [idPrefix=bindKey] - Préfixe d'identifiant DOM unique pour les boutons et indicateurs
+   * @param {string} [colorLabel='Couleur de fond'] - Libellé du sous-champ couleur
+   * @param {boolean} [allowTransparent=false] - Indique si le bouton d'activation de transparence doit être affiché
+   * @returns {string} Fragment HTML de la ligne de configuration
    */
   renderSlideBackgroundControlRow(bindKey, labelText, colorProp = 'bg', imgProp = 'bgImage', opacityProp = 'bgOpacity', idPrefix = bindKey, colorLabel = 'Couleur de fond', allowTransparent = false) {
     return `
@@ -1792,7 +1905,11 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML d'une ligne de réglage simple (paragraphe, etc.).
+   * Génère le fragment HTML d'une ligne de réglage simple (police, taille, couleur).
+   * 
+   * @param {string} bindKey - Clé de configuration liée (ex: 'body', 'quote', 'chapterTag')
+   * @param {string} labelText - Libellé affiché pour la balise
+   * @returns {string} Fragment HTML de la ligne de configuration
    */
   renderTagControlRow(bindKey, labelText) {
     return `
@@ -1820,7 +1937,11 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML pour les réglages d'un callout.
+   * Génère le fragment HTML pour les réglages d'un callout (bordure, fond et couleur de titre).
+   * 
+   * @param {string} bindKey - Clé de configuration liée (ex: 'calloutNote', 'calloutTip', 'calloutDanger')
+   * @param {string} labelText - Libellé affiché pour le type de callout
+   * @returns {string} Fragment HTML de la ligne de configuration
    */
   renderCalloutRow(bindKey, labelText) {
     return `
@@ -1850,7 +1971,11 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère le HTML pour les réglages d'un badge ou tag inline.
+   * Génère le fragment HTML pour les réglages d'un badge ou tag inline (texte, fond et bordure).
+   * 
+   * @param {string} bindKey - Clé de configuration liée (ex: 'badgeInfo', 'badgeSuccess')
+   * @param {string} labelText - Libellé affiché pour le type de badge
+   * @returns {string} Fragment HTML de la ligne de configuration
    */
   renderBadgeRow(bindKey, labelText) {
     return `
@@ -1880,7 +2005,10 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Génère un menu déroulant de polices.
+   * Génère le fragment HTML d'une liste déroulante des polices standard disponibles.
+   * 
+   * @param {string} bindKey - Clé de configuration liée (ex: 'hMain.font', 'body.font')
+   * @returns {string} Fragment HTML de l'élément select
    */
   renderFontSelect(bindKey) {
     const optionsHtml = FONT_OPTIONS.map((f) => `<option value="${f}">${f}</option>`).join('\n');
@@ -1892,7 +2020,14 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Associe les écouteurs d'événements interactifs.
+   * Associe l'ensemble des écouteurs d'événements interactifs :
+   * - Bascule d'onglets Rapport / Slide
+   * - Actions globales (application des styles, import/export CSS et JSON, réinitialisation)
+   * - Chargement, prévisualisation et suppression d'images de fond
+   * - Bascule de transparence pour bandeaux et conteneurs
+   * - Redimensionnement par poignée séparatrice entre formulaire et aperçu
+   * - Synchronisation temps réel des inputs et de la prévisualisation
+   * @returns {void}
    */
   bindEvents() {
     // Bascule des onglets Rapport / Slide
@@ -2125,7 +2260,12 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Modifie la valeur d'une clé imbriquée ('h1.color') dans l'objet de configuration actif.
+   * Modifie la valeur d'une clé imbriquée (ex: 'contentSlide.paddingX', 'h1.color') dans l'objet de configuration actif.
+   * Crée automatiquement les sous-objets intermédiaires si nécessaire.
+   * 
+   * @param {string} path - Chemin de la propriété séparé par des points
+   * @param {*} value - Valeur à affecter
+   * @returns {void}
    */
   setBindValue(path, value) {
     const parts = path.split('.');
@@ -2138,7 +2278,10 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Lit la valeur d'une clé imbriquée ('h1.color') depuis l'objet de configuration actif.
+   * Lit la valeur d'une clé imbriquée (ex: 'contentSlide.paddingX', 'h1.color') depuis l'objet de configuration actif.
+   * 
+   * @param {string} path - Chemin de la propriété séparé par des points
+   * @returns {*} Valeur extraite ou chaîne vide si non définie
    */
   getBindValue(path) {
     const parts = path.split('.');
@@ -2151,8 +2294,11 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Bascule l'onglet de travail entre Rapport et Slide.
-   * @param {'report'|'slide'} mode
+   * Bascule l'onglet de travail entre la vision Rapport et la vision Diaporama.
+   * Met à jour l'affichage des sections contextuelles et réactualise le formulaire et l'aperçu.
+   * 
+   * @param {'report'|'slide'} mode - Mode sélectionné ('report' ou 'slide')
+   * @returns {void}
    */
   switchMode(mode) {
     this.activeMode = mode;
@@ -2179,6 +2325,9 @@ export class StyleSettingsManager {
 
   /**
    * Met à jour l'ensemble des champs du formulaire avec les valeurs du mode actif.
+   * Synchronise les sélecteurs, inputs hexadécimaux, boutons de transparence et indicateurs d'images.
+   * 
+   * @returns {void}
    */
   updateFormValues() {
     const inputs = this.container.querySelectorAll('[data-bind]');
@@ -2239,7 +2388,9 @@ export class StyleSettingsManager {
   }
 
   /**
-   * Met à jour l'iframe d'aperçu en direct avec les styles actuels.
+   * Régénère à la volée le CSS compilé et actualise le document HTML de l'iframe d'aperçu dynamique.
+   * 
+   * @returns {void}
    */
   updateLivePreview() {
     if (!this.livePreviewFrame) return;
