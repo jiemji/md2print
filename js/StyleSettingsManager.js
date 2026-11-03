@@ -228,11 +228,12 @@ export const DEFAULT_STYLE_CONFIG = {
 };
 
 /**
- * Polices standard recommandées disponibles sur les systèmes Windows et Office.
+ * Polices standard recommandées disponibles (systèmes Windows, Office et polices web modernes).
  */
 export const FONT_OPTIONS = [
   'Calibri',
   'Calibri Light',
+  'Poppins',
   'Aptos',
   'Aptos Display',
   'Segoe UI',
@@ -1210,7 +1211,12 @@ ${cfg.chapterSlide?.bgImage ? `
 
   const metadataTag = `/* [md2print-config:mode=${mode}]\n${JSON.stringify(cfg)}\n[/md2print-config] */`;
 
-  return `${metadataTag}\n\n${baseCss}\n${overrides}`;
+  const usesPoppins = JSON.stringify(cfg).includes('Poppins');
+  const fontImport = usesPoppins
+    ? `@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,700&display=swap');\n\n`
+    : '';
+
+  return `${metadataTag}\n\n${fontImport}${baseCss}\n${overrides}`;
 }
 
 /**
@@ -2614,6 +2620,9 @@ console.log(report.status);</code></pre>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <style>
     ${generatedCss}
     html, body {
