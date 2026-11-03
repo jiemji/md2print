@@ -249,3 +249,39 @@ Sources prises en charge :
 > La simplicité est la sophistication suprême.
 ```
 
+---
+
+## 13. Frises Chronologiques et Jalons de Processus ([frise] ... [/frise])
+
+Permet de représenter une chaîne de jalons ou une frise chronologique horizontale sous forme de pastilles circulaires reliées par une ligne continue, avec titres et descriptions explicatives parfaitement centrés.
+
+### 13.1. Syntaxe Standard (Recommandée avec séparateur `|`)
+
+```markdown
+[frise]
+- **T0** | **Détection** | Alerte de nos équipes, d'un prestataire ou d'un métier
+- **Q** | **Qualification** | L'incident est-il majeur ? Assurés touchés, durée, données
+- **4 h** (danger) | **Alerte au superviseur** | L'ACPR est prévenue, au plus tard 24 h après la découverte
+- **72 h** (warning) | **Point d'étape** | Causes, impacts, mesures de remise en route
+- **30 j** | **Rapport final** | Cause réelle, enseignements, actions correctives
+[/frise]
+```
+
+### 13.2. Variantes de Couleurs des Jalons
+La couleur de chaque pastille peut être précisée entre parenthèses juste après le jalon :
+- `(danger)` ou `(rouge)` : Rouge alerte / incident critique
+- `(warning)` ou `(orange)` : Orange avertissement / attention
+- `(success)` ou `(vert)` : Vert validation / achèvement
+- `(info)` ou `(bleu)` : Bleu secondaire
+- `(purple)` ou `(violet)` : Pourpre
+- `(muted)` ou `(gris)` : Gris neutre
+- *(Par défaut sans parenthèse)* : Bleu nuit corporate principal
+
+### 13.3. Syntaxe Alternative
+Les alias suivants sont également pris en charge :
+- `[timeline] ... [/timeline]`
+- `:::frise ... :::`
+- Séparateur deux-points ` : ` au lieu du tube `|` :
+  `- **T0** : **Détection** : Alerte de nos équipes...`
+
+

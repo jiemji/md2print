@@ -747,6 +747,147 @@ blockquote p:last-child {
 }
 
 /* ==========================================================================
+   FRISE CHRONOLOGIQUE HORIZONTALE / TIMELINE DE PROCESSUS ([frise] ... [/frise])
+   ========================================================================== */
+.process-timeline-wrapper {
+  width: 100%;
+  margin: 24px 0;
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+
+.process-timeline {
+  display: flex;
+  position: relative;
+  width: 100%;
+  min-width: 500px;
+  box-sizing: border-box;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+/* Ligne continue d'arrière-plan reliant le centre du 1er jalon au centre du dernier jalon */
+.process-timeline::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: calc(50% / var(--timeline-steps, 5));
+  right: calc(50% / var(--timeline-steps, 5));
+  height: 3px;
+  background-color: var(--report-border-color, #cbd5e1);
+  z-index: 1;
+}
+
+.timeline-step {
+  flex: 1 1 0%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+
+.timeline-node-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 38px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.timeline-node {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family: var(--report-font-heading, inherit);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: -0.01em;
+  text-align: center;
+  background-color: var(--report-color-h2, #2F5496);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+  user-select: none;
+}
+
+/* Variantes sémantiques de couleurs */
+.timeline-node-primary,
+.timeline-node-dark {
+  background-color: var(--report-color-h2, #2F5496);
+}
+
+.timeline-node-danger,
+.timeline-node-red {
+  background-color: var(--report-color-h1, #C00000);
+}
+
+.timeline-node-warning,
+.timeline-node-orange {
+  background-color: #E97132;
+}
+
+.timeline-node-success,
+.timeline-node-green {
+  background-color: #196B24;
+}
+
+.timeline-node-info,
+.timeline-node-blue {
+  background-color: #156082;
+}
+
+.timeline-node-purple,
+.timeline-node-violet {
+  background-color: #A02B93;
+}
+
+.timeline-node-muted,
+.timeline-node-gray {
+  background-color: #64748b;
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
+.timeline-title {
+  font-family: var(--report-font-heading, inherit);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: var(--report-color-h2, #2F5496);
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.timeline-desc {
+  font-family: var(--report-font-body, inherit);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--report-color-muted, #595959);
+  word-break: break-word;
+}
+
+.timeline-desc p {
+  margin: 0;
+}
+
+/* ==========================================================================
    TABLEAUX (TABLEAUNORMAL & CONFIG OUTPUT_CONFIG.JSON)
    ========================================================================== */
 .table-responsive-wrapper {
@@ -1944,6 +2085,146 @@ html, body {
 
 .slide-column table.doc-table {
   width: 100%;
+}
+
+/* ==========================================================================
+   FRISE CHRONOLOGIQUE HORIZONTALE / TIMELINE DE PROCESSUS ([frise] ... [/frise])
+   ========================================================================== */
+.process-timeline-wrapper {
+  width: 100%;
+  margin: 18px 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.process-timeline {
+  display: flex;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+/* Ligne continue d'arrière-plan reliant le centre du 1er jalon au centre du dernier jalon */
+.process-timeline::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: calc(50% / var(--timeline-steps, 5));
+  right: calc(50% / var(--timeline-steps, 5));
+  height: 3px;
+  background-color: var(--slide-border-color, #cbd5e1);
+  z-index: 1;
+}
+
+.timeline-step {
+  flex: 1 1 0%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.timeline-node-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 38px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.timeline-node {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family: var(--slide-font-heading, inherit);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: -0.01em;
+  text-align: center;
+  background-color: var(--slide-brand-dark, #0E2841);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+  user-select: none;
+}
+
+/* Variantes sémantiques de couleurs */
+.timeline-node-primary,
+.timeline-node-dark {
+  background-color: var(--slide-brand-dark, #0E2841);
+}
+
+.timeline-node-danger,
+.timeline-node-red {
+  background-color: var(--slide-brand-red, #C41718);
+}
+
+.timeline-node-warning,
+.timeline-node-orange {
+  background-color: var(--slide-accent-coral, #E97132);
+}
+
+.timeline-node-success,
+.timeline-node-green {
+  background-color: var(--slide-accent-green, #196B24);
+}
+
+.timeline-node-info,
+.timeline-node-blue {
+  background-color: var(--slide-accent-teal, #156082);
+}
+
+.timeline-node-purple,
+.timeline-node-violet {
+  background-color: var(--slide-accent-purple, #A02B93);
+}
+
+.timeline-node-muted,
+.timeline-node-gray {
+  background-color: #64748b;
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
+.timeline-title {
+  font-family: var(--slide-font-heading, inherit);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: var(--slide-text-main, #0E2841);
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.timeline-desc {
+  font-family: var(--slide-font-body, inherit);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--slide-text-muted, #64748b);
+  word-break: break-word;
+}
+
+.timeline-desc p {
+  margin: 0;
 }
 
 /* ==========================================================================

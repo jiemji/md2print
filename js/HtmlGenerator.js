@@ -222,6 +222,167 @@ export function extractAndGroupColumns(md) {
 }
 
 /**
+ * @typedef {Object} TimelineStep
+ * @property {string} badge - Libellé textuel court du jalon (ex: 'T0', '4 h')
+ * @property {string} colorName - Identifiant de la variante de couleur ('primary', 'danger', 'warning', 'success', 'info', 'purple', 'muted')
+ * @property {string} title - Titre en gras de l'étape
+ * @property {string} desc - Description ou texte explicatif associé
+ */
+
+/**
+ * Analyse une ligne d'étape de frise chronologique et en extrait les composants structurés.
+ * Formats pris en charge :
+ *  - `- **Jalon** (couleur) | **Titre** | Description`
+ *  - `- Jalon (couleur) : Titre : Description`
+ *  - `1. Jalon | Titre | Description`
+ * @function parseTimelineStep
+ * @param {string} rawLine - Ligne brute Markdown à analyser
+ * @returns {TimelineStep|null} Objet d'étape structuré ou null si la ligne est vide
+ */
+export function parseTimelineStep(rawLine) {
+  if (!rawLine || !rawLine.trim()) return null;
+  const trimmed = rawLine.trim();
+  const withoutBullet = trimmed.replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
+  if (!withoutBullet) return null;
+
+  let parts = [];
+  if (withoutBullet.includes('|')) {
+    parts = withoutBullet.split('|').map((p) => p.trim());
+  } else if (withoutBullet.includes(' : ')) {
+    parts = withoutBullet.split(' : ').map((p) => p.trim());
+  } else {
+    const match = withoutBullet.match(/^(\*\*[^*]+\*\*|\([^)]+\))\s*(.*)/);
+    if (match) {
+      parts = [match[1].trim(), match[2].trim()];
+    } else {
+      parts = [withoutBullet];
+    }
+  }
+
+  const badgeRaw = parts[0] || '';
+  const titleRaw = parts[1] || '';
+  const descRaw = parts.slice(2).join(' | ').trim();
+
+  let colorName = 'primary';
+  let badgeText = badgeRaw;
+
+  const colorMatch = badgeText.match(/\(([^)]+)\)/);
+  if (colorMatch) {
+    const rawColor = colorMatch[1].trim().toLowerCase();
+    badgeText = badgeText.replace(/\([^)]+\)/, '').trim();
+    if (/^(danger|rouge|red|critique|alerte?)$/.test(rawColor)) {
+      colorName = 'danger';
+    } else if (/^(warning|orange|amber|attention)$/.test(rawColor)) {
+      colorName = 'warning';
+    } else if (/^(success|vert|green|valide|ok)$/.test(rawColor)) {
+      colorName = 'success';
+    } else if (/^(info|bleu|blue|cyan)$/.test(rawColor)) {
+      colorName = 'info';
+    } else if (/^(purple|violet|magenta)$/.test(rawColor)) {
+      colorName = 'purple';
+    } else if (/^(muted|gris|gray|grey)$/.test(rawColor)) {
+      colorName = 'muted';
+    } else if (/^(dark|sombre|navy)$/.test(rawColor)) {
+      colorName = 'dark';
+    }
+  }
+
+  const cleanBadge = badgeText.replace(/[*_`]/g, '').trim();
+  let cleanTitle = titleRaw.replace(/^[*_`\s]+|[*_`\s]+$/g, '').trim();
+  if (!cleanTitle && !descRaw) {
+    cleanTitle = cleanBadge;
+  }
+
+  return {
+    badge: cleanBadge,
+    colorName,
+    title: cleanTitle,
+    desc: descRaw,
+  };
+}
+
+/**
+ * Extrait les blocs de frises chronologiques (`[frise]...[/frise]`, `[timeline]...[/timeline]`, `:::frise...:::`)
+ * et génère le code HTML correspondant avec placeholders pour préservation Marked.js.
+ * @function extractAndRenderTimelines
+ * @param {string} md - Texte Markdown source
+ * @returns {{ transformedMd: string, timelineHtmls: string[] }}
+ */
+export function extractAndRenderTimelines(md) {
+  if (!md) return { transformedMd: '', timelineHtmls: [] };
+
+  // Masquer temporairement les blocs de code pour éviter toute fausse détection à l'intérieur
+  const codeBlocks = [];
+  const maskedMd = md.replace(/```[\s\S]*?```/g, (match) => {
+    const token = `%%MD2PRINT_CODE_FENCE_${codeBlocks.length}%%`;
+    codeBlocks.push(match);
+    return token;
+  });
+
+  const restoreCodeBlocks = (text) =>
+    text.replace(/%%MD2PRINT_CODE_FENCE_(\d+)%%/g, (_, idx) => codeBlocks[Number(idx)] || '');
+
+  const timelineRegex = /(?:\[\s*(?:frise|timeline)\s*\]([\s\S]*?)\[\s*\/\s*(?:frise|timeline)\s*\]|:::\s*(?:frise|timeline)\s*\r?\n([\s\S]*?)\r?\n:::)/gi;
+  const timelineHtmls = [];
+
+  const transformedMasked = maskedMd.replace(timelineRegex, (match, content1, content2) => {
+    const rawContent = content1 !== undefined ? content1 : content2;
+    const content = restoreCodeBlocks(rawContent || '');
+    const lines = content.split(/\r?\n/);
+    const steps = [];
+
+    for (const line of lines) {
+      const step = parseTimelineStep(line);
+      if (step && (step.badge || step.title)) {
+        steps.push(step);
+      }
+    }
+
+    if (steps.length === 0) {
+      return '';
+    }
+
+    const stepsHtml = steps
+      .map((s) => {
+        const descHtml = s.desc
+          ? escapeHtml(s.desc)
+              .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+              .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+              .replace(/_([^_]+)_/g, '<em>$1</em>')
+          : '';
+
+        return `
+        <div class="timeline-step">
+          <div class="timeline-node-wrapper">
+            <div class="timeline-node timeline-node-${s.colorName}">${escapeHtml(s.badge)}</div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">${escapeHtml(s.title)}</div>
+            ${descHtml ? `<div class="timeline-desc">${descHtml}</div>` : ''}
+          </div>
+        </div>`;
+      })
+      .join('\n');
+
+    const timelineHtml = `
+<div class="process-timeline-wrapper">
+  <div class="process-timeline" style="--timeline-steps: ${steps.length};">
+${stepsHtml}
+  </div>
+</div>`;
+
+    const placeholder = `%%SLIDE_TIMELINE_${timelineHtmls.length}%%`;
+    timelineHtmls.push(timelineHtml);
+    return `\n\n${placeholder}\n\n`;
+  });
+
+  return {
+    transformedMd: restoreCodeBlocks(transformedMasked),
+    timelineHtmls,
+  };
+}
+
+/**
  * Convertit le Markdown normalisé en fragment HTML via Marked.js, Highlight.js et Mermaid.js.
  * Gère récursivement les colonnes multiples (`[colonne]...[/colonne]`), les schémas Mermaid pré-rendus,
  * les titres hiérarchiques avec ancrage slug, le souligné (`__texte__`), les callouts GitHub,
@@ -267,6 +428,9 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
     targetMarkdown = restoreCodeBlocks(transformedMd);
   }
+
+  const { transformedMd: timelineCleanedMd, timelineHtmls } = extractAndRenderTimelines(targetMarkdown);
+  targetMarkdown = timelineCleanedMd;
 
   const renderer = new window.marked.Renderer();
   const usedSlugs = new Set();
@@ -462,6 +626,17 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
   }
 
+  // Réinsertion des frises chronologiques générées
+  if (timelineHtmls && timelineHtmls.length > 0) {
+    for (let i = 0; i < timelineHtmls.length; i++) {
+      const regex = new RegExp(
+        `<p>\\s*%%SLIDE_TIMELINE_${i}%%\\s*<\\/p>|%%SLIDE_TIMELINE_${i}%%`,
+        'g'
+      );
+      processedHtml = processedHtml.replace(regex, timelineHtmls[i]);
+    }
+  }
+
   return processedHtml;
 };
 
@@ -651,6 +826,11 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+}
+.process-timeline-wrapper {
+  width: 100% !important;
+  flex-shrink: 0 !important;
+  margin: 14px 0 !important;
 }
 /* === Dimensionnement pleine largeur et partage horizontal des KPI / Chiffres clés === */
 .metric-group-row,
