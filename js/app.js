@@ -34,6 +34,8 @@ import {
   saveCustomCss,
   saveThemeConfigs,
   clearCustomConfigAndTemplate,
+  clearCustomStyles,
+  removeCustomStyleForMode,
   saveDraftState,
   clearDraftState,
   loadStoredState,
@@ -329,9 +331,12 @@ async function restoreFromIndexedDB() {
  * @returns {Promise<void>}
  */
 async function loadDefaultConfigAndTemplate(forceReset = false) {
+  const cacheBust = `?t=${Date.now()}`;
+  const fetchOpts = { cache: 'no-store' };
+
   if (forceReset || !state.outputConfig) {
     try {
-      const resConfig = await fetch('config/output_config.json');
+      const resConfig = await fetch(`config/output_config.json${cacheBust}`, fetchOpts);
       if (resConfig.ok) {
         state.outputConfig = await resConfig.json();
         state.configFileName = 'output_config.json (défaut)';
@@ -344,7 +349,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
   if (forceReset || !state.templateBuffer) {
     try {
       const tplPath = state.outputConfig?.documents?.[0]?.path || 'templates/Modele_word.docx';
-      const resTpl = await fetch(tplPath);
+      const resTpl = await fetch(`${tplPath}${cacheBust}`, fetchOpts);
       if (resTpl.ok) {
         state.templateBuffer = await resTpl.arrayBuffer();
         state.templateFileName = `${tplPath.split('/').pop()} (défaut)`;
@@ -360,7 +365,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
       const defPpt =
         pw?.templates?.find((t) => t.id === (pw.default || 'standard')) || pw?.templates?.[0];
       const pptPath = defPpt?.path || 'templates/Modele_presentation.potx';
-      const resPpt = await fetch(pptPath);
+      const resPpt = await fetch(`${pptPath}${cacheBust}`, fetchOpts);
       if (resPpt.ok) {
         state.pptTemplateBuffer = await resPpt.arrayBuffer();
         state.pptTemplateFileName = `${pptPath.split('/').pop()} (défaut)`;
@@ -374,7 +379,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
 
   if (forceReset || !state.reportCss) {
     try {
-      const resReportCss = await fetch('css/report.css');
+      const resReportCss = await fetch(`css/report.css${cacheBust}`, fetchOpts);
       if (resReportCss.ok) {
         state.reportCss = await resReportCss.text();
       } else {
@@ -387,7 +392,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
 
   if (forceReset || !state.slideCss) {
     try {
-      const resSlideCss = await fetch('css/slide.css');
+      const resSlideCss = await fetch(`css/slide.css${cacheBust}`, fetchOpts);
       if (resSlideCss.ok) {
         state.slideCss = await resSlideCss.text();
       } else {
@@ -399,19 +404,19 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
   }
 
   // Synchronisation automatique des configurations de style depuis les fichiers CSS chargés
-  if (!state.themeConfigs) {
+  if (forceReset || !state.themeConfigs) {
     state.themeConfigs = {};
   }
-  if (state.slideCss && (state.slideCss.includes('/* === Surcharges') || state.slideCss.includes('[md2print-config') || !state.themeConfigs.slide)) {
+  if (state.slideCss && (forceReset || !state.themeConfigs.slide || state.slideCss.includes('/* === Surcharges') || state.slideCss.includes('[md2print-config'))) {
     const parsedSlide = parseConfigFromCss(state.slideCss, 'slide');
     if (parsedSlide?.config) {
-      state.themeConfigs.slide = { ...(state.themeConfigs.slide || {}), ...parsedSlide.config };
+      state.themeConfigs.slide = forceReset ? parsedSlide.config : { ...(state.themeConfigs.slide || {}), ...parsedSlide.config };
     }
   }
-  if (state.reportCss && (state.reportCss.includes('/* === Surcharges') || state.reportCss.includes('[md2print-config') || !state.themeConfigs.report)) {
+  if (state.reportCss && (forceReset || !state.themeConfigs.report || state.reportCss.includes('/* === Surcharges') || state.reportCss.includes('[md2print-config'))) {
     const parsedReport = parseConfigFromCss(state.reportCss, 'report');
     if (parsedReport?.config) {
-      state.themeConfigs.report = { ...(state.themeConfigs.report || {}), ...parsedReport.config };
+      state.themeConfigs.report = forceReset ? parsedReport.config : { ...(state.themeConfigs.report || {}), ...parsedReport.config };
     }
   }
 
@@ -553,6 +558,22 @@ function getOrCreateStyleSettingsManager() {
         updateConfigStatusUI();
         updatePreview();
         showToast('Styles appliqués et sauvegardés avec succès', 'success');
+      },
+      onReset: async ({ mode, cssText, config }) => {
+        if (mode === 'slide') {
+          state.slideCss = cssText;
+        } else {
+          state.reportCss = cssText;
+        }
+        if (!state.themeConfigs) state.themeConfigs = {};
+        state.themeConfigs[mode] = config;
+
+        await removeCustomStyleForMode(mode);
+        state.customCssFileName = null;
+
+        updateConfigStatusUI();
+        updatePreview();
+        showToast(`Styles ${mode === 'slide' ? 'Diaporama' : 'Rapport'} réinitialisés depuis ${mode === 'slide' ? 'slide.css' : 'report.css'} (serveur)`, 'success');
       },
       onClose: () => {
         closeStyleSettingsPage();
@@ -1116,7 +1137,10 @@ function initEventListeners() {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
     if (styleSettingsManager) {
-      styleSettingsManager.handleResetDefaults();
+      if (state.themeConfigs?.report) styleSettingsManager.setConfig('report', state.themeConfigs.report);
+      if (state.themeConfigs?.slide) styleSettingsManager.setConfig('slide', state.themeConfigs.slide);
+      styleSettingsManager.updateFormValues();
+      styleSettingsManager.updateLivePreview();
     }
     updatePreview();
     showToast('Configuration, modèles et styles CSS réinitialisés par défaut');

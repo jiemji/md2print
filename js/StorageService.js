@@ -268,6 +268,80 @@ export async function clearCustomConfigAndTemplate() {
 }
 
 /**
+ * Supprime l'ensemble des styles CSS et configurations de thèmes personnalisés d'IndexedDB.
+ * @returns {Promise<void>}
+ */
+export async function clearCustomStyles() {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      const store = tx.objectStore(STORE_STATE);
+      store.delete('custom_css');
+      store.delete('custom_theme_configs');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
+ * Supprime les surcharges personnalisées d'un mode spécifique ('report' ou 'slide') dans IndexedDB.
+ * Si aucun style personnalisé ne subsiste pour aucun mode, supprime les entrées d'IndexedDB.
+ * @param {'report'|'slide'} mode - Mode ciblé ('report' ou 'slide')
+ * @returns {Promise<void>}
+ */
+export async function removeCustomStyleForMode(mode) {
+  try {
+    const db = await openDatabase();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_STATE], 'readwrite');
+      const store = tx.objectStore(STORE_STATE);
+
+      // Traitement de custom_css
+      const getCssReq = store.get('custom_css');
+      getCssReq.onsuccess = () => {
+        const item = getCssReq.result;
+        if (item) {
+          if (mode === 'slide') item.slideCss = null;
+          if (mode === 'report') item.reportCss = null;
+          if (!item.slideCss && !item.reportCss) {
+            store.delete('custom_css');
+          } else {
+            item.updatedAt = Date.now();
+            store.put(item);
+          }
+        }
+      };
+
+      // Traitement de custom_theme_configs
+      const getThemeReq = store.get('custom_theme_configs');
+      getThemeReq.onsuccess = () => {
+        const item = getThemeReq.result;
+        if (item && item.configs) {
+          delete item.configs[mode];
+          if (Object.keys(item.configs).length === 0) {
+            store.delete('custom_theme_configs');
+          } else {
+            item.updatedAt = Date.now();
+            store.put(item);
+          }
+        }
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch {
+    // Ignore silencieusement
+  }
+}
+
+/**
  * Sauvegarde de manière atomique le brouillon Markdown et l'ensemble de ses images Base64 dans IndexedDB.
  * @param {object} draftData
  * @param {string} draftData.markdown - Contenu Markdown courant (avec jetons [image])

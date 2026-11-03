@@ -1228,11 +1228,13 @@ export class StyleSettingsManager {
    * @param {Object} [options={}] - Options d'initialisation
    * @param {HTMLElement} [options.container] - Conteneur DOM principal de la vue de styles
    * @param {function({ reportCss: string, slideCss: string, configs: { report: StyleThemeConfig, slide: StyleThemeConfig } }): void} [options.onApply] - Callback appelé lors de l'application des styles
+   * @param {function({ mode: 'report'|'slide', cssText: string, config: StyleThemeConfig }): Promise<void>|void} [options.onReset] - Callback appelé lors de la réinitialisation depuis les fichiers serveur
    * @param {function(): void} [options.onClose] - Callback appelé lors du retour à l'éditeur
    */
   constructor(options = {}) {
     this.container = options.container;
     this.onApply = options.onApply || (() => {});
+    this.onReset = options.onReset || (() => {});
     this.onClose = options.onClose || (() => {});
     this.activeMode = 'report';
 
@@ -2097,8 +2099,8 @@ export class StyleSettingsManager {
       this.handleExportJson();
     });
 
-    this.container.querySelector('#btnResetStyleDefaults')?.addEventListener('click', () => {
-      this.handleResetDefaults();
+    this.container.querySelector('#btnResetStyleDefaults')?.addEventListener('click', async () => {
+      await this.handleResetDefaults();
     });
 
     this.container.querySelector('#btnCloseStyleConfig')?.addEventListener('click', () => {
@@ -2702,12 +2704,44 @@ console.log(report.status);</code></pre>
   }
 
   /**
-   * Réinitialise les réglages du mode actif aux valeurs par défaut.
-   * @returns {void}
+   * Réinitialise les réglages du mode actif en rechargeant la feuille CSS correspondante depuis le serveur.
+   * Si le fichier serveur est introuvable ou inaccessible, bascule sur la configuration par défaut intégrée.
+   * Notifie l'application parente pour purger les surcharges sauvegardées dans IndexedDB.
+   * @returns {Promise<void>}
    */
-  handleResetDefaults() {
-    this.configs[this.activeMode] = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[this.activeMode]));
+  async handleResetDefaults() {
+    const mode = this.activeMode;
+    const serverCssPath = mode === 'slide' ? 'css/slide.css' : 'css/report.css';
+    let cssText = '';
+
+    try {
+      const res = await fetch(`${serverCssPath}?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        cssText = await res.text();
+        const parsed = parseConfigFromCss(cssText, mode);
+        if (parsed?.config) {
+          this.configs[mode] = parsed.config;
+        } else {
+          this.configs[mode] = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[mode]));
+        }
+      } else {
+        this.configs[mode] = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[mode]));
+        cssText = mode === 'slide' ? DEFAULT_SLIDE_CSS : DEFAULT_REPORT_CSS;
+      }
+    } catch {
+      this.configs[mode] = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG[mode]));
+      cssText = mode === 'slide' ? DEFAULT_SLIDE_CSS : DEFAULT_REPORT_CSS;
+    }
+
     this.updateFormValues();
     this.updateLivePreview();
+
+    if (typeof this.onReset === 'function') {
+      await this.onReset({
+        mode,
+        cssText,
+        config: JSON.parse(JSON.stringify(this.configs[mode])),
+      });
+    }
   }
 }
