@@ -78,7 +78,7 @@ export const DEFAULT_STYLE_CONFIG = {
     },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C00000', borderLeftWidth: 10 },
-    contentSlide: { headerBg: '#ffffff', borderTopColor: '#C00000', borderTopWidth: 6 },
+    contentSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, headerBg: '#ffffff', headerBgImage: '', headerBgImageName: '', headerBgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 6, paddingX: 56 },
     page: { bgBackdrop: '#f1f5f9', bgPaper: '#ffffff', border: '#d1d5db' },
   },
   slide: {
@@ -147,7 +147,7 @@ export const DEFAULT_STYLE_CONFIG = {
     },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C41718', borderLeftWidth: 10 },
-    contentSlide: { headerBg: '#ffffff', borderTopColor: '#C41718', borderTopWidth: 6 },
+    contentSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, headerBg: '#ffffff', headerBgImage: '', headerBgImageName: '', headerBgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 6, paddingX: 56 },
     page: { bgBackdrop: '#0b1120', bgPaper: '#ffffff', border: '#cbd5e1' },
   },
 };
@@ -196,6 +196,9 @@ function normalizeColor(val) {
   if (/^#[0-9A-Fa-f]{6}$/.test(val)) return val;
   if (/^#[0-9A-Fa-f]{3}$/.test(val)) {
     return `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}`;
+  }
+  if (val.toLowerCase() === 'transparent' || val.toLowerCase() === 'none') {
+    return 'transparent';
   }
   return val;
 }
@@ -339,12 +342,28 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
     if (cssVars['--slide-chapter-border-left-width']) cfg.chapterSlide.borderLeftWidth = parseInt(cssVars['--slide-chapter-border-left-width'], 10) || 10;
     if (cssVars['--slide-content-border-top-color']) cfg.contentSlide.borderTopColor = normalizeColor(cssVars['--slide-content-border-top-color']);
     if (cssVars['--slide-content-border-top-width']) cfg.contentSlide.borderTopWidth = parseInt(cssVars['--slide-content-border-top-width'], 10) || 6;
+    if (cssVars['--slide-content-bg']) cfg.contentSlide.bg = normalizeColor(cssVars['--slide-content-bg']);
     if (cssVars['--slide-header-bg']) cfg.contentSlide.headerBg = normalizeColor(cssVars['--slide-header-bg']);
+    if (cssVars['--slide-padding-x']) {
+      const pxMatch = cssVars['--slide-padding-x'].match(/(\d+)/);
+      if (pxMatch) cfg.contentSlide.paddingX = parseInt(pxMatch[1], 10);
+    }
   }
 
   // Règles spécifiques de cascade
-  const headerBg = extractRuleProp('\\.slide\\.slide-content\\s+\\.slide-header', 'background-color');
+  const coverBg = extractRuleProp('\\.slide\\.slide-title', 'background-color');
+  if (coverBg) cfg.coverSlide.bg = normalizeColor(coverBg);
+  const chapterBg = extractRuleProp('\\.slide\\.slide-chapter', 'background-color');
+  if (chapterBg) cfg.chapterSlide.bg = normalizeColor(chapterBg);
+  const contentBg = extractRuleProp('\\.slide\\.slide-content', 'background-color');
+  if (contentBg) cfg.contentSlide.bg = normalizeColor(contentBg);
+  const headerBg = extractRuleProp('\\.slide\\.slide-content\\s+\\.slide-header|\\.slide-header', 'background-color');
   if (headerBg) cfg.contentSlide.headerBg = normalizeColor(headerBg);
+  const slidePadX = extractRuleProp('\\.slide\\.slide-content\\s+\\.slide-body|\\.slide-header', 'padding-left');
+  if (slidePadX) {
+    const pxMatch = slidePadX.match(/(\d+)/);
+    if (pxMatch) cfg.contentSlide.paddingX = parseInt(pxMatch[1], 10);
+  }
 
   const mainTitleColor = extractRuleProp('\\.slide-main-title', 'color');
   if (mainTitleColor) cfg.hMain.color = normalizeColor(mainTitleColor);
@@ -385,6 +404,32 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
       cfg.chapterSlide.bgImageName = 'Image restaurée';
       const opMatch = lastChapterBlock.match(/opacity:\s*([\d.]+)/);
       if (opMatch) cfg.chapterSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+    }
+  }
+
+  const contentImgMatches = [...css.matchAll(/\.slide\.slide-content::after\s*\{([^}]+)\}/g)];
+  if (contentImgMatches.length > 0) {
+    const lastContentBlock = contentImgMatches[contentImgMatches.length - 1][1];
+    const imgUrlMatch = lastContentBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.contentSlide) cfg.contentSlide = {};
+      cfg.contentSlide.bgImage = imgUrlMatch[1];
+      cfg.contentSlide.bgImageName = 'Image restaurée';
+      const opMatch = lastContentBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch) cfg.contentSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+    }
+  }
+
+  const headerImgMatches = [...css.matchAll(/(?:\.slide\.slide-content\s+)?\.slide-header::after\s*\{([^}]+)\}/g)];
+  if (headerImgMatches.length > 0) {
+    const lastHeaderBlock = headerImgMatches[headerImgMatches.length - 1][1];
+    const imgUrlMatch = lastHeaderBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.contentSlide) cfg.contentSlide = {};
+      cfg.contentSlide.headerBgImage = imgUrlMatch[1];
+      cfg.contentSlide.headerBgImageName = 'Image restaurée';
+      const opMatch = lastHeaderBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch) cfg.contentSlide.headerBgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
     }
   }
 
@@ -432,6 +477,13 @@ export function generateThemeCss(mode, config) {
   const baseCss = isSlide ? DEFAULT_SLIDE_CSS : DEFAULT_REPORT_CSS;
   const cfg = config || DEFAULT_STYLE_CONFIG[mode];
 
+  const rawPadX = cfg.contentSlide?.paddingX;
+  const padX = (rawPadX === null || rawPadX === undefined || rawPadX === '')
+    ? '56px'
+    : (typeof rawPadX === 'number' || /^-?\d+(\.\d+)?$/.test(String(rawPadX).trim())
+        ? `${parseInt(rawPadX, 10)}px`
+        : String(rawPadX).trim());
+
   // Surcharges CSS explicites injectées à la suite du thème de base
   const overrides = isSlide
     ? `
@@ -459,7 +511,9 @@ export function generateThemeCss(mode, config) {
   --slide-chapter-border-left-color: ${cfg.chapterSlide?.borderLeftColor || '#C41718'};
   --slide-content-border-top-width: ${cfg.contentSlide?.borderTopWidth !== undefined ? cfg.contentSlide.borderTopWidth + 'px' : '6px'};
   --slide-content-border-top-color: ${cfg.contentSlide?.borderTopColor || '#C41718'};
-  --slide-header-bg: ${cfg.contentSlide?.headerBg || '#ffffff'};
+  --slide-content-bg: ${cfg.contentSlide?.bg || '#ffffff'};
+  --slide-header-bg: ${cfg.contentSlide?.headerBg ? normalizeColor(cfg.contentSlide.headerBg) : '#ffffff'};
+  --slide-padding-x: ${padX};
   --slide-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
   --slide-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
   --slide-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#C41718'};
@@ -513,21 +567,65 @@ export function generateThemeCss(mode, config) {
 
 .slide.slide-content {
   padding: 0 !important;
+  background-color: ${cfg.contentSlide?.bg || '#ffffff'} !important;
+  background-image: none !important;
+  position: relative;
 }
+${cfg.contentSlide?.bgImage ? `
+.slide.slide-content::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('${cfg.contentSlide.bgImage}') !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  opacity: ${(Number(cfg.contentSlide.bgOpacity ?? 100) / 100).toFixed(2)} !important;
+  pointer-events: none;
+  z-index: 0;
+}
+.slide.slide-content > * {
+  position: relative;
+  z-index: 1;
+}
+` : ''}
 
+.slide-header,
 .slide.slide-content .slide-header {
-  background-color: ${cfg.contentSlide?.headerBg || '#ffffff'} !important;
+  background-color: ${cfg.contentSlide?.headerBg ? normalizeColor(cfg.contentSlide.headerBg) : '#ffffff'} !important;
   padding-top: 24px !important;
   padding-bottom: 14px !important;
-  padding-left: 56px !important;
-  padding-right: 56px !important;
+  padding-left: ${padX} !important;
+  padding-right: ${padX} !important;
   margin-bottom: 0 !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  position: relative;
+  overflow: hidden;
 }
+${cfg.contentSlide?.headerBgImage ? `
+.slide-header::after,
+.slide.slide-content .slide-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('${cfg.contentSlide.headerBgImage}') !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  opacity: ${(Number(cfg.contentSlide.headerBgOpacity ?? 100) / 100).toFixed(2)} !important;
+  pointer-events: none;
+  z-index: 0;
+}
+.slide-header > *,
+.slide.slide-content .slide-header > * {
+  position: relative;
+  z-index: 1;
+}
+` : ''}
 
 .slide.slide-content .slide-body {
-  padding: 24px 56px 44px 56px !important;
+  padding: 24px ${padX} 44px ${padX} !important;
 }
 
 /* === Fonds spécifiques Couverture (#) et Chapitre (##) === */
@@ -542,7 +640,7 @@ ${cfg.coverSlide?.bgImage ? `
   position: absolute;
   inset: 0;
   background-image: url('${cfg.coverSlide.bgImage}') !important;
-  background-size: cover !important;
+  background-size: 100% 100% !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
   opacity: ${(Number(cfg.coverSlide.bgOpacity ?? 100) / 100).toFixed(2)} !important;
@@ -566,7 +664,7 @@ ${cfg.chapterSlide?.bgImage ? `
   position: absolute;
   inset: 0;
   background-image: url('${cfg.chapterSlide.bgImage}') !important;
-  background-size: cover !important;
+  background-size: 100% 100% !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
   opacity: ${(Number(cfg.chapterSlide.bgOpacity ?? 100) / 100).toFixed(2)} !important;
@@ -1465,22 +1563,12 @@ export class StyleSettingsManager {
                 <span class="config-card-title">Arrière-plans et Structure</span>
               </div>
               <div class="config-card-content">
-                <!-- Section spécifique Vision Slide : Couverture et Chapitre -->
+                <!-- Section spécifique Vision Slide : Couverture, Chapitre, Contenu et Bandeau -->
                 <div id="slideBackgroundsSection" class="slide-bg-section">
                   ${this.renderSlideBackgroundControlRow('coverSlide', 'Diapositive de Couverture (Slide #)')}
                   ${this.renderSlideBackgroundControlRow('chapterSlide', 'Diapositive de Chapitre (Slide ##)')}
-                  <div class="config-row config-bg-row">
-                    <div class="config-label-col">
-                      <span class="config-tag-label">Bandeau de titre (Slide Contenu ###)</span>
-                    </div>
-                    <div class="config-inputs-col">
-                      <div class="input-inline-group">
-                        <label class="input-sublabel">Couleur du bandeau</label>
-                        <input type="color" class="color-picker-input" data-bind="contentSlide.headerBg">
-                        <input type="text" class="text-input color-hex-input" data-bind="contentSlide.headerBg" spellcheck="false">
-                      </div>
-                    </div>
-                  </div>
+                  ${this.renderSlideBackgroundControlRow('contentSlide', 'Diapositive de Contenu (Slide ###)', 'bg', 'bgImage', 'bgOpacity', 'contentSlide', 'Couleur de fond')}
+                  ${this.renderSlideBackgroundControlRow('contentSlide', 'Bandeau de titre (Slide Contenu ###)', 'headerBg', 'headerBgImage', 'headerBgOpacity', 'contentSlideHeader', 'Couleur du bandeau', true)}
                 </div>
 
                 <!-- Section spécifique Vision Slide : Liserés -->
@@ -1532,6 +1620,18 @@ export class StyleSettingsManager {
                       <div class="input-inline-group">
                         <label class="input-sublabel">Épaisseur (px)</label>
                         <input type="number" min="0" max="40" class="text-input size-input" style="width: 75px;" data-bind="contentSlide.borderTopWidth" placeholder="6">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="config-row">
+                    <div class="config-label-col">
+                      <span class="config-tag-label">Marges latérales Contenu (Slide ###)</span>
+                    </div>
+                    <div class="config-inputs-col">
+                      <div class="input-inline-group">
+                        <label class="input-sublabel">Gauche et droite (px)</label>
+                        <input type="number" min="0" max="250" class="text-input size-input" style="width: 75px;" data-bind="contentSlide.paddingX" placeholder="56">
                       </div>
                     </div>
                   </div>
@@ -1660,7 +1760,7 @@ export class StyleSettingsManager {
   /**
    * Génère le HTML d'une ligne de réglage pour un fond de slide (couleur, image et transparence).
    */
-  renderSlideBackgroundControlRow(bindKey, labelText) {
+  renderSlideBackgroundControlRow(bindKey, labelText, colorProp = 'bg', imgProp = 'bgImage', opacityProp = 'bgOpacity', idPrefix = bindKey, colorLabel = 'Couleur de fond', allowTransparent = false) {
     return `
       <div class="config-row config-bg-row">
         <div class="config-label-col">
@@ -1668,22 +1768,23 @@ export class StyleSettingsManager {
         </div>
         <div class="config-inputs-col">
           <div class="input-inline-group">
-            <label class="input-sublabel">Couleur de fond</label>
-            <input type="color" class="color-picker-input" data-bind="${bindKey}.bg">
-            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.bg" spellcheck="false">
+            <label class="input-sublabel">${colorLabel}</label>
+            <input type="color" class="color-picker-input" data-bind="${bindKey}.${colorProp}">
+            <input type="text" class="text-input color-hex-input" data-bind="${bindKey}.${colorProp}" spellcheck="false" style="width: 86px;">
+            ${allowTransparent ? `<button type="button" class="btn btn-sm btn-transparent-toggle" id="btnTransparent_${idPrefix}">Transparent</button>` : ''}
           </div>
           <div class="input-inline-group">
             <label class="input-sublabel">Image de fond</label>
             <div class="file-picker-group">
-              <input type="file" id="${bindKey}FileInput" class="hidden-input" accept="image/*">
-              <button type="button" class="btn btn-sm" id="btnUpload_${bindKey}">Choisir image...</button>
-              <button type="button" class="btn btn-sm" id="btnClear_${bindKey}">Supprimer</button>
+              <input type="file" id="${idPrefix}FileInput" class="hidden-input" accept="image/*">
+              <button type="button" class="btn btn-sm" id="btnUpload_${idPrefix}">Choisir image...</button>
+              <button type="button" class="btn btn-sm" id="btnClear_${idPrefix}">Supprimer</button>
             </div>
-            <span class="file-name-indicator" id="${bindKey}_fileName">Aucune image</span>
+            <span class="file-name-indicator" id="${idPrefix}_fileName">Aucune image</span>
           </div>
           <div class="input-inline-group">
-            <label class="input-sublabel">Transparence (<span id="${bindKey}_opacityVal">100 %</span>)</label>
-            <input type="range" min="0" max="100" class="range-slider" data-bind="${bindKey}.bgOpacity" id="${bindKey}_opacityRange">
+            <label class="input-sublabel">Transparence (<span id="${idPrefix}_opacityVal">100 %</span>)</label>
+            <input type="range" min="0" max="100" class="range-slider" data-bind="${bindKey}.${opacityProp}" id="${idPrefix}_opacityRange">
           </div>
         </div>
       </div>
@@ -1863,12 +1964,19 @@ export class StyleSettingsManager {
       this.onClose();
     });
 
-    // Gestion du chargement d'image pour fond de couverture et de chapitre
-    ['coverSlide', 'chapterSlide'].forEach((key) => {
-      const fileInput = this.container.querySelector(`#${key}FileInput`);
-      const uploadBtn = this.container.querySelector(`#btnUpload_${key}`);
-      const clearBtn = this.container.querySelector(`#btnClear_${key}`);
-      const fileNameLabel = this.container.querySelector(`#${key}_fileName`);
+    // Gestion du chargement d'image pour fond de couverture, de chapitre, contenu et bandeau de contenu
+    const bgControllers = [
+      { id: 'coverSlide', bindKey: 'coverSlide', imgProp: 'bgImage', nameProp: 'bgImageName' },
+      { id: 'chapterSlide', bindKey: 'chapterSlide', imgProp: 'bgImage', nameProp: 'bgImageName' },
+      { id: 'contentSlide', bindKey: 'contentSlide', imgProp: 'bgImage', nameProp: 'bgImageName' },
+      { id: 'contentSlideHeader', bindKey: 'contentSlide', imgProp: 'headerBgImage', nameProp: 'headerBgImageName' },
+    ];
+
+    bgControllers.forEach(({ id, bindKey, imgProp, nameProp }) => {
+      const fileInput = this.container.querySelector(`#${id}FileInput`);
+      const uploadBtn = this.container.querySelector(`#btnUpload_${id}`);
+      const clearBtn = this.container.querySelector(`#btnClear_${id}`);
+      const fileNameLabel = this.container.querySelector(`#${id}_fileName`);
 
       uploadBtn?.addEventListener('click', () => {
         if (fileInput) {
@@ -1883,8 +1991,8 @@ export class StyleSettingsManager {
         const reader = new FileReader();
         reader.onload = (evt) => {
           const dataUrl = evt.target.result;
-          this.setBindValue(`${key}.bgImage`, dataUrl);
-          this.setBindValue(`${key}.bgImageName`, file.name);
+          this.setBindValue(`${bindKey}.${imgProp}`, dataUrl);
+          this.setBindValue(`${bindKey}.${nameProp}`, file.name);
           if (fileNameLabel) fileNameLabel.textContent = file.name;
           this.updateLivePreview();
         };
@@ -1892,9 +2000,33 @@ export class StyleSettingsManager {
       });
 
       clearBtn?.addEventListener('click', () => {
-        this.setBindValue(`${key}.bgImage`, '');
-        this.setBindValue(`${key}.bgImageName`, '');
+        this.setBindValue(`${bindKey}.${imgProp}`, '');
+        this.setBindValue(`${bindKey}.${nameProp}`, '');
         if (fileNameLabel) fileNameLabel.textContent = 'Aucune image';
+        this.updateLivePreview();
+      });
+    });
+
+    // Gestion du bouton de fond transparent (pour le bandeau de contenu ou autres éléments)
+    this.container.querySelectorAll('.btn-transparent-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.input-inline-group');
+        const hexInput = row?.querySelector('.color-hex-input');
+        const colorPicker = row?.querySelector('.color-picker-input');
+        const bind = hexInput?.getAttribute('data-bind');
+        if (!bind) return;
+
+        const currentVal = String(this.getBindValue(bind)).toLowerCase();
+        if (currentVal === 'transparent') {
+          const fallback = (colorPicker && /^#[0-9A-Fa-f]{6}$/.test(colorPicker.value)) ? colorPicker.value : '#ffffff';
+          this.setBindValue(bind, fallback);
+          if (hexInput) hexInput.value = fallback.toUpperCase();
+          btn.classList.remove('btn-primary');
+        } else {
+          this.setBindValue(bind, 'transparent');
+          if (hexInput) hexInput.value = 'transparent';
+          btn.classList.add('btn-primary');
+        }
         this.updateLivePreview();
       });
     });
@@ -1945,14 +2077,21 @@ export class StyleSettingsManager {
       if (target.classList.contains('color-picker-input')) {
         const textInput = this.container.querySelector(`.color-hex-input[data-bind="${bind}"]`);
         if (textInput) textInput.value = val.toUpperCase();
+        const transBtn = target.closest('.input-inline-group')?.querySelector('.btn-transparent-toggle');
+        if (transBtn) transBtn.classList.remove('btn-primary');
       } else if (target.classList.contains('color-hex-input')) {
-        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        const trimmed = String(val).trim().toLowerCase();
+        const transBtn = target.closest('.input-inline-group')?.querySelector('.btn-transparent-toggle');
+        if (/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
           const picker = this.container.querySelector(`.color-picker-input[data-bind="${bind}"]`);
-          if (picker) picker.value = val;
+          if (picker) picker.value = trimmed;
+          if (transBtn) transBtn.classList.remove('btn-primary');
+        } else if (trimmed === 'transparent' || trimmed === 'none') {
+          this.setBindValue(bind, 'transparent');
+          if (transBtn) transBtn.classList.add('btn-primary');
         }
       } else if (target.classList.contains('range-slider')) {
-        const key = bind.split('.')[0];
-        const valSpan = this.container.querySelector(`#${key}_opacityVal`);
+        const valSpan = target.id ? this.container.querySelector(`#${target.id.replace('Range', 'Val')}`) : null;
         if (valSpan) valSpan.textContent = `${val} %`;
       }
 
@@ -1966,9 +2105,18 @@ export class StyleSettingsManager {
       const val = target.type === 'checkbox' ? target.checked : target.value;
       this.setBindValue(bind, val);
 
-      if (target.classList.contains('range-slider')) {
-        const key = bind.split('.')[0];
-        const valSpan = this.container.querySelector(`#${key}_opacityVal`);
+      if (target.classList.contains('color-hex-input')) {
+        const trimmed = String(val).trim().toLowerCase();
+        const transBtn = target.closest('.input-inline-group')?.querySelector('.btn-transparent-toggle');
+        if (trimmed === 'transparent' || trimmed === 'none') {
+          this.setBindValue(bind, 'transparent');
+          target.value = 'transparent';
+          if (transBtn) transBtn.classList.add('btn-primary');
+        } else if (/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
+          if (transBtn) transBtn.classList.remove('btn-primary');
+        }
+      } else if (target.classList.contains('range-slider')) {
+        const valSpan = target.id ? this.container.querySelector(`#${target.id.replace('Range', 'Val')}`) : null;
         if (valSpan) valSpan.textContent = `${val} %`;
       }
 
@@ -2040,20 +2188,43 @@ export class StyleSettingsManager {
       if (val !== undefined) {
         if (input.type === 'checkbox') {
           input.checked = Boolean(val);
+        } else if (input.type === 'color') {
+          if (String(val).toLowerCase() === 'transparent') {
+            // Un input[type="color"] ne supporte pas "transparent", on n'écrase pas sa valeur
+          } else if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            input.value = val;
+          }
         } else {
           input.value = val;
         }
       }
     });
 
+    // Mettre à jour l'état visuel des boutons Transparent
+    this.container.querySelectorAll('.btn-transparent-toggle').forEach((btn) => {
+      const hexInput = btn.closest('.input-inline-group')?.querySelector('.color-hex-input');
+      const bind = hexInput?.getAttribute('data-bind');
+      if (bind) {
+        const val = String(this.getBindValue(bind)).toLowerCase();
+        btn.classList.toggle('btn-primary', val === 'transparent');
+      }
+    });
+
     // Mettre à jour les indicateurs d'images et de curseurs d'opacité
-    ['coverSlide', 'chapterSlide'].forEach((key) => {
-      const fileNameLabel = this.container.querySelector(`#${key}_fileName`);
-      const opacityVal = this.container.querySelector(`#${key}_opacityVal`);
-      const opacityRange = this.container.querySelector(`#${key}_opacityRange`);
-      const imgName = this.getBindValue(`${key}.bgImageName`);
-      const hasImg = Boolean(this.getBindValue(`${key}.bgImage`));
-      const opacity = this.getBindValue(`${key}.bgOpacity`) ?? 100;
+    const bgControllers = [
+      { id: 'coverSlide', bindKey: 'coverSlide', imgProp: 'bgImage', nameProp: 'bgImageName', opacityProp: 'bgOpacity' },
+      { id: 'chapterSlide', bindKey: 'chapterSlide', imgProp: 'bgImage', nameProp: 'bgImageName', opacityProp: 'bgOpacity' },
+      { id: 'contentSlide', bindKey: 'contentSlide', imgProp: 'bgImage', nameProp: 'bgImageName', opacityProp: 'bgOpacity' },
+      { id: 'contentSlideHeader', bindKey: 'contentSlide', imgProp: 'headerBgImage', nameProp: 'headerBgImageName', opacityProp: 'headerBgOpacity' },
+    ];
+
+    bgControllers.forEach(({ id, bindKey, imgProp, nameProp, opacityProp }) => {
+      const fileNameLabel = this.container.querySelector(`#${id}_fileName`);
+      const opacityVal = this.container.querySelector(`#${id}_opacityVal`);
+      const opacityRange = this.container.querySelector(`#${id}_opacityRange`);
+      const imgName = this.getBindValue(`${bindKey}.${nameProp}`);
+      const hasImg = Boolean(this.getBindValue(`${bindKey}.${imgProp}`));
+      const opacity = this.getBindValue(`${bindKey}.${opacityProp}`) ?? 100;
 
       if (fileNameLabel) {
         fileNameLabel.textContent = imgName || (hasImg ? 'Image configurée' : 'Aucune image');
