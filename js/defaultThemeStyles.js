@@ -1556,8 +1556,35 @@ html, body {
   padding-left: 32px;
 }
 
+.slide-body ul ul,
+.slide-body ol ol,
+.slide-body ul ol,
+.slide-body ol ul {
+  margin-top: 4px;
+  margin-bottom: 6px;
+  padding-left: 28px;
+}
+
 .slide-body li {
   margin-bottom: 8px;
+}
+
+.slide-body .task-list-item {
+  list-style: none;
+  margin-left: -20px;
+}
+
+.slide-body .task-box {
+  font-family: var(--slide-font-mono, monospace);
+  font-size: 0.85em;
+  color: var(--slide-brand-dark, #0E2841);
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.slide-body .task-checked .task-label {
+  color: var(--slide-text-muted, #64748b);
+  text-decoration: line-through;
 }
 
 .slide-body h3 {

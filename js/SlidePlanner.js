@@ -137,6 +137,11 @@ export function splitMdBySections(mdText) {
 export function blockToMarkdown(block) {
   if (!block) return '';
   if (typeof block.raw === 'string' && block.raw.trim()) {
+    // Pour les éléments de liste, préserver impérativement l'indentation (espaces de début)
+    // qui détermine le niveau hiérarchique du bullet point.
+    if (block.type === 'list_item') {
+      return block.raw.trimEnd();
+    }
     return block.raw.trim();
   }
 
@@ -177,6 +182,43 @@ export function blockToMarkdown(block) {
     default:
       return block.text || '';
   }
+}
+
+/**
+ * Reconstruit le texte Markdown complet d'une série de blocs AST pour une diapositive.
+ * Les éléments de liste consécutifs au sein d'une même liste sont reliés par un simple saut
+ * de ligne (\n) afin de préserver l'imbrication des sous-niveaux d'indentation,
+ * tandis que les blocs de natures différentes ou séparés par des lignes vides sont espacés par (\n\n).
+ * 
+ * @function blocksToMarkdown
+ * @param {Array<object>} blocks - Liste des blocs AST de la diapositive
+ * @returns {string} Texte Markdown reconstitué
+ */
+export function blocksToMarkdown(blocks) {
+  if (!blocks || !blocks.length) return '';
+  const parts = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const text = blockToMarkdown(block);
+    if (!text) continue;
+    if (parts.length === 0) {
+      parts.push(text);
+    } else {
+      const prevBlock = blocks[i - 1];
+      const hasBlankLine =
+        block.startLine !== undefined &&
+        prevBlock?.endLine !== undefined &&
+        block.startLine > prevBlock.endLine + 1;
+
+      const isTightList =
+        !hasBlankLine &&
+        prevBlock?.type === 'list_item' &&
+        block.type === 'list_item';
+
+      parts.push(isTightList ? '\n' + text : '\n\n' + text);
+    }
+  }
+  return parts.join('').trim();
 }
 
 /**
@@ -228,7 +270,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
 
   const flushSlide = () => {
     if (currentSlide && (currentSlide.blocks.length > 0 || currentSlide.isExplicit)) {
-      currentSlide.markdown = currentSlide.blocks.map(blockToMarkdown).join('\n\n').trim();
+      currentSlide.markdown = blocksToMarkdown(currentSlide.blocks);
       slides.push(currentSlide);
       currentSlide = null;
     }
