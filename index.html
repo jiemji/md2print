@@ -40,12 +40,13 @@
         <span class="current-filename" id="currentFileName">Sans titre.md</span>
       </div>
 
-      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide) et Défilement synchronisé -->
+      <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide), Masquage éditeur et Défilement synchronisé -->
       <div class="header-group header-center">
         <div class="view-switcher">
           <button type="button" class="view-btn active" data-view="report" id="btnViewReport">Rapport</button>
           <button type="button" class="view-btn" data-view="slide" id="btnViewSlide">Slide</button>
         </div>
+        <button type="button" class="btn" id="btnToggleEditor" title="Masquer ou afficher l'éditeur Markdown (Raccourci : F9)">Masquer l'éditeur</button>
         <button type="button" class="btn" id="btnToggleSyncScroll" title="Activer ou désactiver le défilement lié entre l'éditeur et l'aperçu (Raccourci : F8)">Défilement lié : Activé</button>
       </div>
 
@@ -92,15 +93,39 @@
     <!-- Espace de Travail Split-View (Gauche : Éditeur / Droite : Aperçu) -->
     <main class="workspace" id="workspace">
       <section class="pane-editor" id="paneEditor">
-        <div
-          id="mdEditor"
-          class="md-editor"
-          contenteditable="true"
-          role="textbox"
-          aria-multiline="true"
-          data-placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
-          spellcheck="false"
-        ></div>
+        <!-- Barre d'outils supérieure de l'éditeur Markdown -->
+        <div class="editor-toolbar" id="editorToolbar">
+          <div class="editor-toolbar-left">
+            <button type="button" class="btn btn-sm" id="btnToggleEditorToc" title="Afficher ou masquer le sommaire des titres Markdown">Sommaire</button>
+            <span class="editor-toc-count" id="editorTocCount">0 titre</span>
+          </div>
+          <div class="editor-toolbar-right">
+            <button type="button" class="btn btn-sm" id="btnHideEditor" title="Masquer l'éditeur Markdown pour afficher l'aperçu plein écran">Masquer l'éditeur</button>
+          </div>
+        </div>
+
+        <!-- Corps de l'éditeur avec volet sommaire (#, ##, ###) et saisie -->
+        <div class="editor-body-container" id="editorBodyContainer">
+          <aside class="editor-toc-sidebar" id="editorTocSidebar">
+            <div class="editor-toc-header">
+              <span class="editor-toc-title">Sommaire des titres</span>
+              <button type="button" class="btn-subtle" id="btnCloseEditorToc" title="Fermer le sommaire">Fermer</button>
+            </div>
+            <div class="editor-toc-list" id="editorTocList">
+              <div class="editor-toc-empty">Aucun titre détecté (#, ##, ###)</div>
+            </div>
+          </aside>
+
+          <div
+            id="mdEditor"
+            class="md-editor"
+            contenteditable="true"
+            role="textbox"
+            aria-multiline="true"
+            data-placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
+            spellcheck="false"
+          ></div>
+        </div>
       </section>
 
       <div class="pane-resizer" id="paneResizer" title="Glisser pour ajuster la largeur"></div>

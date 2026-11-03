@@ -1015,7 +1015,7 @@ export const DEFAULT_SLIDE_CSS = `/* ===========================================
   /* ========================================================================
      3. FORMAT & PROPORTIONS 16:9 (Widescreen standard 12192000 x 6858000 dxa)
      ======================================================================== */
-  --slide-max-width: 1280px;             /* Largeur standard de la diapositive */
+  --slide-max-width: 100%;                /* Largeur adaptative maximale de la diapositive */
   --slide-aspect-ratio: 16 / 9;          /* Ratio universel 16:9 */
   --slide-padding-y: 44px;
   --slide-padding-x: 56px;
@@ -1268,7 +1268,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 10px 10px 60px 10px;
+  box-sizing: border-box;
   overflow: hidden;
   position: relative;
 }
@@ -1285,11 +1286,13 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  max-width: var(--slide-max-width);
-  max-height: calc(var(--slide-max-width) * 9 / 16);
-  aspect-ratio: var(--slide-aspect-ratio);
+  width: min(calc(100vw - 20px), calc((100vh - 118px) * 16 / 9));
+  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 16 / 9));
+  height: min(calc(100vh - 118px), calc((100vw - 20px) * 9 / 16));
+  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 9 / 16));
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: var(--slide-aspect-ratio, 16 / 9);
   position: relative;
   margin: auto;
 }
@@ -1298,6 +1301,9 @@ html, body {
   display: none;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: var(--slide-aspect-ratio, 16 / 9);
   background: var(--slide-canvas-bg);
   border-radius: var(--slide-radius);
   box-shadow: var(--slide-shadow);
@@ -1949,13 +1955,17 @@ html, body {
   justify-content: center;
   gap: 12px;
   position: fixed;
-  bottom: 20px;
-  right: 28px;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  right: auto;
   z-index: 1000;
+  height: 40px;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
   border: 1px solid var(--slide-border-color);
-  padding: 6px 14px;
+  padding: 4px 14px;
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
@@ -1964,13 +1974,14 @@ html, body {
   background: #ffffff;
   border: 1px solid var(--slide-border-color);
   color: var(--slide-text-main);
-  padding: 6px 14px;
+  padding: 4px 14px;
   border-radius: 4px;
   font-family: inherit;
   font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  line-height: 1.2;
 }
 
 .banner-btn:hover:not(:disabled), .slide-controls button:hover:not(:disabled) {

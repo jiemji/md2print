@@ -585,10 +585,47 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 
   const slideContainmentCSS = isSlide
     ? `
-/* === Confinement impératif 16:9 et intégration proportionnelle des images === */
-.slide {
+/* === Maximisation adaptative de la scène 16:9 et centrage des contrôles === */
+.document-body {
+  padding: 10px 10px 60px 10px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   overflow: hidden !important;
 }
+.slide-container {
+  width: min(calc(100vw - 20px), calc((100vh - 118px) * 16 / 9)) !important;
+  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 16 / 9)) !important;
+  height: min(calc(100vh - 118px), calc((100vw - 20px) * 9 / 16)) !important;
+  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 9 / 16)) !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  margin: auto !important;
+}
+.slide {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  overflow: hidden !important;
+}
+.slide-controls {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  bottom: 10px !important;
+  height: 40px !important;
+  box-sizing: border-box !important;
+  padding: 4px 14px !important;
+}
+.banner-btn, .slide-controls button {
+  padding: 4px 14px !important;
+  line-height: 1.2 !important;
+}
+/* === Confinement impératif 16:9 et intégration proportionnelle des images === */
 .slide-content-inner {
   width: 100% !important;
   height: 100% !important;

@@ -21,6 +21,7 @@ import {
   getEditorSelectionOffsets,
   restoreEditorSelectionOffsets,
   setEditorContent,
+  findDomPosition,
   insertNodeAtEditorCaret,
   clearCartoucheSelectionStyles,
   updateCartoucheSelectionHighlight,
@@ -71,6 +72,8 @@ const state = {
   customCssFileName: null,
   themeConfigs: null,
   syncScroll: true,
+  isEditorHidden: false,
+  isEditorTocCollapsed: false,
 };
 
 // --- Cache des Références DOM ---
@@ -116,6 +119,15 @@ const initDomRefs = () => {
   dom.btnExportPptx = document.getElementById('btnExportPptx');
 
   dom.btnToggleTheme = document.getElementById('btnToggleTheme');
+
+  dom.btnToggleEditor = document.getElementById('btnToggleEditor');
+  dom.btnHideEditor = document.getElementById('btnHideEditor');
+  dom.editorToolbar = document.getElementById('editorToolbar');
+  dom.editorTocSidebar = document.getElementById('editorTocSidebar');
+  dom.btnToggleEditorToc = document.getElementById('btnToggleEditorToc');
+  dom.btnCloseEditorToc = document.getElementById('btnCloseEditorToc');
+  dom.editorTocList = document.getElementById('editorTocList');
+  dom.editorTocCount = document.getElementById('editorTocCount');
 
   dom.workspace = document.getElementById('workspace');
   dom.pageStyleConfig = document.getElementById('pageStyleConfig');
@@ -718,7 +730,7 @@ function initEventListeners() {
     handleSaveMarkdown();
   });
 
-  // Raccourci global Ctrl+S / Cmd+S et F8 (Bascule Défilement lié)
+  // Raccourci global Ctrl+S / Cmd+S, F8 (Bascule Défilement lié) et F9 (Masquage éditeur)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
@@ -726,6 +738,9 @@ function initEventListeners() {
     } else if (e.key === 'F8') {
       e.preventDefault();
       toggleSyncScroll();
+    } else if (e.key === 'F9') {
+      e.preventDefault();
+      toggleEditorPane();
     }
   });
 
@@ -744,6 +759,7 @@ function initEventListeners() {
     if (e.data === '`' || e.data === '\n') {
       checkForUnfencedCartouches();
     }
+    scheduleEditorTocUpdate(200);
     schedulePreviewUpdate(400);
     scheduleDraftSave(1500);
   });
@@ -958,6 +974,30 @@ function initEventListeners() {
   // Bascule du défilement lié (Bouton dans l'en-tête ou touche F8)
   dom.btnToggleSyncScroll?.addEventListener('click', () => {
     toggleSyncScroll();
+  });
+
+  // Bascule de masquage de l'éditeur Markdown (Bouton en-tête et barre d'outils)
+  dom.btnToggleEditor?.addEventListener('click', () => {
+    toggleEditorPane();
+  });
+
+  dom.btnHideEditor?.addEventListener('click', () => {
+    toggleEditorPane(true);
+  });
+
+  // Gestion du volet latéral Sommaire des titres (#, ##, ###)
+  dom.btnToggleEditorToc?.addEventListener('click', () => {
+    toggleEditorToc();
+  });
+
+  dom.btnCloseEditorToc?.addEventListener('click', () => {
+    toggleEditorToc(true);
+  });
+
+  // Défilement de l'éditeur Markdown : synchronisation défilement et mise à jour titre actif
+  dom.mdEditor.addEventListener('scroll', () => {
+    syncScrollEditorToIframe();
+    updateActiveTocHeadingOnScroll();
   });
 
   // F3 / F4 — Sélecteur de Vue (Rapport / Slide)
@@ -1522,6 +1562,8 @@ async function updatePreview() {
     updatePlannedSlides();
     syncSlideToCursor();
   }
+
+  renderEditorToc();
 }
 
 /**
@@ -1711,4 +1753,288 @@ function showToast(message, type = 'info') {
     toast.style.transform = 'translateY(6px)';
     setTimeout(() => toast.remove(), 200);
   }, 3200);
+}
+
+// --- Gestion du Masquage de l'Éditeur & du Sommaire des Titres (#, ##, ###) ---
+
+/**
+ * Bascule la visibilité de la fenêtre non-WYSIWYG (Éditeur Markdown).
+ * @param {boolean|null} [forceHide=null] - Forcer le masquage (true) ou l'affichage (false)
+ */
+function toggleEditorPane(forceHide = null) {
+  if (!dom.paneEditor) return;
+  const isHidden = dom.paneEditor.classList.contains('is-hidden');
+  const shouldHide = forceHide !== null ? forceHide : !isHidden;
+
+  if (shouldHide) {
+    dom.paneEditor.classList.add('is-hidden');
+    dom.paneResizer?.classList.add('is-hidden');
+    if (dom.btnToggleEditor) {
+      dom.btnToggleEditor.textContent = "Afficher l'éditeur";
+      dom.btnToggleEditor.classList.add('btn-active');
+      dom.btnToggleEditor.title = "Afficher l'éditeur Markdown (Raccourci : F9)";
+    }
+    state.isEditorHidden = true;
+    showToast("Éditeur masqué. Affichage plein écran de l'aperçu.", 'info');
+  } else {
+    dom.paneEditor.classList.remove('is-hidden');
+    dom.paneResizer?.classList.remove('is-hidden');
+    if (dom.btnToggleEditor) {
+      dom.btnToggleEditor.textContent = "Masquer l'éditeur";
+      dom.btnToggleEditor.classList.remove('btn-active');
+      dom.btnToggleEditor.title = "Masquer l'éditeur Markdown (Raccourci : F9)";
+    }
+    state.isEditorHidden = false;
+    renderEditorToc();
+  }
+}
+
+/**
+ * Bascule l'affichage du volet latéral de sommaire des titres dans l'éditeur.
+ * @param {boolean|null} [forceCollapse=null] - Forcer le repli (true) ou l'ouverture (false)
+ */
+function toggleEditorToc(forceCollapse = null) {
+  if (!dom.editorTocSidebar) return;
+  const isCollapsed = dom.editorTocSidebar.classList.contains('collapsed');
+  const shouldCollapse = forceCollapse !== null ? forceCollapse : !isCollapsed;
+
+  if (shouldCollapse) {
+    dom.editorTocSidebar.classList.add('collapsed');
+    state.isEditorTocCollapsed = true;
+    dom.btnToggleEditorToc?.classList.remove('btn-active');
+  } else {
+    dom.editorTocSidebar.classList.remove('collapsed');
+    state.isEditorTocCollapsed = false;
+    dom.btnToggleEditorToc?.classList.add('btn-active');
+    renderEditorToc();
+  }
+}
+
+let editorTocDebounceTimer = null;
+
+/**
+ * Planifie la mise à jour du sommaire de l'éditeur avec un léger délai pour préserver la fluidité de frappe.
+ * @param {number} [delay=200] - Délai en millisecondes
+ */
+function scheduleEditorTocUpdate(delay = 200) {
+  if (editorTocDebounceTimer) clearTimeout(editorTocDebounceTimer);
+  editorTocDebounceTimer = setTimeout(() => {
+    editorTocDebounceTimer = null;
+    renderEditorToc();
+  }, delay);
+}
+
+/**
+ * Analyse le Markdown courant et génère la liste hiérarchique des titres (#, ##, ###) dans le volet sommaire.
+ */
+function renderEditorToc() {
+  if (!dom.editorTocList) return;
+
+  const rawMd = state.markdown || '';
+  const lines = rawMd.split('\n');
+  const headings = [];
+  let inCodeBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^```/.test(line.trim())) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    const match = line.match(/^(#{1,3})[ \t]+(.*)/);
+    if (match) {
+      const level = match[1].length;
+      const rawText = match[2].trim();
+      const cleanText = rawText
+        .replace(/[*_`~]/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .trim();
+
+      headings.push({
+        level,
+        rawText,
+        cleanText: cleanText || '(Titre sans texte)',
+        lineIndex: i,
+      });
+    }
+  }
+
+  if (dom.editorTocCount) {
+    dom.editorTocCount.textContent = `${headings.length} titre${headings.length > 1 ? 's' : ''}`;
+  }
+
+  if (headings.length === 0) {
+    dom.editorTocList.innerHTML = '<div class="editor-toc-empty">Aucun titre détecté (#, ##, ###)</div>';
+    return;
+  }
+
+  dom.editorTocList.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
+  headings.forEach((h, idx) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `editor-toc-item level-${h.level}`;
+    item.dataset.lineIndex = String(h.lineIndex);
+    item.dataset.headingIndex = String(idx);
+    item.title = `${'#'.repeat(h.level)} ${h.cleanText} (Ligne ${h.lineIndex + 1})`;
+
+    const tag = document.createElement('span');
+    tag.className = 'editor-toc-tag';
+    tag.textContent = '#'.repeat(h.level);
+
+    const text = document.createElement('span');
+    text.className = 'editor-toc-text';
+    text.textContent = h.cleanText;
+
+    item.appendChild(tag);
+    item.appendChild(text);
+
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      jumpToEditorHeading(h.lineIndex, h.rawText, h.level);
+      dom.editorTocList?.querySelectorAll('.editor-toc-item').forEach((el) => el.classList.remove('active'));
+      item.classList.add('active');
+    });
+
+    fragment.appendChild(item);
+  });
+
+  dom.editorTocList.appendChild(fragment);
+  updateActiveTocHeadingOnScroll();
+}
+
+/**
+ * Fait défiler l'éditeur Markdown jusqu'à la ligne du titre sélectionné et place le curseur.
+ * @param {number} lineIndex - Index de la ligne du titre
+ * @param {string} rawText - Texte brut du titre
+ * @param {number} level - Niveau de titre (1, 2 ou 3)
+ */
+function jumpToEditorHeading(lineIndex, rawText, level) {
+  if (!dom.mdEditor) return;
+
+  const rawMd = state.markdown || '';
+  const lines = rawMd.split('\n');
+  let charOffset = 0;
+  for (let i = 0; i < Math.min(lineIndex, lines.length); i++) {
+    charOffset += lines[i].length + 1;
+  }
+
+  const pos = findDomPosition(dom.mdEditor, charOffset);
+  let targetEl = null;
+
+  if (pos && pos.container) {
+    if (pos.container === dom.mdEditor) {
+      if (dom.mdEditor.children.length > 0) {
+        const idx = Math.min(pos.offset, dom.mdEditor.children.length - 1);
+        targetEl = dom.mdEditor.children[idx];
+      }
+    } else {
+      targetEl =
+        pos.container.nodeType === Node.ELEMENT_NODE
+          ? pos.container
+          : pos.container.parentElement;
+    }
+  }
+
+  if (!targetEl || targetEl === dom.mdEditor) {
+    const headingLines = Array.from(dom.mdEditor.querySelectorAll('.md-heading-line'));
+    for (const hl of headingLines) {
+      if (
+        hl.textContent.includes(rawText) ||
+        (hl.dataset.headingText && rawText.includes(hl.dataset.headingText))
+      ) {
+        targetEl = hl;
+        break;
+      }
+    }
+  }
+
+  if (targetEl && targetEl !== dom.mdEditor) {
+    const editorRect = dom.mdEditor.getBoundingClientRect();
+    const targetRect = targetEl.getBoundingClientRect();
+    const targetY = dom.mdEditor.scrollTop + (targetRect.top - editorRect.top) - 20;
+
+    dom.mdEditor.scrollTo({
+      top: Math.max(0, targetY),
+      behavior: 'smooth',
+    });
+
+    targetEl.classList.remove('heading-jump-highlight');
+    void targetEl.offsetWidth;
+    targetEl.classList.add('heading-jump-highlight');
+    setTimeout(() => {
+      targetEl.classList.remove('heading-jump-highlight');
+    }, 1200);
+
+    if (pos && pos.container) {
+      try {
+        dom.mdEditor.focus();
+        const range = document.createRange();
+        range.setStart(pos.container, pos.offset);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (_) {}
+    }
+
+    if (state.currentViewport === 'slide') {
+      syncSlideToCursor();
+    }
+  }
+}
+
+let activeTocScrollTimer = null;
+
+/**
+ * Met à jour l'élément actif du sommaire en fonction du défilement actuel dans l'éditeur.
+ */
+function updateActiveTocHeadingOnScroll() {
+  if (!dom.editorTocList || activeTocScrollTimer) return;
+  activeTocScrollTimer = setTimeout(() => {
+    activeTocScrollTimer = null;
+    const items = Array.from(dom.editorTocList.querySelectorAll('.editor-toc-item'));
+    if (items.length === 0) return;
+
+    const rawMd = state.markdown || '';
+    const lines = rawMd.split('\n');
+    const scrollTop = dom.mdEditor.scrollTop;
+    const editorRect = dom.mdEditor.getBoundingClientRect();
+
+    let activeItem = null;
+
+    for (const item of items) {
+      const lineIdx = parseInt(item.dataset.lineIndex, 10);
+      if (isNaN(lineIdx)) continue;
+
+      let charOffset = 0;
+      for (let i = 0; i < Math.min(lineIdx, lines.length); i++) {
+        charOffset += lines[i].length + 1;
+      }
+
+      const pos = findDomPosition(dom.mdEditor, charOffset);
+      if (pos && pos.container) {
+        const el =
+          pos.container.nodeType === Node.ELEMENT_NODE
+            ? pos.container
+            : pos.container.parentElement;
+        if (el && el !== dom.mdEditor) {
+          const top = el.getBoundingClientRect().top - editorRect.top + scrollTop;
+          if (top <= scrollTop + 80) {
+            activeItem = item;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    if (activeItem) {
+      items.forEach((el) => el.classList.remove('active'));
+      activeItem.classList.add('active');
+    }
+  }, 100);
 }
