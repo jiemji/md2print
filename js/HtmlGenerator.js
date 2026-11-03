@@ -466,18 +466,22 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
 };
 
 /**
- * Génère le document HTML complet et autonome.
- * @param {string} rawMarkdown - Contenu Markdown brut
- * @param {object} options
- * @param {string} [options.docTitle] - Titre du document
- * @param {string} [options.viewMode='report'] - Mode d'affichage ('report' | 'slide')
- * @param {Record<string, string>} [options.localImages={}] - Dictionnaire d'images Base64
- * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des schémas Mermaid pré-rendus en SVG
- * @param {object} [options.pptConfig] - Configuration PPTX issue de output_config.json
- * @param {string} [options.templateId='default'] - Identifiant du template PPTX
- * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision rapport
- * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision slide
- * @returns {string} Code HTML autonome complet
+ * Génère le document HTML complet et autonome (mode Rapport continu ou Diaporama 16:9).
+ * Embarque toutes les ressources nécessaires (images Base64, diagrammes Mermaid vectoriels pré-rendus,
+ * styles CSS réactifs calculés pour contraindre les slides en ratio 16:9 tout en maximisant l'espace utile,
+ * cartouche de numérotation centré, bandeau interactif et sommaire dynamique).
+ * @function generateStandaloneHTML
+ * @param {string} rawMarkdown - Contenu Markdown source avec syntaxe étendue (badges, métriques, colonnes, Mermaid)
+ * @param {object} [options={}] - Options de configuration de la génération
+ * @param {string} [options.docTitle='Document'] - Titre principal du document ou de la présentation
+ * @param {'report'|'slide'} [options.viewMode='report'] - Mode d'affichage ('report' pour flux continu, 'slide' pour diaporama)
+ * @param {Record<string, string>} [options.localImages={}] - Dictionnaire associatif des images locales Base64
+ * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des diagrammes Mermaid pré-générés en SVG
+ * @param {object|null} [options.pptConfig=null] - Configuration PowerPoint issue de output_config.json
+ * @param {string} [options.templateId='default'] - Identifiant du modèle PPTX de référence
+ * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision Rapport
+ * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision Slide
+ * @returns {string} Code HTML autonome complet, prêt pour affichage iframe ou téléchargement standalone
  */
 export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   const {

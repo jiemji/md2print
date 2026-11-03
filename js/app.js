@@ -1,5 +1,19 @@
 /**
- * app.js — Contrôleur principal de l'application SPA md2print
+ * @module app
+ * @description Contrôleur principal de l'application SPA md2print.
+ * Orchestre les interactions utilisateur, la synchronisation temps réel entre l'éditeur Markdown
+ * et l'aperçu WYSIWYG (rapport paginé et diaporamas 16:9), le volet de sommaire hiérarchique (#, ##, ###),
+ * le masquage adaptatif de l'éditeur pour l'affichage plein écran, la gestion du thème (sombre, sépia),
+ * la persistance locale IndexedDB, et les exportations documentaires (HTML autonome, Word .docx, PowerPoint .pptx).
+ * @requires module:utils
+ * @requires module:EditorEngine
+ * @requires module:StorageService
+ * @requires module:defaultThemeStyles
+ * @requires module:StyleSettingsManager
+ * @requires module:HtmlGenerator
+ * @requires module:DocxGenerator
+ * @requires module:PptxGenerator
+ * @requires module:SlidePlanner
  */
 import {
   toSlug,
@@ -48,7 +62,36 @@ import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
 import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 
+/**
+ * @typedef {Object} AppState
+ * @property {string} markdown - Contenu textuel Markdown brut ou sérialisé
+ * @property {string} currentFileName - Nom du fichier de travail en cours
+ * @property {boolean} isDirty - Vrai si des modifications locales non enregistrées sont présentes
+ * @property {File[]} folderFiles - Liste des fichiers Markdown chargés depuis un dossier
+ * @property {string} selectedFolderIndex - Index du fichier actuellement sélectionné dans le dossier
+ * @property {Record<string, string>} localImages - Dictionnaire des images Base64 associées aux jetons
+ * @property {number} imageSeq - Compteur séquentiel d'identifiants d'images insérées
+ * @property {Array<Object>|null} plannedSlides - Planification des diapositives en vision slide
+ * @property {'report'|'slide'} currentViewport - Mode d'affichage actif (Rapport continu ou Diaporama 16:9)
+ * @property {'dark'|'sepia'} theme - Thème visuel de l'interface (sombre ou sépia)
+ * @property {number} editorWidthPct - Largeur en pourcentage du volet éditeur (ex: 50)
+ * @property {Object|null} outputConfig - Configuration de rendu DOCX/PPTX
+ * @property {string} configFileName - Nom lisible du fichier de configuration actif
+ * @property {ArrayBuffer|null} templateBuffer - Contenu binaire du modèle Word (.docx)
+ * @property {string} templateFileName - Nom lisible du modèle Word
+ * @property {ArrayBuffer|null} pptTemplateBuffer - Contenu binaire du modèle PowerPoint (.potx)
+ * @property {string} pptTemplateFileName - Nom lisible du modèle PowerPoint
+ * @property {string|null} reportCss - Feuille de style CSS personnalisée pour le mode Rapport
+ * @property {string|null} slideCss - Feuille de style CSS personnalisée pour le mode Slide
+ * @property {string|null} customCssFileName - Nom du fichier CSS personnalisé chargé
+ * @property {Object|null} themeConfigs - Configurations de styles pour chaque mode ('report', 'slide')
+ * @property {boolean} syncScroll - Vrai si le défilement lié entre l'éditeur et l'aperçu est activé
+ * @property {boolean} isEditorHidden - Vrai si le panneau éditeur Markdown est masqué (plein écran aperçu)
+ * @property {boolean} isEditorTocCollapsed - Vrai si le volet sommaire (#, ##, ###) de l'éditeur est replié
+ */
+
 // --- État Applicatif Singleton ---
+/** @type {AppState} */
 const state = {
   markdown: '',
   currentFileName: 'Sans titre.md',
@@ -553,8 +596,12 @@ function syncFromEditorDOM() {
 let styleSettingsManager = null;
 
 /**
- * Récupère ou instancie le gestionnaire de paramétrage des styles.
- * @returns {StyleSettingsManager|null}
+ * Récupère ou instancie en singleton le gestionnaire de paramétrage des styles de balises (StyleSettingsManager).
+ * Configure les callbacks métier :
+ * - onApply : sauvegarde les styles modifiés et les configurations JSON dans IndexedDB et actualise l'aperçu.
+ * - onReset : recharge le fichier CSS de référence serveur (slide.css ou report.css), purge les surcharges d'IndexedDB pour ce mode et réinitialise l'interface.
+ * - onClose : masque l'interface de paramétrage et restaure l'espace de travail d'édition.
+ * @returns {StyleSettingsManager|null} Instance du gestionnaire ou null si le conteneur DOM est absent
  */
 function getOrCreateStyleSettingsManager() {
   if (!styleSettingsManager && dom.pageStyleConfig) {
@@ -1758,8 +1805,20 @@ function showToast(message, type = 'info') {
 // --- Gestion du Masquage de l'Éditeur & du Sommaire des Titres (#, ##, ###) ---
 
 /**
+ * @typedef {Object} TocHeadingItem
+ * @property {number} level - Niveau hiérarchique du titre (1 pour #, 2 pour ##, 3 pour ###)
+ * @property {string} rawText - Texte brut du titre extrait de la ligne Markdown
+ * @property {string} cleanText - Texte assaini et débarrassé de la mise en forme inline
+ * @property {number} lineIndex - Index de la ligne (0-based) dans le document Markdown source
+ */
+
+/**
  * Bascule la visibilité de la fenêtre non-WYSIWYG (Éditeur Markdown).
- * @param {boolean|null} [forceHide=null] - Forcer le masquage (true) ou l'affichage (false)
+ * Permet d'étendre la zone d'aperçu en mode plein écran (100 % de largeur).
+ * Synchronise l'état du bouton d'en-tête, applique les classes CSS d'invisibilité,
+ * et restaure le sommaire lors de la réouverture.
+ * @param {boolean|null} [forceHide=null] - Forcer le masquage (true), l'affichage (false) ou basculer l'état (null)
+ * @returns {void}
  */
 function toggleEditorPane(forceHide = null) {
   if (!dom.paneEditor) return;
@@ -1790,8 +1849,10 @@ function toggleEditorPane(forceHide = null) {
 }
 
 /**
- * Bascule l'affichage du volet latéral de sommaire des titres dans l'éditeur.
- * @param {boolean|null} [forceCollapse=null] - Forcer le repli (true) ou l'ouverture (false)
+ * Bascule l'affichage du volet latéral de sommaire des titres dans l'éditeur Markdown.
+ * Réduit ou agrandit la colonne latérale gauche intégrée dans l'éditeur.
+ * @param {boolean|null} [forceCollapse=null] - Forcer le repli (true), l'ouverture (false) ou basculer (null)
+ * @returns {void}
  */
 function toggleEditorToc(forceCollapse = null) {
   if (!dom.editorTocSidebar) return;
@@ -1813,8 +1874,9 @@ function toggleEditorToc(forceCollapse = null) {
 let editorTocDebounceTimer = null;
 
 /**
- * Planifie la mise à jour du sommaire de l'éditeur avec un léger délai pour préserver la fluidité de frappe.
- * @param {number} [delay=200] - Délai en millisecondes
+ * Planifie la mise à jour du sommaire de l'éditeur avec un délai anti-rebond pour préserver la fluidité de frappe.
+ * @param {number} [delay=200] - Délai d'attente en millisecondes
+ * @returns {void}
  */
 function scheduleEditorTocUpdate(delay = 200) {
   if (editorTocDebounceTimer) clearTimeout(editorTocDebounceTimer);
@@ -1825,7 +1887,10 @@ function scheduleEditorTocUpdate(delay = 200) {
 }
 
 /**
- * Analyse le Markdown courant et génère la liste hiérarchique des titres (#, ##, ###) dans le volet sommaire.
+ * Analyse le document Markdown actif et construit l'arborescence des titres (#, ##, ###).
+ * Ignore systématiquement les lignes situées à l'intérieur de blocs de code délimités par des triples backticks.
+ * Construit les boutons de saut rapide avec indentation hiérarchique et actualise le compteur de titres.
+ * @returns {void}
  */
 function renderEditorToc() {
   if (!dom.editorTocList) return;
@@ -1907,10 +1972,12 @@ function renderEditorToc() {
 }
 
 /**
- * Fait défiler l'éditeur Markdown jusqu'à la ligne du titre sélectionné et place le curseur.
- * @param {number} lineIndex - Index de la ligne du titre
- * @param {string} rawText - Texte brut du titre
- * @param {number} level - Niveau de titre (1, 2 ou 3)
+ * Fait défiler l'éditeur Markdown jusqu'à la ligne du titre sélectionné, active une animation flash,
+ * positionne le curseur d'édition et synchronise la diapositive correspondante en vision Slide.
+ * @param {number} lineIndex - Index de la ligne (0-based) dans le document Markdown source
+ * @param {string} rawText - Texte brut du titre pour fallback de recherche par contenu
+ * @param {number} level - Niveau hiérarchique du titre (1, 2 ou 3)
+ * @returns {void}
  */
 function jumpToEditorHeading(lineIndex, rawText, level) {
   if (!dom.mdEditor) return;
@@ -1990,9 +2057,56 @@ function jumpToEditorHeading(lineIndex, rawText, level) {
 let activeTocScrollTimer = null;
 
 /**
- * Met à jour l'élément actif du sommaire en fonction du défilement actuel dans l'éditeur.
+ * Met à jour l'élément actif du sommaire de l'éditeur en fonction de la position courante de défilement.
+ * Parcourt les éléments de titres du sommaire et applique la classe `.active` sur le titre le plus haut visible.
+ * @returns {void}
  */
 function updateActiveTocHeadingOnScroll() {
+  if (!dom.editorTocList || activeTocScrollTimer) return;
+  activeTocScrollTimer = setTimeout(() => {
+    activeTocScrollTimer = null;
+    const items = Array.from(dom.editorTocList.querySelectorAll('.editor-toc-item'));
+    if (items.length === 0) return;
+
+    const rawMd = state.markdown || '';
+    const lines = rawMd.split('\n');
+    const scrollTop = dom.mdEditor.scrollTop;
+    const editorRect = dom.mdEditor.getBoundingClientRect();
+
+    let activeItem = null;
+
+    for (const item of items) {
+      const lineIdx = parseInt(item.dataset.lineIndex, 10);
+      if (isNaN(lineIdx)) continue;
+
+      let charOffset = 0;
+      for (let i = 0; i < Math.min(lineIdx, lines.length); i++) {
+        charOffset += lines[i].length + 1;
+      }
+
+      const pos = findDomPosition(dom.mdEditor, charOffset);
+      if (pos && pos.container) {
+        const el =
+          pos.container.nodeType === Node.ELEMENT_NODE
+            ? pos.container
+            : pos.container.parentElement;
+        if (el && el !== dom.mdEditor) {
+          const top = el.getBoundingClientRect().top - editorRect.top + scrollTop;
+          if (top <= scrollTop + 80) {
+            activeItem = item;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    if (activeItem) {
+      items.forEach((el) => el.classList.remove('active'));
+      activeItem.classList.add('active');
+    }
+  }, 100);
+}
   if (!dom.editorTocList || activeTocScrollTimer) return;
   activeTocScrollTimer = setTimeout(() => {
     activeTocScrollTimer = null;

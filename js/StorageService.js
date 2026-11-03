@@ -432,7 +432,9 @@ export async function clearDraftState() {
  *   localImages: Record<string, string>,
  *   customConfig: object|null,
  *   customTemplate: object|null,
- *   customPptTemplate: object|null
+ *   customPptTemplate: object|null,
+ *   customCss: object|null,
+ *   customThemeConfigs: Record<string, object>|null
  * }>}
  */
 export async function loadStoredState() {
