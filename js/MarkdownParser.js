@@ -298,7 +298,31 @@ export const parseToAST = (mdText) => {
     const trimmedBoth = line.trim();
 
     if (trimmedBoth === '') {
-      i++;
+      const emptyStart = i;
+      while (i < lines.length && lines[i].trim() === '') {
+        i++;
+      }
+      const emptyCount = i - emptyStart;
+      // Ignorer les lignes vides situées tout au début ou tout à la fin du document
+      if (emptyStart === 0 || i >= lines.length) {
+        continue;
+      }
+      const prevLine = lines[emptyStart - 1].trim();
+      const nextLine = lines[i].trim();
+      const isClosingTag = /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)\s*\]|:::)$/i.test(nextLine);
+      const isBetweenColumns =
+        /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?)\s*\]|:::)$/i.test(prevLine) &&
+        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\s*\]|:::\s*col)/i.test(nextLine);
+      if (isClosingTag || isBetweenColumns) {
+        continue;
+      }
+      ast.push({
+        type: 'empty_line',
+        count: emptyCount,
+        raw: '\n'.repeat(emptyCount),
+        startLine: emptyStart,
+        endLine: i - 1,
+      });
       continue;
     }
 
@@ -464,6 +488,13 @@ export const parseToAST = (mdText) => {
       if (pTrimmed.startsWith('```')) break;
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(pTrimmedBoth)) break;
       if (pTrimmedBoth.startsWith('>')) break;
+      if (/^(?:\[\s*\/?\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)(?::[^\]]*)?\s*\]|:::(?:\s*(?:col(?:onne)?|cols?onnes?|frise|timeline))?)$/i.test(pTrimmedBoth)) {
+        if (paraLines.length === 0) {
+          paraLines.push(pTrimmed);
+          i++;
+        }
+        break;
+      }
 
       paraLines.push(pTrimmed);
       i++;

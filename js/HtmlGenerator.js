@@ -222,6 +222,168 @@ export function extractAndGroupColumns(md) {
 }
 
 /**
+ * @typedef {Object} TimelineStep
+ * @property {string} badge - Libellé textuel court du jalon (ex: 'T0', '4 h')
+ * @property {string} colorName - Identifiant de la variante de couleur ('primary', 'danger', 'warning', 'success', 'info', 'purple', 'muted')
+ * @property {string} title - Titre en gras de l'étape
+ * @property {string} desc - Description ou texte explicatif associé
+ */
+
+/**
+ * Analyse une ligne d'étape de frise chronologique et en extrait les composants structurés.
+ * Formats pris en charge :
+ *  - `- **Jalon** (couleur) | **Titre** | Description`
+ *  - `- Jalon (couleur) : Titre : Description`
+ *  - `1. Jalon | Titre | Description`
+ * @function parseTimelineStep
+ * @param {string} rawLine - Ligne brute Markdown à analyser
+ * @returns {TimelineStep|null} Objet d'étape structuré ou null si la ligne est vide
+ */
+export function parseTimelineStep(rawLine) {
+  if (!rawLine || !rawLine.trim()) return null;
+  const trimmed = rawLine.trim();
+  if (trimmed === '%%MD2PRINT_EMPTY_LINE%%') return null;
+  const withoutBullet = trimmed.replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
+  if (!withoutBullet) return null;
+
+  let parts = [];
+  if (withoutBullet.includes('|')) {
+    parts = withoutBullet.split('|').map((p) => p.trim());
+  } else if (withoutBullet.includes(' : ')) {
+    parts = withoutBullet.split(' : ').map((p) => p.trim());
+  } else {
+    const match = withoutBullet.match(/^(\*\*[^*]+\*\*|\([^)]+\))\s*(.*)/);
+    if (match) {
+      parts = [match[1].trim(), match[2].trim()];
+    } else {
+      parts = [withoutBullet];
+    }
+  }
+
+  const badgeRaw = parts[0] || '';
+  const titleRaw = parts[1] || '';
+  const descRaw = parts.slice(2).join(' | ').trim();
+
+  let colorName = 'primary';
+  let badgeText = badgeRaw;
+
+  const colorMatch = badgeText.match(/\(([^)]+)\)/);
+  if (colorMatch) {
+    const rawColor = colorMatch[1].trim().toLowerCase();
+    badgeText = badgeText.replace(/\([^)]+\)/, '').trim();
+    if (/^(danger|rouge|red|critique|alerte?)$/.test(rawColor)) {
+      colorName = 'danger';
+    } else if (/^(warning|orange|amber|attention)$/.test(rawColor)) {
+      colorName = 'warning';
+    } else if (/^(success|vert|green|valide|ok)$/.test(rawColor)) {
+      colorName = 'success';
+    } else if (/^(info|bleu|blue|cyan)$/.test(rawColor)) {
+      colorName = 'info';
+    } else if (/^(purple|violet|magenta)$/.test(rawColor)) {
+      colorName = 'purple';
+    } else if (/^(muted|gris|gray|grey)$/.test(rawColor)) {
+      colorName = 'muted';
+    } else if (/^(dark|sombre|navy)$/.test(rawColor)) {
+      colorName = 'dark';
+    }
+  }
+
+  const cleanBadge = badgeText.replace(/[*_`]/g, '').trim();
+  let cleanTitle = titleRaw.replace(/^[*_`\s]+|[*_`\s]+$/g, '').trim();
+  if (!cleanTitle && !descRaw) {
+    cleanTitle = cleanBadge;
+  }
+
+  return {
+    badge: cleanBadge,
+    colorName,
+    title: cleanTitle,
+    desc: descRaw,
+  };
+}
+
+/**
+ * Extrait les blocs de frises chronologiques (`[frise]...[/frise]`, `[timeline]...[/timeline]`, `:::frise...:::`)
+ * et génère le code HTML correspondant avec placeholders pour préservation Marked.js.
+ * @function extractAndRenderTimelines
+ * @param {string} md - Texte Markdown source
+ * @returns {{ transformedMd: string, timelineHtmls: string[] }}
+ */
+export function extractAndRenderTimelines(md) {
+  if (!md) return { transformedMd: '', timelineHtmls: [] };
+
+  // Masquer temporairement les blocs de code pour éviter toute fausse détection à l'intérieur
+  const codeBlocks = [];
+  const maskedMd = md.replace(/```[\s\S]*?```/g, (match) => {
+    const token = `%%MD2PRINT_CODE_FENCE_${codeBlocks.length}%%`;
+    codeBlocks.push(match);
+    return token;
+  });
+
+  const restoreCodeBlocks = (text) =>
+    text.replace(/%%MD2PRINT_CODE_FENCE_(\d+)%%/g, (_, idx) => codeBlocks[Number(idx)] || '');
+
+  const timelineRegex = /(?:\[\s*(?:frise|timeline)\s*\]([\s\S]*?)\[\s*\/\s*(?:frise|timeline)\s*\]|:::\s*(?:frise|timeline)\s*\r?\n([\s\S]*?)\r?\n:::)/gi;
+  const timelineHtmls = [];
+
+  const transformedMasked = maskedMd.replace(timelineRegex, (match, content1, content2) => {
+    const rawContent = content1 !== undefined ? content1 : content2;
+    const content = restoreCodeBlocks(rawContent || '');
+    const lines = content.split(/\r?\n/);
+    const steps = [];
+
+    for (const line of lines) {
+      const step = parseTimelineStep(line);
+      if (step && (step.badge || step.title)) {
+        steps.push(step);
+      }
+    }
+
+    if (steps.length === 0) {
+      return '';
+    }
+
+    const stepsHtml = steps
+      .map((s) => {
+        const descHtml = s.desc
+          ? escapeHtml(s.desc)
+              .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+              .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+              .replace(/_([^_]+)_/g, '<em>$1</em>')
+          : '';
+
+        return `
+        <div class="timeline-step">
+          <div class="timeline-node-wrapper">
+            <div class="timeline-node timeline-node-${s.colorName}">${escapeHtml(s.badge)}</div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">${escapeHtml(s.title)}</div>
+            ${descHtml ? `<div class="timeline-desc">${descHtml}</div>` : ''}
+          </div>
+        </div>`;
+      })
+      .join('\n');
+
+    const timelineHtml = `
+<div class="process-timeline-wrapper">
+  <div class="process-timeline" style="--timeline-steps: ${steps.length};">
+${stepsHtml}
+  </div>
+</div>`;
+
+    const placeholder = `%%SLIDE_TIMELINE_${timelineHtmls.length}%%`;
+    timelineHtmls.push(timelineHtml);
+    return `\n\n${placeholder}\n\n`;
+  });
+
+  return {
+    transformedMd: restoreCodeBlocks(transformedMasked),
+    timelineHtmls,
+  };
+}
+
+/**
  * Convertit le Markdown normalisé en fragment HTML via Marked.js, Highlight.js et Mermaid.js.
  * Gère récursivement les colonnes multiples (`[colonne]...[/colonne]`), les schémas Mermaid pré-rendus,
  * les titres hiérarchiques avec ancrage slug, le souligné (`__texte__`), les callouts GitHub,
@@ -232,6 +394,98 @@ export function extractAndGroupColumns(md) {
  * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire associant le code source d'un schéma Mermaid à son SVG vectoriel pré-rendu
  * @returns {string} Fragment HTML prêt pour l'injection dans le corps de page ou de diapositive
  */
+/**
+ * Convertit les lignes vides explicites du Markdown brut en jetons %%MD2PRINT_EMPTY_LINE%%
+ * afin que Marked.js ne les fusionne pas et qu'elles soient restituées sous forme de <div class="empty-line">.
+ * @param {string} md - Texte Markdown brut
+ * @returns {string} Texte Markdown avec jetons de lignes vides
+ */
+const convertRawEmptyLinesToPlaceholders = (md) => {
+  if (!md) return '';
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
+  }
+  const out = [];
+  let inCodeFence = false;
+  let inTimeline = false;
+  let i = 0;
+
+  while (i < lines.length && lines[i].trim() === '') {
+    i++;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      inCodeFence = !inCodeFence;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (inCodeFence) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    if (/^(?:\[\s*(?:frise|timeline)\s*\]|:::\s*(?:frise|timeline))$/i.test(trimmed)) {
+      inTimeline = true;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (/^(?:\[\s*\/\s*(?:frise|timeline)\s*\]|:::)$/i.test(trimmed) && inTimeline) {
+      inTimeline = false;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (inTimeline) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    if (trimmed === '') {
+      const emptyStart = i;
+      while (i < lines.length && lines[i].trim() === '') {
+        i++;
+      }
+      const emptyCount = i - emptyStart;
+      if (i >= lines.length) break;
+
+      const prevLine = emptyStart > 0 ? lines[emptyStart - 1].trim() : '';
+      const nextLine = lines[i].trim();
+
+      const isClosingTag = /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)\s*\]|:::)$/i.test(nextLine);
+      const isBetweenColumns =
+        /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?)\s*\]|:::)$/i.test(prevLine) &&
+        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\s*\]|:::\s*col)/i.test(nextLine);
+      const isPlaceholderAdjacent =
+        prevLine.startsWith('%%') || nextLine.startsWith('%%');
+
+      if (!isClosingTag && !isBetweenColumns && !isPlaceholderAdjacent) {
+        out.push('');
+        for (let k = 0; k < emptyCount; k++) {
+          out.push('%%MD2PRINT_EMPTY_LINE%%');
+          out.push('');
+        }
+      } else {
+        out.push('');
+      }
+      continue;
+    }
+
+    out.push(line);
+    i++;
+  }
+
+  return out.join('\n');
+};
+
 const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
     return '<p>Erreur : La bibliothèque Marked.js n\'est pas chargée.</p>';
@@ -267,6 +521,9 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
     targetMarkdown = restoreCodeBlocks(transformedMd);
   }
+
+  const { transformedMd: timelineCleanedMd, timelineHtmls } = extractAndRenderTimelines(targetMarkdown);
+  targetMarkdown = timelineCleanedMd;
 
   const renderer = new window.marked.Renderer();
   const usedSlugs = new Set();
@@ -462,6 +719,23 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
   }
 
+  // Réinsertion des frises chronologiques générées
+  if (timelineHtmls && timelineHtmls.length > 0) {
+    for (let i = 0; i < timelineHtmls.length; i++) {
+      const regex = new RegExp(
+        `<p>\\s*%%SLIDE_TIMELINE_${i}%%\\s*<\\/p>|%%SLIDE_TIMELINE_${i}%%`,
+        'g'
+      );
+      processedHtml = processedHtml.replace(regex, timelineHtmls[i]);
+    }
+  }
+
+  // Restitution des lignes vides explicites sous forme de blocs d'espacement dédiés
+  processedHtml = processedHtml.replace(
+    /<p>\s*%%MD2PRINT_EMPTY_LINE%%\s*<\/p>|%%MD2PRINT_EMPTY_LINE%%/g,
+    '<div class="empty-line" aria-hidden="true"></div>'
+  );
+
   return processedHtml;
 };
 
@@ -561,7 +835,8 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       })
       .join('\n');
   } else {
-    parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
+    const reportMdWithEmptyLines = convertRawEmptyLinesToPlaceholders(cleanMarkdown);
+    parsedContent = parseMarkdownToHTML(reportMdWithEmptyLines, mermaidSvgMap);
   }
 
   let tocItemsHTML = '';
@@ -599,22 +874,57 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   overflow: hidden !important;
 }
 .slide-container {
-  width: min(calc(100vw - 20px), calc((100vh - 118px) * 16 / 9)) !important;
-  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 16 / 9)) !important;
-  height: min(calc(100vh - 118px), calc((100vw - 20px) * 9 / 16)) !important;
-  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 9 / 16)) !important;
+  width: min(calc(100vw - 20px), calc((100vh - 118px) * 1707 / 960)) !important;
+  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 1707 / 960)) !important;
+  height: min(calc(100vh - 118px), calc((100vw - 20px) * 960 / 1707)) !important;
+  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 960 / 1707)) !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  aspect-ratio: 16 / 9 !important;
+  aspect-ratio: 1707 / 960 !important;
   margin: auto !important;
+  position: relative !important;
+  overflow: hidden !important;
 }
 .slide {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  aspect-ratio: 16 / 9 !important;
+  width: 1707px !important;
+  height: 960px !important;
+  min-width: 1707px !important;
+  min-height: 960px !important;
+  max-width: 1707px !important;
+  max-height: 960px !important;
+  aspect-ratio: 1707 / 960 !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform-origin: top left !important;
+  transform: scale(var(--slide-scale, 1)) !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(calc(var(--slide-scale, 1) * 0.985));
+  }
+  to {
+    opacity: 1;
+    transform: scale(var(--slide-scale, 1));
+  }
+}
+/* === Rendu des lignes vides explicites en mode Slide === */
+.empty-line {
+  display: block !important;
+  width: 100% !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  flex: 0 0 16px !important;
+  pointer-events: none !important;
+}
+.slide-body :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+.slide.slide-content .slide-body {
+  padding-top: 12px !important;
 }
 .slide-controls {
   left: 50% !important;
@@ -651,6 +961,11 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+}
+.process-timeline-wrapper {
+  width: 100% !important;
+  flex-shrink: 0 !important;
+  margin: 14px 0 !important;
 }
 /* === Dimensionnement pleine largeur et partage horizontal des KPI / Chiffres clés === */
 .metric-group-row,
@@ -706,14 +1021,56 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 .slide-image-box img,
 .slide-body img,
 .slide img {
+  width: 100% !important;
+  height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  width: auto !important;
-  height: auto !important;
   object-fit: contain !important;
   display: block !important;
   margin: auto !important;
   box-sizing: border-box !important;
+}
+.slide-body .mermaid-card {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+.slide-body .mermaid-diagram {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+.slide-body .mermaid-diagram svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block !important;
+  margin: auto !important;
+}
+.slide-body .mermaid-diagram svg g[class*="bar-plot"] rect {
+  rx: 6px !important;
+  ry: 6px !important;
+}
+.slide-body .mermaid-diagram svg circle.line-plot-dot {
+  cursor: pointer !important;
+  transition: r 0.2s ease, stroke-width 0.2s ease !important;
+}
+.slide-body .mermaid-diagram svg circle.line-plot-dot:hover {
+  r: 6.5px !important;
+  stroke-width: 2px !important;
 }
 /* === Colonnes multiples côte à côte en mode Slide === */
 .slide-columns-row {
@@ -780,6 +1137,20 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 }
 `
     : `
+/* === Rendu des lignes vides explicites en vision Rapport === */
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  pointer-events: none;
+}
+.markdown-rendered-content :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6, hr):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+.markdown-rendered-content .empty-line + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 6px !important;
+}
 /* === Rendu propre des images en vision Rapport === */
 .slide-image-box, figure {
   margin: 16px auto;
@@ -848,8 +1219,22 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   const documentJS = `
     (function() {
       const isSlideMode = ${isSlide ? 'true' : 'false'};
+      const SLIDE_REF_WIDTH = 1707;
+      const SLIDE_REF_HEIGHT = 960;
       let currentSlideIndex = 0;
       let totalSlides = 0;
+
+      function updateSlideScale() {
+        const container = document.getElementById('slideContainer');
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const scaleX = rect.width / SLIDE_REF_WIDTH;
+          const scaleY = rect.height / SLIDE_REF_HEIGHT;
+          const scale = Math.min(scaleX, scaleY);
+          container.style.setProperty('--slide-scale', scale.toFixed(6));
+        }
+      }
 
       window.toggleTocSidebar = function() {
         const sidebar = document.getElementById('tocSidebar');
@@ -930,6 +1315,18 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
         const slides = document.querySelectorAll('.slide');
         totalSlides = slides.length;
         currentSlideIndex = 0;
+
+        updateSlideScale();
+        requestAnimationFrame(updateSlideScale);
+        window.addEventListener('resize', updateSlideScale);
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => {
+            updateSlideScale();
+          });
+          const container = document.getElementById('slideContainer');
+          if (container) ro.observe(container);
+          if (document.body) ro.observe(document.body);
+        }
 
         if (totalSlides > 0) {
           showSlide(0);
@@ -1088,7 +1485,6 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       </div>
       <div class="banner-actions">
         <span class="banner-date">${escapeHtml(formattedDate)}</span>
-        <button type="button" class="banner-btn" onclick="window.print()">Imprimer</button>
       </div>
     </div>
   </header>

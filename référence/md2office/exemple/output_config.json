@@ -1,0 +1,199 @@
+{
+    "documents": [
+        {
+            "name": "Rapport Isec",
+            "path": "templates/Modele_word.docx",
+            "styles": {
+                "globalTitle": "Titre",
+                "deliveryTitle": "Titre1",
+                "h1": "Titre1",
+                "h2": "Titre2",
+                "h3": "Titre3",
+                "h4": "Titre4",
+                "h5": "Titre5",
+                "p": "Normal",
+                "ul": [
+                    "Listepuce",
+                    "Listepuce2",
+                    "Listepuce3"
+                ],
+                "ol": [
+                    "Listenumero",
+                    "Listenumero2",
+                    "Listenumero3"
+                ]
+            },
+            "tableFormat": {
+                "headerFill": "003366",
+                "headerColor": "FFFFFF",
+                "rowFill": "FFFFFF",
+                "rowAltFill": "F9F9F9",
+                "borderColor": "CCCCCC",
+                "borderSize": 4
+            }
+        }
+    ],
+    "templates": [
+        {
+            "id": "extracted_1772134936046",
+            "name": "Slides ISEC",
+            "tableFormat": {
+                "headerFill": "C00000",
+                "headerColor": "FFFFFF",
+                "headerBold": true,
+                "rowFill": "FFFFFF",
+                "rowAltFill": "F9F9F9",
+                "borderColor": "CCCCCC",
+                "borderSize": 1,
+                "fontSize": 10
+            },
+            "layout": {
+                "name": "custom",
+                "width": 13.33,
+                "height": 7.5
+            },
+            "theme": {
+                "primary": "000000",
+                "secondary": "666666",
+                "text": "333333",
+                "background": "FFFFFF",
+                "surface": "F7F7F7"
+            },
+            "fonts": {
+                "title": "Calibri",
+                "body": "Calibri"
+            },
+            "masters": {
+                "TITRE": {
+                    "background": {
+                        "color": "FFFFFF"
+                    },
+                    "elements": [
+                        {
+                            "type": "rect",
+                            "x": 0,
+                            "y": 0,
+                            "w": 13.33,
+                            "h": 7.5,
+                            "fill": "C00000"
+                        },
+                        {
+                            "type": "text",
+                            "x": 0.27,
+                            "y": 0.41,
+                            "w": 12.72,
+                            "h": 0.84,
+                            "text": "INTRINSEC CONSEIL",
+                            "fontSize": 44,
+                            "color": "bg1",
+                            "bold": true
+                        },
+                        {
+                            "type": "text",
+                            "x": 1.36,
+                            "y": 3.27,
+                            "w": 11.32,
+                            "h": 1.11,
+                            "text": "{{title}}",
+                            "fontSize": 60,
+                            "color": "000000"
+                        }
+                    ],
+                    "contentArea": null
+                },
+                "CHAPITRE": {
+                    "background": {
+                        "color": "FFFFFF"
+                    },
+                    "elements": [
+                        {
+                            "type": "rect",
+                            "x": 8.32,
+                            "y": -0.12,
+                            "w": 6.84,
+                            "h": 8.28,
+                            "rotate": 38.5,
+                            "fill": "C00000"
+                        },
+                        {
+                            "type": "text",
+                            "x": 1.37,
+                            "y": 2.79,
+                            "w": 4.89,
+                            "h": 1.92,
+                            "text": "{{chapter}}",
+                            "fontSize": 54,
+                            "color": "000000"
+                        }
+                    ],
+                    "contentArea": null
+                },
+                "SLIDE": {
+                    "background": {
+                        "color": "FFFFFF"
+                    },
+                    "elements": [
+                        {
+                            "type": "text",
+                            "x": 0,
+                            "y": 0,
+                            "w": 13.33,
+                            "h": 1.07,
+                            "text": "{{title}}",
+                            "fontSize": 40,
+                            "color": "bg1",
+                            "bold": true,
+                            "align": "right",
+                            "margin": [
+                                14.2,
+                                42.5,
+                                14.2,
+                                42.5
+                            ],
+                            "fill": "C00000"
+                        },
+                        {
+                            "type": "text",
+                            "x": 0.15,
+                            "y": 7.03,
+                            "w": 1.18,
+                            "h": 0.29,
+                            "text": "Intrinsec - 2026",
+                            "fontSize": 11,
+                            "color": "000000"
+                        },
+                        {
+                            "type": "text",
+                            "x": 12.55,
+                            "y": 7.03,
+                            "w": 0.64,
+                            "h": 0.29,
+                            "text": "{{SLIDE_NUMBER}}",
+                            "fontSize": 11,
+                            "color": "bg1",
+                            "bold": true,
+                            "align": "center",
+                            "fill": "C00000"
+                        },
+                        {
+                            "type": "text",
+                            "x": 5.32,
+                            "y": 7.03,
+                            "w": 0.73,
+                            "h": 0.29,
+                            "text": "{{DATE}}",
+                            "fontSize": 11,
+                            "color": "000000"
+                        }
+                    ],
+                    "contentArea": {
+                        "x": 0.45,
+                        "y": 1.47,
+                        "w": 12.6,
+                        "h": 7.5
+                    }
+                }
+            }
+        }
+    ]
+}
