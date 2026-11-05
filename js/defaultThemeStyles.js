@@ -456,6 +456,22 @@ p {
   text-align: justify;
 }
 
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  pointer-events: none;
+}
+
+.markdown-rendered-content :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6, hr):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+
+.markdown-rendered-content .empty-line + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 6px !important;
+}
+
 /* Listes à puces & Listes numérotées (Listepuce & Listenumero) */
 ul, ol {
   margin-bottom: 16px;
@@ -951,8 +967,8 @@ blockquote p:last-child {
   background: #f8fafc;
   border: 1px solid var(--report-border-color);
   border-left: 4px solid var(--report-color-h2);
-  border-radius: var(--report-radius-sm);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -971,6 +987,21 @@ blockquote p:last-child {
   max-width: 100%;
   height: auto !important;
   display: block;
+}
+
+.mermaid-diagram svg g[class*="bar-plot"] rect {
+  rx: 6px;
+  ry: 6px;
+}
+
+.mermaid-diagram svg circle.line-plot-dot {
+  cursor: pointer;
+  transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+
+.mermaid-diagram svg circle.line-plot-dot:hover {
+  r: 6.5px;
+  stroke-width: 2px;
 }
 
 pre.code-block {
@@ -1115,10 +1146,10 @@ export const DEFAULT_SLIDE_CSS = `/* ===========================================
   --slide-font-size-base: 1.25rem;       /* Taille confortable pour lecture sur écran projeté */
   --slide-line-height-base: 1.6;
 
-  /* Échelle des titres de diapositives */
-  --slide-title-cover-size: clamp(2.4rem, 4.5vw, 3.4rem);   /* Titre de couverture (Couverture) */
-  --slide-title-chapter-size: clamp(2rem, 3.6vw, 2.6rem);   /* Titre d'inter-titre (Section) */
-  --slide-title-content-size: clamp(1.6rem, 2.6vw, 2.1rem); /* Titre de diapositive de contenu (Slide) */
+  /* Échelle des titres de diapositives (calibrée sur le canevas de référence 1707x960) */
+  --slide-title-cover-size: 2.8rem;   /* Titre de couverture (Couverture) */
+  --slide-title-chapter-size: 2.3rem; /* Titre d'inter-titre (Section) */
+  --slide-title-content-size: 1.85rem;/* Titre de diapositive de contenu (Slide) */
 
   /* ========================================================================
      2. PALETTE DE COULEURS (Charte graphique Modele_presentation.potx)
@@ -1427,29 +1458,37 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(calc(100vw - 20px), calc((100vh - 118px) * 16 / 9));
-  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 16 / 9));
-  height: min(calc(100vh - 118px), calc((100vw - 20px) * 9 / 16));
-  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 9 / 16));
+  width: min(calc(100vw - 20px), calc((100vh - 118px) * 1707 / 960));
+  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 1707 / 960));
+  height: min(calc(100vh - 118px), calc((100vw - 20px) * 960 / 1707));
+  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 960 / 1707));
   max-width: 100%;
   max-height: 100%;
-  aspect-ratio: var(--slide-aspect-ratio, 16 / 9);
+  aspect-ratio: 1707 / 960;
   position: relative;
   margin: auto;
+  overflow: hidden;
+  border-radius: var(--slide-radius);
+  box-shadow: var(--slide-shadow);
 }
 
 .slide {
   display: none;
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  aspect-ratio: var(--slide-aspect-ratio, 16 / 9);
+  width: 1707px;
+  height: 960px;
+  min-width: 1707px;
+  min-height: 960px;
+  max-width: 1707px;
+  max-height: 960px;
+  aspect-ratio: 1707 / 960;
   background: var(--slide-canvas-bg);
   border-radius: var(--slide-radius);
-  box-shadow: var(--slide-shadow);
   overflow: hidden;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  transform: scale(var(--slide-scale, 1));
   animation: slideFadeIn 0.25s ease-out;
 }
 
@@ -1461,11 +1500,11 @@ html, body {
 @keyframes slideFadeIn {
   from {
     opacity: 0;
-    transform: scale(0.985);
+    transform: scale(calc(var(--slide-scale, 1) * 0.985));
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(var(--slide-scale, 1));
   }
 }
 
@@ -1941,7 +1980,8 @@ html, body {
   background: var(--slide-mermaid-bg, #f8fafc);
   border: 1px solid var(--slide-mermaid-border, var(--slide-table-border));
   border-left: 4px solid var(--slide-mermaid-border-left, var(--slide-brand-red));
-  border-radius: 4px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1967,6 +2007,21 @@ html, body {
   height: 100% !important;
   display: block;
   margin: auto;
+}
+
+.slide-body .mermaid-diagram svg g[class*="bar-plot"] rect {
+  rx: 6px;
+  ry: 6px;
+}
+
+.mermaid-diagram svg circle.line-plot-dot {
+  cursor: pointer;
+  transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+
+.mermaid-diagram svg circle.line-plot-dot:hover {
+  r: 6.5px;
+  stroke-width: 2px;
 }
 
 /* ==========================================================================
@@ -1996,15 +2051,28 @@ html, body {
 .slide-image-box img,
 .slide img,
 .slide-body img {
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   object-fit: contain;
   display: block;
   margin: auto;
   border-radius: var(--slide-radius-sm);
   box-sizing: border-box;
+}
+
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  pointer-events: none;
+}
+
+.slide-body :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6):has(+ .empty-line) {
+  margin-bottom: 0 !important;
 }
 
 /* ==========================================================================

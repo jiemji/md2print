@@ -136,6 +136,10 @@ export function splitMdBySections(mdText) {
  */
 export function blockToMarkdown(block) {
   if (!block) return '';
+  if (block.type === 'empty_line') {
+    const c = Math.max(1, Number(block.count) || 1);
+    return Array(c).fill('%%MD2PRINT_EMPTY_LINE%%').join('\n\n');
+  }
   if (typeof block.raw === 'string' && block.raw.trim()) {
     // Pour les éléments de liste, préserver impérativement l'indentation (espaces de début)
     // qui détermine le niveau hiérarchique du bullet point.
@@ -269,9 +273,17 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
   let currentSlide = null;
 
   const flushSlide = () => {
-    if (currentSlide && (currentSlide.blocks.length > 0 || currentSlide.isExplicit)) {
-      currentSlide.markdown = blocksToMarkdown(currentSlide.blocks);
-      slides.push(currentSlide);
+    if (currentSlide) {
+      while (
+        currentSlide.blocks.length > 0 &&
+        currentSlide.blocks[currentSlide.blocks.length - 1].type === 'empty_line'
+      ) {
+        currentSlide.blocks.pop();
+      }
+      if (currentSlide.blocks.length > 0 || currentSlide.isExplicit) {
+        currentSlide.markdown = blocksToMarkdown(currentSlide.blocks);
+        slides.push(currentSlide);
+      }
       currentSlide = null;
     }
   };
@@ -304,11 +316,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
     if (block.type === 'header') {
       if (block.level === 1) {
         // Règle 1 : Un titre # déclenche un slide de couverture
-        if (currentSlide && currentSlide.blocks.length === 0) {
-          currentSlide = null;
-        } else {
-          flushSlide();
-        }
+        flushSlide();
 
         globalTitle = block.text;
         lastH3Title = null;
@@ -353,11 +361,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
 
       if (block.level === 2) {
         // Règle 2 : Un titre ## déclenche un slide de chapitre
-        if (currentSlide && currentSlide.blocks.length === 0) {
-          currentSlide = null;
-        } else {
-          flushSlide();
-        }
+        flushSlide();
 
         currentSection = block.text;
         lastH3Title = null;
@@ -383,11 +387,7 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
 
       if (block.level === 3) {
         // Règle 3 : Un titre ### crée un slide de type slide
-        if (currentSlide && currentSlide.blocks.length === 0) {
-          currentSlide = null;
-        } else {
-          flushSlide();
-        }
+        flushSlide();
 
         lastH3Title = block.text;
 
@@ -448,7 +448,12 @@ export function planSlides(mdText, docTitle = 'Document', options = {}) {
       continue;
     }
 
-    // Autres blocs de contenu (paragraphes, listes, tableaux, diagrammes, images)
+    // Ignorer les lignes vides orphelines lorsqu'aucune diapositive de contenu n'est ouverte
+    if (block.type === 'empty_line' && !currentSlide) {
+      continue;
+    }
+
+    // Autres blocs de contenu (paragraphes, listes, tableaux, diagrammes, images, lignes vides)
     if (!currentSlide) {
       ensureContentSlide(lastH3Title || currentSection || globalTitle || 'Contenu', block.startLine ?? 0);
     }

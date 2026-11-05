@@ -568,15 +568,24 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
   let currentSlide = null;
 
   const flushSlide = () => {
-    if (
-      currentSlide &&
-      (currentSlide.items.length > 0 ||
+    if (currentSlide) {
+      if (currentSlide.items) {
+        while (
+          currentSlide.items.length > 0 &&
+          currentSlide.items[currentSlide.items.length - 1].type === 'empty_line'
+        ) {
+          currentSlide.items.pop();
+        }
+      }
+      if (
+        currentSlide.items.length > 0 ||
         currentSlide.table ||
         currentSlide.images?.length > 0 ||
         currentSlide.mermaids?.length > 0 ||
-        currentSlide.isExplicit)
-    ) {
-      slides.push(currentSlide);
+        currentSlide.isExplicit
+      ) {
+        slides.push(currentSlide);
+      }
       currentSlide = null;
     }
   };
@@ -701,6 +710,10 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       continue;
     }
 
+    if (block.type === 'empty_line' && !currentSlide) {
+      continue;
+    }
+
     if (!currentSlide) {
       const fallbackTitle = lastH3Title || currentSection || globalTitle || 'Contenu';
       currentSlide = {
@@ -710,6 +723,22 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
         title: fallbackTitle,
         items: [],
       };
+    }
+
+    if (block.type === 'empty_line') {
+      const count = Math.max(1, Number(block.count) || 1);
+      const isLeading =
+        currentSlide.items.length === 0 &&
+        !currentSlide.table &&
+        !currentSlide.images?.length &&
+        !currentSlide.mermaids?.length;
+      for (let k = 0; k < count; k++) {
+        currentSlide.items.push({
+          type: 'empty_line',
+          isLeading: isLeading && k === 0,
+        });
+      }
+      continue;
     }
 
     if (block.type === 'table') {
@@ -948,23 +977,34 @@ export async function generatePresentationFromTemplate(
         </p:txBody>
       </p:sp>`;
 
+      const leadingEmptyCount = (slideItem.items || []).filter((it) => it.type === 'empty_line').length;
+      const shiftEmu = Math.min(leadingEmptyCount * 180000, 2200000);
+      const applyEmptyLineShift = (b) => ({
+        x: b.x,
+        y: String(Number(b.y) + shiftEmu),
+        cx: b.cx,
+        cy: String(Math.max(1200000, Number(b.cy) - shiftEmu)),
+      });
+
       if (slideItem.table) {
         // Rendu du tableau Markdown en <a:tbl>
-        const bounds = layout.bodyBounds || {
+        const baseBounds = layout.bodyBounds || {
           x: '735013',
           y: '1144588',
           cx: '10937875',
           cy: '5137150',
         };
+        const bounds = applyEmptyLineShift(baseBounds);
         spTreeShapes += buildTableGraphicFrame(slideItem.table, shapeId++, bounds, tableFormat);
       } else if (slideItem.images?.length > 0 || slideItem.mermaids?.length > 0) {
         // Rendu des images ou schémas Mermaid
-        const bb = layout.bodyBounds || {
+        const baseBb = layout.bodyBounds || {
           x: '735013',
           y: '1144588',
           cx: '10937875',
           cy: '5137150',
         };
+        const bb = applyEmptyLineShift(baseBb);
 
         // Images standard
         if (slideItem.images?.length > 0) {
@@ -1027,7 +1067,14 @@ export async function generatePresentationFromTemplate(
         // Rendu des paragraphes et listes à puces
         const paragraphsXml = slideItem.items
           .map((it) => {
-            if (it.type === 'list_item') {
+            if (it.type === 'empty_line') {
+              const ptSz = it.isLeading ? '800' : '1200';
+              return `
+          <a:p>
+            <a:pPr marL="0" indent="0"><a:buNone/></a:pPr>
+            <a:endParaRPr lang="fr-FR" sz="${ptSz}"/>
+          </a:p>`;
+            } else if (it.type === 'list_item') {
               const lvl = Math.min(it.level || 0, 4);
               return `
           <a:p>

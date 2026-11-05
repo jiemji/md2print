@@ -27,6 +27,7 @@ import {
   validateOutputConfig,
   pruneUnusedLocalImages,
   renderMermaidBlocksMap,
+  setMermaidTheme,
 } from './utils.js';
 import {
   createCartoucheElement,
@@ -353,6 +354,8 @@ async function restoreFromIndexedDB() {
 
   if (customThemeConfigs) {
     state.themeConfigs = customThemeConfigs;
+    const initialPreset = customThemeConfigs[state.currentViewport]?.mermaid?.preset || 'default';
+    setMermaidTheme(initialPreset);
   }
 
   if (draft && typeof draft.markdown === 'string') {
@@ -615,6 +618,8 @@ function getOrCreateStyleSettingsManager() {
         await saveCustomCss({ reportCss, slideCss, fileName: 'styles-personnalises.css' });
         await saveThemeConfigs(configs);
         updateConfigStatusUI();
+        const activePreset = configs[state.currentViewport]?.mermaid?.preset || 'default';
+        setMermaidTheme(activePreset);
         updatePreview();
         showToast('Styles appliqués et sauvegardés avec succès', 'success');
       },
@@ -631,6 +636,8 @@ function getOrCreateStyleSettingsManager() {
         state.customCssFileName = null;
 
         updateConfigStatusUI();
+        const activePreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
+        setMermaidTheme(activePreset);
         updatePreview();
         showToast(`Styles ${mode === 'slide' ? 'Diaporama' : 'Rapport'} réinitialisés depuis ${mode === 'slide' ? 'slide.css' : 'report.css'} (serveur)`, 'success');
       },
@@ -1540,6 +1547,8 @@ function setViewMode(mode) {
   if (styleSettingsManager && dom.pageStyleConfig && dom.pageStyleConfig.style.display === 'flex') {
     styleSettingsManager.switchMode(mode);
   }
+  const modePreset = state.themeConfigs?.[mode]?.mermaid?.preset || 'default';
+  setMermaidTheme(modePreset);
   persistPreferencesNow();
   updatePreview();
 }
@@ -1577,6 +1586,8 @@ async function updatePreview() {
     prevIframeScroll = 0;
   }
 
+  const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
+  setMermaidTheme(activeMermaidPreset);
   const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: resolveDocumentTitle(),
@@ -1663,6 +1674,8 @@ function syncSlideToCursor() {
 async function handleExportHtml() {
   state.markdown = serializeEditorToMarkdown(dom.mdEditor);
   const title = resolveDocumentTitle();
+  const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
+  setMermaidTheme(activeMermaidPreset);
   const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: title,
@@ -1692,6 +1705,8 @@ async function handleExportDocx() {
 
   const title = resolveDocumentTitle();
   const docConfig = state.outputConfig?.documents?.[0] || {};
+  const reportMermaidPreset = state.themeConfigs?.report?.mermaid?.preset || 'default';
+  setMermaidTheme(reportMermaidPreset);
   showToast('Génération du fichier Word (.docx) en cours...');
 
   try {
@@ -1722,6 +1737,8 @@ async function handleExportPptx() {
   }
 
   const title = resolveDocumentTitle();
+  const slideMermaidPreset = state.themeConfigs?.slide?.mermaid?.preset || 'default';
+  setMermaidTheme(slideMermaidPreset);
   showToast('Génération de la présentation PowerPoint (.pptx) en cours...');
 
   try {

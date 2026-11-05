@@ -242,6 +242,7 @@ export function extractAndGroupColumns(md) {
 export function parseTimelineStep(rawLine) {
   if (!rawLine || !rawLine.trim()) return null;
   const trimmed = rawLine.trim();
+  if (trimmed === '%%MD2PRINT_EMPTY_LINE%%') return null;
   const withoutBullet = trimmed.replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
   if (!withoutBullet) return null;
 
@@ -393,6 +394,98 @@ ${stepsHtml}
  * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire associant le code source d'un schéma Mermaid à son SVG vectoriel pré-rendu
  * @returns {string} Fragment HTML prêt pour l'injection dans le corps de page ou de diapositive
  */
+/**
+ * Convertit les lignes vides explicites du Markdown brut en jetons %%MD2PRINT_EMPTY_LINE%%
+ * afin que Marked.js ne les fusionne pas et qu'elles soient restituées sous forme de <div class="empty-line">.
+ * @param {string} md - Texte Markdown brut
+ * @returns {string} Texte Markdown avec jetons de lignes vides
+ */
+const convertRawEmptyLinesToPlaceholders = (md) => {
+  if (!md) return '';
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop();
+  }
+  const out = [];
+  let inCodeFence = false;
+  let inTimeline = false;
+  let i = 0;
+
+  while (i < lines.length && lines[i].trim() === '') {
+    i++;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      inCodeFence = !inCodeFence;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (inCodeFence) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    if (/^(?:\[\s*(?:frise|timeline)\s*\]|:::\s*(?:frise|timeline))$/i.test(trimmed)) {
+      inTimeline = true;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (/^(?:\[\s*\/\s*(?:frise|timeline)\s*\]|:::)$/i.test(trimmed) && inTimeline) {
+      inTimeline = false;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (inTimeline) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    if (trimmed === '') {
+      const emptyStart = i;
+      while (i < lines.length && lines[i].trim() === '') {
+        i++;
+      }
+      const emptyCount = i - emptyStart;
+      if (i >= lines.length) break;
+
+      const prevLine = emptyStart > 0 ? lines[emptyStart - 1].trim() : '';
+      const nextLine = lines[i].trim();
+
+      const isClosingTag = /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)\s*\]|:::)$/i.test(nextLine);
+      const isBetweenColumns =
+        /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?)\s*\]|:::)$/i.test(prevLine) &&
+        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\s*\]|:::\s*col)/i.test(nextLine);
+      const isPlaceholderAdjacent =
+        prevLine.startsWith('%%') || nextLine.startsWith('%%');
+
+      if (!isClosingTag && !isBetweenColumns && !isPlaceholderAdjacent) {
+        out.push('');
+        for (let k = 0; k < emptyCount; k++) {
+          out.push('%%MD2PRINT_EMPTY_LINE%%');
+          out.push('');
+        }
+      } else {
+        out.push('');
+      }
+      continue;
+    }
+
+    out.push(line);
+    i++;
+  }
+
+  return out.join('\n');
+};
+
 const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
     return '<p>Erreur : La bibliothèque Marked.js n\'est pas chargée.</p>';
@@ -637,6 +730,12 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
     }
   }
 
+  // Restitution des lignes vides explicites sous forme de blocs d'espacement dédiés
+  processedHtml = processedHtml.replace(
+    /<p>\s*%%MD2PRINT_EMPTY_LINE%%\s*<\/p>|%%MD2PRINT_EMPTY_LINE%%/g,
+    '<div class="empty-line" aria-hidden="true"></div>'
+  );
+
   return processedHtml;
 };
 
@@ -736,7 +835,8 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       })
       .join('\n');
   } else {
-    parsedContent = parseMarkdownToHTML(cleanMarkdown, mermaidSvgMap);
+    const reportMdWithEmptyLines = convertRawEmptyLinesToPlaceholders(cleanMarkdown);
+    parsedContent = parseMarkdownToHTML(reportMdWithEmptyLines, mermaidSvgMap);
   }
 
   let tocItemsHTML = '';
@@ -774,22 +874,57 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   overflow: hidden !important;
 }
 .slide-container {
-  width: min(calc(100vw - 20px), calc((100vh - 118px) * 16 / 9)) !important;
-  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 16 / 9)) !important;
-  height: min(calc(100vh - 118px), calc((100vw - 20px) * 9 / 16)) !important;
-  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 9 / 16)) !important;
+  width: min(calc(100vw - 20px), calc((100vh - 118px) * 1707 / 960)) !important;
+  width: min(calc(100dvw - 20px), calc((100dvh - 118px) * 1707 / 960)) !important;
+  height: min(calc(100vh - 118px), calc((100vw - 20px) * 960 / 1707)) !important;
+  height: min(calc(100dvh - 118px), calc((100dvw - 20px) * 960 / 1707)) !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  aspect-ratio: 16 / 9 !important;
+  aspect-ratio: 1707 / 960 !important;
   margin: auto !important;
+  position: relative !important;
+  overflow: hidden !important;
 }
 .slide {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  aspect-ratio: 16 / 9 !important;
+  width: 1707px !important;
+  height: 960px !important;
+  min-width: 1707px !important;
+  min-height: 960px !important;
+  max-width: 1707px !important;
+  max-height: 960px !important;
+  aspect-ratio: 1707 / 960 !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform-origin: top left !important;
+  transform: scale(var(--slide-scale, 1)) !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(calc(var(--slide-scale, 1) * 0.985));
+  }
+  to {
+    opacity: 1;
+    transform: scale(var(--slide-scale, 1));
+  }
+}
+/* === Rendu des lignes vides explicites en mode Slide === */
+.empty-line {
+  display: block !important;
+  width: 100% !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  flex: 0 0 16px !important;
+  pointer-events: none !important;
+}
+.slide-body :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+.slide.slide-content .slide-body {
+  padding-top: 12px !important;
 }
 .slide-controls {
   left: 50% !important;
@@ -886,14 +1021,56 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 .slide-image-box img,
 .slide-body img,
 .slide img {
+  width: 100% !important;
+  height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  width: auto !important;
-  height: auto !important;
   object-fit: contain !important;
   display: block !important;
   margin: auto !important;
   box-sizing: border-box !important;
+}
+.slide-body .mermaid-card {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+.slide-body .mermaid-diagram {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+.slide-body .mermaid-diagram svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block !important;
+  margin: auto !important;
+}
+.slide-body .mermaid-diagram svg g[class*="bar-plot"] rect {
+  rx: 6px !important;
+  ry: 6px !important;
+}
+.slide-body .mermaid-diagram svg circle.line-plot-dot {
+  cursor: pointer !important;
+  transition: r 0.2s ease, stroke-width 0.2s ease !important;
+}
+.slide-body .mermaid-diagram svg circle.line-plot-dot:hover {
+  r: 6.5px !important;
+  stroke-width: 2px !important;
 }
 /* === Colonnes multiples côte à côte en mode Slide === */
 .slide-columns-row {
@@ -960,6 +1137,20 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 }
 `
     : `
+/* === Rendu des lignes vides explicites en vision Rapport === */
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  pointer-events: none;
+}
+.markdown-rendered-content :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6, hr):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+.markdown-rendered-content .empty-line + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 6px !important;
+}
 /* === Rendu propre des images en vision Rapport === */
 .slide-image-box, figure {
   margin: 16px auto;
@@ -1028,8 +1219,22 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   const documentJS = `
     (function() {
       const isSlideMode = ${isSlide ? 'true' : 'false'};
+      const SLIDE_REF_WIDTH = 1707;
+      const SLIDE_REF_HEIGHT = 960;
       let currentSlideIndex = 0;
       let totalSlides = 0;
+
+      function updateSlideScale() {
+        const container = document.getElementById('slideContainer');
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const scaleX = rect.width / SLIDE_REF_WIDTH;
+          const scaleY = rect.height / SLIDE_REF_HEIGHT;
+          const scale = Math.min(scaleX, scaleY);
+          container.style.setProperty('--slide-scale', scale.toFixed(6));
+        }
+      }
 
       window.toggleTocSidebar = function() {
         const sidebar = document.getElementById('tocSidebar');
@@ -1110,6 +1315,18 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
         const slides = document.querySelectorAll('.slide');
         totalSlides = slides.length;
         currentSlideIndex = 0;
+
+        updateSlideScale();
+        requestAnimationFrame(updateSlideScale);
+        window.addEventListener('resize', updateSlideScale);
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => {
+            updateSlideScale();
+          });
+          const container = document.getElementById('slideContainer');
+          if (container) ro.observe(container);
+          if (document.body) ro.observe(document.body);
+        }
 
         if (totalSlides > 0) {
           showSlide(0);
@@ -1268,7 +1485,6 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       </div>
       <div class="banner-actions">
         <span class="banner-date">${escapeHtml(formattedDate)}</span>
-        <button type="button" class="banner-btn" onclick="window.print()">Imprimer</button>
       </div>
     </div>
   </header>

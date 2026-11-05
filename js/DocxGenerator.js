@@ -73,7 +73,26 @@ async function buildDocxBlocks(cleanMd, docConfig) {
   const blocks = [];
   let isFirstH1 = true;
 
-  for (const block of ast) {
+  for (let idx = 0; idx < ast.length; idx++) {
+    const block = ast[idx];
+    const nextBlock = ast[idx + 1];
+    const hasEmptyNext = nextBlock?.type === 'empty_line';
+
+    if (block.type === 'empty_line') {
+      const count = Math.max(1, Number(block.count) || 1);
+      const styleP = docConfig?.styles?.p;
+      for (let k = 0; k < count; k++) {
+        blocks.push(
+          new window.docx.Paragraph({
+            children: [new window.docx.TextRun({ text: '' })],
+            style: typeof styleP === 'string' ? styleP : undefined,
+            spacing: { before: 0, after: 80 },
+          })
+        );
+      }
+      continue;
+    }
+
     if (block.type === 'header') {
       if (block.level === 1 && isFirstH1) {
         isFirstH1 = false;
@@ -268,7 +287,7 @@ async function buildDocxBlocks(cleanMd, docConfig) {
         new window.docx.Paragraph({
           children: toDocxRuns(block.runs),
           style: typeof styleP === 'string' ? styleP : undefined,
-          spacing: { after: 120 },
+          spacing: { after: hasEmptyNext ? 0 : 120 },
         })
       );
     }

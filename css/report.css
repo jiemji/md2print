@@ -447,6 +447,22 @@ p {
   text-align: justify;
 }
 
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  pointer-events: none;
+}
+
+.markdown-rendered-content :is(p, ul, ol, blockquote, .callout, .metric-group-row, .table-responsive-wrapper, .process-timeline-wrapper, .slide-columns-row, pre, h1, h2, h3, h4, h5, h6, hr):has(+ .empty-line) {
+  margin-bottom: 0 !important;
+}
+
+.markdown-rendered-content .empty-line + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 6px !important;
+}
+
 /* Listes à puces & Listes numérotées (Listepuce & Listenumero) */
 ul, ol {
   margin-bottom: 16px;
@@ -942,8 +958,8 @@ blockquote p:last-child {
   background: #f8fafc;
   border: 1px solid var(--report-border-color);
   border-left: 4px solid var(--report-color-h2);
-  border-radius: var(--report-radius-sm);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -962,6 +978,21 @@ blockquote p:last-child {
   max-width: 100%;
   height: auto !important;
   display: block;
+}
+
+.mermaid-diagram svg g[class*="bar-plot"] rect {
+  rx: 6px;
+  ry: 6px;
+}
+
+.mermaid-diagram svg circle.line-plot-dot {
+  cursor: pointer;
+  transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+
+.mermaid-diagram svg circle.line-plot-dot:hover {
+  r: 6.5px;
+  stroke-width: 2px;
 }
 
 pre.code-block {

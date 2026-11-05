@@ -1,3 +1,4 @@
+import { MERMAID_THEME_PRESETS } from './utils.js';
 /**
  * @module StyleSettingsManager
  * @description Contrôleur de la page de paramétrage interactif des styles, couleurs,
@@ -141,6 +142,7 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
     },
     mermaid: {
+      preset: 'default',
       bg: '#f8fafc',
       border: '#cbd5e1',
       borderLeft: '#2F5496',
@@ -210,6 +212,7 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
     },
     mermaid: {
+      preset: 'default',
       bg: '#f8fafc',
       border: '#cbd5e1',
       borderLeft: '#C41718',
@@ -418,6 +421,7 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (cssVars[`${prefix}column-padding`]) cfg.column.padding = cssVars[`${prefix}column-padding`];
 
   // Mermaid
+  if (cssVars[`${prefix}mermaid-preset`]) cfg.mermaid.preset = cssVars[`${prefix}mermaid-preset`];
   if (cssVars[`${prefix}mermaid-bg`]) cfg.mermaid.bg = normalizeColor(cssVars[`${prefix}mermaid-bg`]);
   if (cssVars[`${prefix}mermaid-border`]) cfg.mermaid.border = normalizeColor(cssVars[`${prefix}mermaid-border`]);
   if (cssVars[`${prefix}mermaid-border-left`]) cfg.mermaid.borderLeft = normalizeColor(cssVars[`${prefix}mermaid-border-left`]);
@@ -604,6 +608,7 @@ export function generateThemeCss(mode, config) {
   --slide-content-bg: ${cfg.contentSlide?.bg || '#ffffff'};
   --slide-header-bg: ${cfg.contentSlide?.headerBg ? normalizeColor(cfg.contentSlide.headerBg) : '#ffffff'};
   --slide-padding-x: ${padX};
+  --slide-mermaid-preset: ${cfg.mermaid?.preset || 'default'};
   --slide-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
   --slide-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
   --slide-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#C41718'};
@@ -786,11 +791,19 @@ ${cfg.chapterSlide?.bgImage ? `
   border-left-color: ${cfg.mermaid?.borderLeft || (isSlide ? '#C41718' : '#2F5496')} !important;
 }
 .slide img, .slide-body img {
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   object-fit: contain;
+}
+.empty-line {
+  display: block;
+  width: 100%;
+  height: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  pointer-events: none;
 }
 .slide-body a {
   color: ${cfg.link.color};
@@ -1005,6 +1018,10 @@ ${cfg.chapterSlide?.bgImage ? `
   --report-column-border: ${cfg.column?.border || '#cbd5e1'};
   --report-column-radius: ${cfg.column?.radius || '6px'};
   --report-column-padding: ${cfg.column?.padding || '14px'};
+  --report-mermaid-preset: ${cfg.mermaid?.preset || 'default'};
+  --report-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
+  --report-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
+  --report-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#2F5496'};
 }
 
 /* === Titres & Hiérarchie === */
@@ -1174,6 +1191,11 @@ ${cfg.chapterSlide?.bgImage ? `
   border: ${cfg.column?.border && cfg.column.border !== 'transparent' && cfg.column.border !== 'none' ? `1px solid ${cfg.column.border}` : 'none'};
   border-radius: ${cfg.column?.radius || '6px'};
   padding: ${cfg.column?.padding || '14px'};
+}
+.mermaid-card, .markdown-rendered-content .mermaid-card {
+  background-color: ${cfg.mermaid?.bg || '#f8fafc'} !important;
+  border-color: ${cfg.mermaid?.border || '#cbd5e1'} !important;
+  border-left-color: ${cfg.mermaid?.borderLeft || '#2F5496'} !important;
 }
 .slide-column-content {
   display: flex;
@@ -1582,9 +1604,20 @@ export class StyleSettingsManager {
 
                 <div class="config-row">
                   <div class="config-label-col">
-                    <span class="config-tag-label">Cadre Mermaid (schémas)</span>
+                    <span class="config-tag-label">Diagrammes Mermaid (schémas)</span>
                   </div>
                   <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Thème du schéma</label>
+                      <select class="select-input font-select" data-bind="mermaid.preset">
+                        <option value="default">Standard (Mermaid par défaut)</option>
+                        <option value="noir-rouge">Noir &amp; Rouge (Éditorial)</option>
+                        <option value="bleu-corporate">Bleu Corporate (Professionnel)</option>
+                        <option value="sombre">Sombre (Fond sombre)</option>
+                        <option value="colore">Coloré (Pastel)</option>
+                        <option value="monochrome">Monochrome (Noir &amp; Blanc)</option>
+                      </select>
+                    </div>
                     <div class="input-inline-group">
                       <label class="input-sublabel">Filet vertical gauche</label>
                       <input type="color" class="color-picker-input" data-bind="mermaid.borderLeft">
@@ -2406,35 +2439,43 @@ export class StyleSettingsManager {
     const currentCfg = this.configs[this.activeMode];
     const generatedCss = generateThemeCss(this.activeMode, currentCfg);
     const isSlide = this.activeMode === 'slide';
+    const presetKey = currentCfg.mermaid?.preset || 'default';
+    const presetInfo = MERMAID_THEME_PRESETS[presetKey] || MERMAID_THEME_PRESETS.default;
+    const sampleColors = presetInfo.sampleColors;
 
     const sampleHtml = isSlide
       ? `
         <div class="preview-slides-stack" style="display: flex; flex-direction: column; gap: 24px; padding: 12px; box-sizing: border-box;">
           
-          <!-- Diapositive 1 : Couverture (#) -->
-          <div class="slide slide-title active" style="display: flex; width: 100%; min-height: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
-            <div class="slide-inner slide-title-inner">
-              <div class="slide-title-card">
-                <h1 class="slide-main-title">Présentation Stratégique</h1>
-                <div class="slide-title-meta">
-                  <span class="slide-title-metadata">Sous-titre et métadonnées</span>
-                  <span class="slide-title-date">02/11/2026</span>
+          <!-- Diapositive 1 : Couverture (#) calibrée en 1707x960 et mise à l'échelle -->
+          <div class="preview-slide-viewport" style="width: 100%; position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <div class="slide slide-title active" style="display: flex; width: 1707px; height: 960px; min-height: 960px; position: absolute; top: 0; left: 0; transform-origin: top left; transform: scale(var(--slide-scale, 0.35)); box-sizing: border-box;">
+              <div class="slide-inner slide-title-inner">
+                <div class="slide-title-card">
+                  <h1 class="slide-main-title">Présentation Stratégique</h1>
+                  <div class="slide-title-meta">
+                    <span class="slide-title-metadata">Sous-titre et métadonnées</span>
+                    <span class="slide-title-date">02/11/2026</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Diapositive 2 : Chapitre (##) -->
-          <div class="slide slide-chapter active" style="display: flex; width: 100%; min-height: 200px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
-            <div class="slide-inner slide-chapter-inner">
-              <div class="slide-chapter-card">
-                <h2 class="slide-chapter-title">1. Contexte & Orientations</h2>
+          <!-- Diapositive 2 : Chapitre (##) calibrée en 1707x960 et mise à l'échelle -->
+          <div class="preview-slide-viewport" style="width: 100%; position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <div class="slide slide-chapter active" style="display: flex; width: 1707px; height: 960px; min-height: 960px; position: absolute; top: 0; left: 0; transform-origin: top left; transform: scale(var(--slide-scale, 0.35)); box-sizing: border-box;">
+              <div class="slide-inner slide-chapter-inner">
+                <div class="slide-chapter-card">
+                  <h2 class="slide-chapter-title">1. Contexte & Orientations</h2>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Diapositive 3 : Contenu standard (###) avec sous-titres #### et ##### -->
-          <div class="slide slide-content active" style="display: flex; flex-direction: column; width: 100%; min-height: 380px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); box-sizing: border-box;">
+          <!-- Diapositive 3 : Contenu standard (###) calibrée sur une largeur de référence de 1707px -->
+          <div class="preview-slide-viewport" data-auto-height="true" style="width: 100%; position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <div class="slide slide-content active" style="display: flex; flex-direction: column; width: 1707px; height: auto; min-height: 960px; max-height: none; position: absolute; top: 0; left: 0; transform-origin: top left; transform: scale(var(--slide-scale, 0.35)); box-sizing: border-box;">
             <div class="slide-inner slide-content-inner">
               <header class="slide-header">
                 <span class="slide-chapter-tag">Stratégie 2026</span>
@@ -2492,12 +2533,12 @@ export class StyleSettingsManager {
                 <figure class="mermaid-card" style="margin: 12px 0;">
                   <div class="mermaid-diagram" style="padding: 10px; display: flex; justify-content: center; align-items: center;">
                     <svg viewBox="0 0 360 80" style="width: 100%; max-height: 80px; display: block; margin: auto;">
-                      <rect x="10" y="20" width="90" height="40" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
-                      <text x="55" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#0369a1">Gitlab</text>
-                      <line x1="100" y1="40" x2="250" y2="40" stroke="#0284c7" stroke-width="2"/>
-                      <polygon points="250,36 260,40 250,44" fill="#0284c7"/>
-                      <rect x="260" y="20" width="90" height="40" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
-                      <text x="305" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#92400e">Runner</text>
+                      <rect x="10" y="20" width="90" height="40" rx="4" fill="${sampleColors.node1}" stroke="${sampleColors.stroke1}" stroke-width="2"/>
+                      <text x="55" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="${sampleColors.text1}">Gitlab</text>
+                      <line x1="100" y1="40" x2="250" y2="40" stroke="${sampleColors.line}" stroke-width="2"/>
+                      <polygon points="250,36 260,40 250,44" fill="${sampleColors.line}"/>
+                      <rect x="260" y="20" width="90" height="40" rx="4" fill="${sampleColors.node2}" stroke="${sampleColors.stroke2}" stroke-width="2"/>
+                      <text x="305" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="${sampleColors.text2}">Runner</text>
                     </svg>
                   </div>
                 </figure>
@@ -2527,6 +2568,7 @@ export class StyleSettingsManager {
                 </div>
               </div>
             </div>
+          </div>
           </div>
 
         </div>
@@ -2588,6 +2630,19 @@ export class StyleSettingsManager {
             </div>
           </div>
 
+          <figure class="mermaid-card" style="margin: 12px 0;">
+            <div class="mermaid-diagram" style="padding: 10px; display: flex; justify-content: center; align-items: center;">
+              <svg viewBox="0 0 360 80" style="width: 100%; max-height: 80px; display: block; margin: auto;">
+                <rect x="10" y="20" width="90" height="40" rx="4" fill="${sampleColors.node1}" stroke="${sampleColors.stroke1}" stroke-width="2"/>
+                <text x="55" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="${sampleColors.text1}">Gitlab</text>
+                <line x1="100" y1="40" x2="250" y2="40" stroke="${sampleColors.line}" stroke-width="2"/>
+                <polygon points="250,36 260,40 250,44" fill="${sampleColors.line}"/>
+                <rect x="260" y="20" width="90" height="40" rx="4" fill="${sampleColors.node2}" stroke="${sampleColors.stroke2}" stroke-width="2"/>
+                <text x="305" y="45" font-family="sans-serif" font-size="12" text-anchor="middle" fill="${sampleColors.text2}">Runner</text>
+              </svg>
+            </div>
+          </figure>
+
           <div class="table-responsive-wrapper">
             <table class="doc-table">
               <thead>
@@ -2638,6 +2693,33 @@ console.log(report.status);</code></pre>
 </head>
 <body data-view-mode="${this.activeMode}">
   ${sampleHtml}
+  <script>
+    (function() {
+      function updatePreviewSlidesScale() {
+        var viewports = document.querySelectorAll('.preview-slide-viewport');
+        viewports.forEach(function(vp) {
+          var slide = vp.querySelector('.slide');
+          if (!slide) return;
+          var w = vp.clientWidth;
+          if (w > 0) {
+            var scale = w / 1707;
+            vp.style.setProperty('--slide-scale', scale.toFixed(6));
+            var h = vp.getAttribute('data-auto-height') === 'true'
+              ? Math.max(960, slide.scrollHeight)
+              : 960;
+            vp.style.height = Math.round(h * scale) + 'px';
+          }
+        });
+      }
+      updatePreviewSlidesScale();
+      requestAnimationFrame(updatePreviewSlidesScale);
+      window.addEventListener('resize', updatePreviewSlidesScale);
+      if (typeof ResizeObserver !== 'undefined') {
+        var ro = new ResizeObserver(updatePreviewSlidesScale);
+        if (document.body) ro.observe(document.body);
+      }
+    })();
+  </script>
 </body>
 </html>`;
 
