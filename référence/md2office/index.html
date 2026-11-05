@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="md2office — Convertisseur Markdown vers PowerPoint et Word. Transformez vos fichiers .md en présentations PPTX et documents DOCX.">
+  <title>md2office — Markdown → PPTX / DOCX</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Libs CDN -->
+  <script src="https://unpkg.com/docx@9.7.1/dist/index.umd.cjs"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ═══════ Header ═══════ -->
+    <header class="app-header">
+      <div class="app-header__brand">
+        <span class="app-header__logo">md2office</span>
+        <span class="app-header__version">v1.0</span>
+      </div>
+      <span class="app-header__subtitle">Markdown → PowerPoint · Word</span>
+    </header>
+
+    <!-- ═══════ Main ═══════ -->
+    <main class="app-main">
+
+      <!-- Section 1: Upload Markdown -->
+      <section class="card" id="section-upload">
+        <div class="card__header">
+          <div class="card__icon card__icon--upload">📝</div>
+          <div>
+            <h1 class="card__title">Fichier Markdown</h1>
+            <p class="card__description">Glissez-déposez ou sélectionnez votre fichier .md</p>
+          </div>
+        </div>
+
+        <div class="dropzone" id="md-dropzone">
+          <div class="dropzone__icon">📂</div>
+          <div class="dropzone__text">Déposez votre fichier Markdown ici</div>
+          <div class="dropzone__hint">ou cliquez pour parcourir (.md, .markdown, .txt)</div>
+          <input type="file" class="dropzone__input" id="md-input" accept=".md,.markdown,.txt">
+        </div>
+
+        <div id="file-info-container"></div>
+
+        <div class="md-structure hidden" id="md-structure"></div>
+      </section>
+
+      <!-- Section 2: Configuration (apparaît après upload) -->
+      <section class="card hidden" id="section-config">
+        <div class="card__header">
+          <div class="card__icon card__icon--config">⚙️</div>
+          <div>
+            <h2 class="card__title">Configuration</h2>
+            <p class="card__description">Personnalisez le formatage et les modèles (optionnel)</p>
+          </div>
+        </div>
+
+        <div class="config-grid">
+          <div class="config-item">
+            <label class="config-item__label">Configuration JSON</label>
+            <div class="config-item__dropzone config-item__dropzone--loaded" id="config-json-zone">
+              ✓ output_config.json (par défaut)
+            </div>
+            <input type="file" class="dropzone__input" id="config-json-input" accept=".json">
+          </div>
+
+          <div class="config-item">
+            <label class="config-item__label">Template PowerPoint (.potx)</label>
+            <div class="config-item__dropzone config-item__dropzone--loaded" id="template-potx-zone">
+              ✓ Modele_presentation.potx (par défaut)
+            </div>
+            <input type="file" class="dropzone__input" id="template-potx-input" accept=".potx">
+          </div>
+
+          <div class="config-item">
+            <label class="config-item__label">Template Word (.docx)</label>
+            <div class="config-item__dropzone" id="template-docx-zone">
+              Cliquez pour charger un template
+            </div>
+            <input type="file" class="dropzone__input" id="template-docx-input" accept=".docx,.dotx">
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Export (apparaît après upload) -->
+      <section class="card hidden" id="section-export">
+        <div class="card__header">
+          <div class="card__icon card__icon--export">🚀</div>
+          <div>
+            <h2 class="card__title">Exporter</h2>
+            <p class="card__description">Générez votre fichier de sortie</p>
+          </div>
+        </div>
+
+        <div class="export-actions">
+          <button class="btn-export btn-export--pptx" id="btn-export-pptx" disabled>
+            <span class="btn-export__icon">📊</span>
+            <span class="btn-export__label">PowerPoint</span>
+            <span class="btn-export__desc">Générer un fichier .pptx</span>
+          </button>
+
+          <button class="btn-export btn-export--docx" id="btn-export-docx" disabled>
+            <span class="btn-export__icon">📄</span>
+            <span class="btn-export__label">Word</span>
+            <span class="btn-export__desc">Générer un fichier .docx</span>
+          </button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- App Module -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
