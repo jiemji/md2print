@@ -546,8 +546,10 @@ body {
   background-color: var(--bg-primary);
   overflow-y: auto;
   overflow-x: auto;
-  white-space: pre-wrap;
+  white-space: break-spaces;
   word-break: break-word;
+  tab-size: 4;
+  -moz-tab-size: 4;
 }
 
 .md-editor:empty::before {
@@ -581,15 +583,25 @@ body {
   font-weight: 700;
   letter-spacing: 0.03em;
   vertical-align: middle;
-  user-select: all;
-  -webkit-user-select: all;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .image-cartouche:hover {
   background-color: var(--bg-hover);
   border-color: var(--accent-color);
+}
+
+.image-cartouche:active {
+  cursor: grabbing;
+}
+
+.image-cartouche.is-dragging {
+  opacity: 0.45;
+  outline: 2px dashed var(--accent-color);
+  outline-offset: 2px;
 }
 
 .image-cartouche.is-selected {
@@ -610,7 +622,7 @@ body {
   font-size: 0.85rem;
   font-weight: 700;
   vertical-align: middle;
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .mermaid-cartouche.is-collapsed {
@@ -621,9 +633,13 @@ body {
   min-width: 130px;
   padding: 0 14px;
   margin: 4px 2px;
-  cursor: pointer;
-  user-select: all;
-  -webkit-user-select: all;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mermaid-cartouche.is-collapsed:active {
+  cursor: grabbing;
 }
 
 .mermaid-cartouche.is-expanded {
@@ -644,6 +660,12 @@ body {
   border-color: var(--success-color);
 }
 
+.mermaid-cartouche.is-dragging {
+  opacity: 0.45;
+  outline: 2px dashed var(--success-color);
+  outline-offset: 2px;
+}
+
 .mermaid-cartouche.is-selected {
   border-color: var(--success-color);
   box-shadow: 0 0 0 2px var(--success-color);
@@ -654,8 +676,14 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
   width: 100%;
+}
+
+.mermaid-cartouche-header:active {
+  cursor: grabbing;
 }
 
 .mermaid-cartouche-label {
@@ -1127,7 +1155,7 @@ body {
   display: inline-block;
   vertical-align: top;
   max-width: 60ch;
-  white-space: pre-wrap;
+  white-space: break-spaces;
   overflow-wrap: break-word;
   word-break: break-word;
 }

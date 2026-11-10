@@ -19,6 +19,93 @@ import {
   toSlug,
 } from './utils.js';
 
+let currentDraggedCartouche = null;
+
+/**
+ * Retourne la cartouche graphique en cours de déplacement par glisser-déposer.
+ * @returns {HTMLElement|null}
+ */
+export function getDraggedCartouche() {
+  return currentDraggedCartouche;
+}
+
+/**
+ * Définit ou réinitialise la cartouche graphique en cours de déplacement.
+ * @param {HTMLElement|null} el
+ * @returns {void}
+ */
+export function setDraggedCartouche(el) {
+  currentDraggedCartouche = el;
+}
+
+/**
+ * Calcule l'objet Range du curseur DOM à partir des coordonnées écran de la souris.
+ * Supporte document.caretRangeFromPoint (Chrome/Edge/Safari) et document.caretPositionFromPoint (Firefox).
+ * @param {number} clientX
+ * @param {number} clientY
+ * @returns {Range|null}
+ */
+export function getCaretRangeFromPoint(clientX, clientY) {
+  if (typeof document.caretRangeFromPoint === 'function') {
+    return document.caretRangeFromPoint(clientX, clientY);
+  }
+  if (typeof document.caretPositionFromPoint === 'function') {
+    const pos = document.caretPositionFromPoint(clientX, clientY);
+    if (pos && pos.offsetNode) {
+      const range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+      return range;
+    }
+  }
+  return null;
+}
+
+/**
+ * Attache les écouteurs de glisser-déposer sur une cartouche graphique (.image-cartouche ou .mermaid-cartouche).
+ * @param {HTMLElement} cartoucheEl
+ * @returns {void}
+ */
+export function attachCartoucheDragEvents(cartoucheEl) {
+  cartoucheEl.draggable = true;
+
+  cartoucheEl.addEventListener('dragstart', (e) => {
+    // Si l'utilisateur manipule le texte dans le textarea d'un schéma Mermaid déplié, ne pas déclencher le drag
+    if (e.target.closest('.mermaid-code-textarea')) {
+      e.preventDefault();
+      return;
+    }
+
+    currentDraggedCartouche = cartoucheEl;
+    cartoucheEl.classList.add('is-dragging');
+
+    const isImage = cartoucheEl.classList.contains('image-cartouche');
+    const type = isImage ? 'image' : 'mermaid';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-md2print-cartouche', type);
+
+    if (isImage) {
+      const id = cartoucheEl.dataset.imageId || '';
+      const alt = cartoucheEl.dataset.imageAlt || 'image';
+      e.dataTransfer.setData('text/plain', createImageCartouche(id, alt));
+    } else {
+      const textarea = cartoucheEl.querySelector('.mermaid-code-textarea');
+      const code = (textarea ? textarea.value : cartoucheEl.dataset.mermaidCode) || '';
+      e.dataTransfer.setData('text/plain', '```mermaid\n' + code.trim() + '\n```');
+    }
+  });
+
+  cartoucheEl.addEventListener('dragend', () => {
+    cartoucheEl.classList.remove('is-dragging');
+    if (currentDraggedCartouche === cartoucheEl) {
+      currentDraggedCartouche = null;
+    }
+    document
+      .querySelectorAll('.image-cartouche.is-dragging, .mermaid-cartouche.is-dragging')
+      .forEach((el) => el.classList.remove('is-dragging'));
+  });
+}
+
 /**
  * Crée l'élément DOM graphique (cartouche de 2 lignes de hauteur) représentant une image Base64.
  * @param {string} imgId - Identifiant interne dans state.localImages
@@ -31,8 +118,11 @@ export function createCartoucheElement(imgId, alt = 'image') {
   span.contentEditable = 'false';
   span.dataset.imageId = imgId;
   span.dataset.imageAlt = alt || 'image';
-  span.title = alt ? `Image : ${alt}` : 'Image encapsulée en Base64';
+  span.title = alt
+    ? `Image : ${alt} (Glisser-déposer pour déplacer)`
+    : 'Image encapsulée en Base64 (Glisser-déposer pour déplacer)';
   span.textContent = '[image]';
+  attachCartoucheDragEvents(span);
   return span;
 }
 
@@ -56,7 +146,7 @@ export function createMermaidCartoucheElement(code = '', options = {}) {
   // En-tête de la cartouche avec bouton flèche
   const header = document.createElement('span');
   header.className = 'mermaid-cartouche-header';
-  header.title = 'Schéma Mermaid — Cliquer sur la flèche pour déplier / replier';
+  header.title = 'Schéma Mermaid — Cliquer sur la flèche pour déplier / replier (Glisser-déposer pour déplacer)';
 
   const badge = document.createElement('span');
   badge.className = 'mermaid-cartouche-label';
@@ -81,6 +171,18 @@ export function createMermaidCartoucheElement(code = '', options = {}) {
   textarea.placeholder = 'graph TB\n    A --> B';
   textarea.spellcheck = false;
 
+  // Empêcher le glisser-déposer de la cartouche lors de la manipulation du texte dans le textarea
+  textarea.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    span.draggable = false;
+  });
+  textarea.addEventListener('mouseup', () => {
+    span.draggable = true;
+  });
+  textarea.addEventListener('blur', () => {
+    span.draggable = true;
+  });
+
   const adjustHeight = () => {
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(90, textarea.scrollHeight + 4) + 'px';
@@ -89,6 +191,8 @@ export function createMermaidCartoucheElement(code = '', options = {}) {
   body.appendChild(textarea);
   span.appendChild(header);
   span.appendChild(body);
+
+  attachCartoucheDragEvents(span);
 
   const toggleExpand = (e) => {
     e.stopPropagation();

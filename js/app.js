@@ -38,9 +38,13 @@ import {
   setEditorContent,
   findDomPosition,
   insertNodeAtEditorCaret,
+  ensureTrailingSentinel,
   clearCartoucheSelectionStyles,
   updateCartoucheSelectionHighlight,
   handleCartoucheDeletion,
+  getDraggedCartouche,
+  setDraggedCartouche,
+  getCaretRangeFromPoint,
 } from './EditorEngine.js';
 import {
   savePreferences,
@@ -974,19 +978,90 @@ function initEventListeners() {
     }
   });
 
-  // Glisser-déposer sur l'éditeur (Fichier .md ou Image)
+  // Glisser-déposer sur l'éditeur (Fichier .md, Image ou Cartouche graphique interne)
   dom.mdEditor.addEventListener('dragover', (e) => {
     e.preventDefault();
+
+    const draggedCartouche = getDraggedCartouche();
+    if (draggedCartouche) {
+      e.dataTransfer.dropEffect = 'move';
+      const range = getCaretRangeFromPoint(e.clientX, e.clientY);
+      if (
+        range &&
+        dom.mdEditor.contains(range.startContainer) &&
+        !draggedCartouche.contains(range.startContainer) &&
+        !range.startContainer?.closest?.('.mermaid-code-textarea')
+      ) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+      return;
+    }
+
     dom.mdEditor.classList.add('drag-active');
   });
 
-  dom.mdEditor.addEventListener('dragleave', () => {
-    dom.mdEditor.classList.remove('drag-active');
+  dom.mdEditor.addEventListener('dragleave', (e) => {
+    if (!dom.mdEditor.contains(e.relatedTarget)) {
+      dom.mdEditor.classList.remove('drag-active');
+    }
   });
 
   dom.mdEditor.addEventListener('drop', async (e) => {
     e.preventDefault();
     dom.mdEditor.classList.remove('drag-active');
+
+    const draggedCartouche = getDraggedCartouche();
+    if (draggedCartouche) {
+      e.stopPropagation();
+      draggedCartouche.classList.remove('is-dragging');
+      setDraggedCartouche(null);
+
+      const range = getCaretRangeFromPoint(e.clientX, e.clientY);
+      if (
+        range &&
+        dom.mdEditor.contains(range.startContainer) &&
+        !draggedCartouche.contains(range.startContainer) &&
+        !range.startContainer?.closest?.('.mermaid-code-textarea')
+      ) {
+        // Retirer la cartouche de son emplacement d'origine
+        draggedCartouche.remove();
+
+        // Insérer la cartouche à la position de dépôt ciblée
+        const sentinel = dom.mdEditor.querySelector('br[data-sentinel="true"]');
+        if (
+          sentinel &&
+          ((range.startContainer === dom.mdEditor &&
+            range.startOffset >= Array.from(dom.mdEditor.childNodes).indexOf(sentinel)) ||
+            range.startContainer === sentinel)
+        ) {
+          dom.mdEditor.insertBefore(draggedCartouche, sentinel);
+        } else {
+          range.insertNode(draggedCartouche);
+        }
+
+        ensureTrailingSentinel(dom.mdEditor);
+
+        // Synchroniser le Markdown et recharger l'éditeur pour conserver le formatage non-WYSIWYG
+        syncFromEditorDOM();
+
+        // Sélectionner et positionner le curseur après la cartouche déplacée
+        clearCartoucheSelectionStyles(dom.mdEditor);
+        const sel = window.getSelection();
+        if (sel) {
+          const afterRange = document.createRange();
+          afterRange.setStartAfter(draggedCartouche);
+          afterRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(afterRange);
+        }
+
+        showToast('Cartouche déplacée', 'success');
+      }
+      return;
+    }
+
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
 
