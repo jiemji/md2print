@@ -18,6 +18,7 @@ import {
   resolveBadgeClass,
   parseMetricTag,
   resolveMetricClass,
+  isExecutableHtmlFence,
 } from './utils.js';
 
 const DEFAULT_FORMAT = Object.freeze({
@@ -312,7 +313,7 @@ export const parseToAST = (mdText) => {
       const isClosingTag = /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)\s*\]|:::)$/i.test(nextLine);
       const isBetweenColumns =
         /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?)\s*\]|:::)$/i.test(prevLine) &&
-        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\s*\]|:::\s*col)/i.test(nextLine);
+        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)\s*(?::[^\]]*)?\s*\]|:::\s*col)/i.test(nextLine);
       if (isClosingTag || isBetweenColumns) {
         continue;
       }
@@ -412,6 +413,11 @@ export const parseToAST = (mdText) => {
           type: 'mermaid',
           code: rawCode,
         });
+      } else if (isExecutableHtmlFence(fenceHeader)) {
+        ast.push({
+          type: 'html_exec',
+          code: rawCode,
+        });
       } else {
         ast.push({
           type: 'paragraph',
@@ -488,7 +494,7 @@ export const parseToAST = (mdText) => {
       if (pTrimmed.startsWith('```')) break;
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(pTrimmedBoth)) break;
       if (pTrimmedBoth.startsWith('>')) break;
-      if (/^(?:\[\s*\/?\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)(?::[^\]]*)?\s*\]|:::(?:\s*(?:col(?:onne)?|cols?onnes?|frise|timeline))?)$/i.test(pTrimmedBoth)) {
+      if (/^(?:\[\s*\/?\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)(?:\s*:[^\]]*)?\s*\]|:::(?:\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)(?:\s*:[^\r\n]*)?)?)$/i.test(pTrimmedBoth)) {
         if (paraLines.length === 0) {
           paraLines.push(pTrimmed);
           i++;

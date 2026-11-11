@@ -21,6 +21,7 @@ import {
   ensureOfficeCompatibleImage,
   getImageDimensions,
   renderMermaidToPngDataUrl,
+  parseColumnTagParams,
 } from './utils.js';
 
 /**
@@ -523,9 +524,16 @@ function fitBoundsToAspectRatio(targetBounds, imgW, imgH) {
 export function blockToPlainText(block) {
   if (!block) return '';
   const rawTrim = (block.raw || block.text || '').trim();
+  const colOpenMatch =
+    rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
+    rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i);
+  if (colOpenMatch) {
+    const { title } = parseColumnTagParams(colOpenMatch[1]);
+    return title || '';
+  }
   if (
-    /^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) ||
-    /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)
+    /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
+    /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
   ) {
     return '';
   }
@@ -762,9 +770,28 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       currentSlide.isExplicit = false;
     } else if (block.type === 'paragraph') {
       const rawTrim = (block.raw || block.text || '').trim();
-      // Filtrer les balises structurelles de colonnes ([colonne], [/colonne], etc.)
-      // afin qu'elles ne soient pas injectées sous forme de texte brut dans la diapositive PowerPoint
-      if (/^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) || /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)) {
+      // Filtrer les balises structurelles de colonnes ([colonne...], [/colonne], etc.)
+      // et émettre un en-tête de niveau 4 si un titre est défini sur la colonne
+      const colOpenMatch =
+        rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
+        rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i);
+      if (colOpenMatch) {
+        const { title } = parseColumnTagParams(colOpenMatch[1]);
+        if (title) {
+          currentSlide.items.push({
+            type: 'header',
+            level: 4,
+            text: title,
+            runs: extractInlineStyles(title),
+          });
+          currentSlide.isExplicit = false;
+        }
+        continue;
+      }
+      if (
+        /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
+        /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
+      ) {
         continue;
       }
       currentSlide.items.push({

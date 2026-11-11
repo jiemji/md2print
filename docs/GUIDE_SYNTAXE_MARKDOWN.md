@@ -48,15 +48,28 @@ Contenu colonne 2
 [/col]
 ```
 
-### 2.3. Proportions Asymétriques (Ratio)
-Par défaut, chaque colonne a un ratio de 1. Il est possible de préciser un ratio numérique pour moduler la répartition :
+### 2.3. Paramétrage Étendu : `[colonne:taille relative:titre:couleur:ratio police]`
+Les 4 paramètres après `colonne` sont optionnels :
+- **`taille relative`** : ratio numérique (défaut : `1`) pour répartir la largeur disponible entre colonnes adjacentes.
+- **`titre`** : titre affiché centré en haut de la colonne comme un titre de niveau 4 (`####`).
+- **`couleur`** : typologie issue des badges/tags (`info`, `success`, `warning`, `danger`, `important`, `neutral`). Applique la couleur de bordure du tag correspondant en arrière-plan du bandeau de titre avec un texte blanc. Sans couleur précisée, le fond et le texte reprennent les réglages standards de la colonne.
+- **`ratio police`** : multiplicateur numérique optionnel (ex. `0.85`, `1.2` ou `85%`, défaut : `1`) qui met proportionnellement à l'échelle la taille de police du titre et du corps de texte à l'intérieur de la colonne.
+
 ```markdown
-[colonne:2]
-Contenu large occupant les deux tiers de la largeur disponible.
+[colonne:2:Points Clés:info]
+Contenu large occupant les deux tiers de la largeur disponible, avec bandeau bleu Info.
 [/colonne]
 
-[colonne:1]
-Contenu étroit occupant un tiers de la largeur disponible.
+[colonne:1:Vigilance:warning:0.85]
+Contenu étroit occupant un tiers de la largeur disponible, avec bandeau Warning et texte/titre réduits à 85 %.
+[/colonne]
+
+[colonne::Analyse Standard]
+Colonne de ratio 1 par défaut avec titre centré sur fond standard.
+[/colonne]
+
+[colonne::::1.15]
+Colonne sans titre dont le texte et les sous-titres internes sont agrandis de 15 %.
 [/colonne]
 ```
 
@@ -283,5 +296,41 @@ Les alias suivants sont également pris en charge :
 - `:::frise ... :::`
 - Séparateur deux-points ` : ` au lieu du tube `|` :
   `- **T0** : **Détection** : Alerte de nos équipes...`
+
+---
+
+## 14. Composants HTML / CSS / JS Exécutables ([html] ... [/html] ou ```html-exec)
+
+Permet d'intégrer des widgets interactifs, animations CSS/SVG ou scripts JavaScript directement dans le rendu HTML (aperçu en direct, mode Rapport, mode Diaporama 16:9 et export `.html` autonome). Dans l'éditeur Markdown non-WYSIWYG, le bloc est automatiquement condensé en une cartouche `[html]` pliable, dépliable et déplaçable à la souris (à l'identique de la cartouche `[mermaid]`), ce qui protège les lignes vides, les sélecteurs CSS `#id` et le code JavaScript contre toute interprétation Markdown parasite.
+
+### 14.1. Syntaxes Reconnues
+
+**Syntaxe balisée courte :**
+```markdown
+[html]
+<div id="demo-box" style="padding: 16px; border: 1px solid #cbd5e1; border-radius: 8px;">
+  <button id="demo-btn" type="button">Tester l'interaction</button>
+</div>
+<script>
+  document.getElementById('demo-btn')?.addEventListener('click', (e) => {
+    e.currentTarget.textContent = 'Action exécutée';
+  });
+</script>
+[/html]
+```
+
+**Syntaxe bloc de code exécutable (canonique à la sauvegarde) :**
+````markdown
+```html-exec
+<style>
+  #mon-widget { padding: 16px; border-radius: 8px; }
+</style>
+<div id="mon-widget">Contenu interactif</div>
+```
+````
+
+- **Alias supportés** : `:::html ... :::`, ```` ```html-live ````, ```` ```html-run ````, ```` ```html-widget ````.
+- **Raccourci clavier dans l'éditeur** : `Ctrl+Shift+H` ou `Alt+H` insère directement une cartouche `[html]` ouverte à la position du curseur.
+
 
 

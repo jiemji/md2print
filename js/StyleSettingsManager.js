@@ -152,6 +152,7 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
       padding: '14px',
       radius: '6px',
+      fontSize: '0.95rem',
     },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C00000', borderLeftWidth: 10 },
@@ -222,6 +223,7 @@ export const DEFAULT_STYLE_CONFIG = {
       border: '#cbd5e1',
       padding: '14px',
       radius: '6px',
+      fontSize: '1rem',
     },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C41718', borderLeftWidth: 10 },
@@ -419,6 +421,7 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (cssVars[`${prefix}column-border`]) cfg.column.border = normalizeColor(cssVars[`${prefix}column-border`]);
   if (cssVars[`${prefix}column-radius`]) cfg.column.radius = cssVars[`${prefix}column-radius`];
   if (cssVars[`${prefix}column-padding`]) cfg.column.padding = cssVars[`${prefix}column-padding`];
+  if (cssVars[`${prefix}column-font-size`]) cfg.column.fontSize = cssVars[`${prefix}column-font-size`];
 
   // Mermaid
   if (cssVars[`${prefix}mermaid-preset`]) cfg.mermaid.preset = cssVars[`${prefix}mermaid-preset`];
@@ -473,6 +476,8 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
 
   const colBg = extractRuleProp('\\.slide-column', 'background-color');
   if (colBg) cfg.column.bg = normalizeColor(colBg);
+  const colFontSize = extractRuleProp('\\.slide-column-content', 'font-size');
+  if (colFontSize) cfg.column.fontSize = colFontSize;
 
   // Images de fond
   const coverImgMatches = [...css.matchAll(/\.slide\.slide-title::after\s*\{([^}]+)\}/g)];
@@ -616,6 +621,15 @@ export function generateThemeCss(mode, config) {
   --slide-column-border: ${cfg.column?.border || '#cbd5e1'};
   --slide-column-radius: ${cfg.column?.radius || '6px'};
   --slide-column-padding: ${cfg.column?.padding || '14px'};
+  --slide-column-font-size: ${cfg.column?.fontSize || '1rem'};
+  --slide-h3-size: ${cfg.h3.size};
+  --slide-h4-size: ${cfg.h3.size};
+  --slide-h5-size: ${cfg.h4.size};
+  --slide-h6-size: ${cfg.h5?.size || '1.05rem'};
+  --slide-quote-size: ${cfg.quote.size};
+  --slide-code-size: ${cfg.code.size};
+  --slide-badge-size: ${cfg.badge?.size || '0.78rem'};
+  --slide-table-size: ${cfg.table.size};
 }
 
 /* === Titres & Hiérarchie === */
@@ -837,7 +851,43 @@ ${cfg.chapterSlide?.bgImage ? `
   min-width: 0 !important;
   margin: 0 !important;
   box-sizing: border-box !important;
-  border-top-color: ${cfg.metric.accentColor} !important;
+  border-top-color: ${cfg.metric.accentColor};
+}
+.slide-body .metric-card.metric-card-info {
+  border-top-color: ${cfg.badgeInfo?.border || cfg.badgeInfo?.color || "#0E2841"} !important;
+}
+.slide-body .metric-card.metric-card-info .metric-value {
+  color: ${cfg.badgeInfo?.color || "#0E2841"} !important;
+}
+.slide-body .metric-card.metric-card-success {
+  border-top-color: ${cfg.badgeSuccess?.border || cfg.badgeSuccess?.color || "#196B24"} !important;
+}
+.slide-body .metric-card.metric-card-success .metric-value {
+  color: ${cfg.badgeSuccess?.color || "#196B24"} !important;
+}
+.slide-body .metric-card.metric-card-warning {
+  border-top-color: ${cfg.badgeWarning?.border || cfg.badgeWarning?.color || "#E97132"} !important;
+}
+.slide-body .metric-card.metric-card-warning .metric-value {
+  color: ${cfg.badgeWarning?.color || "#ad5319"} !important;
+}
+.slide-body .metric-card.metric-card-danger {
+  border-top-color: ${cfg.badgeDanger?.border || cfg.badgeDanger?.color || "#C41718"} !important;
+}
+.slide-body .metric-card.metric-card-danger .metric-value {
+  color: ${cfg.badgeDanger?.color || "#C41718"} !important;
+}
+.slide-body .metric-card.metric-card-important {
+  border-top-color: ${cfg.badgeImportant?.border || cfg.badgeImportant?.color || "#0F9ED5"} !important;
+}
+.slide-body .metric-card.metric-card-important .metric-value {
+  color: ${cfg.badgeImportant?.color || "#0F9ED5"} !important;
+}
+.slide-body .metric-card.metric-card-neutral {
+  border-top-color: ${cfg.badgeNeutral?.border || "#cbd5e1"} !important;
+}
+.slide-body .metric-card.metric-card-neutral .metric-value {
+  color: ${cfg.badgeNeutral?.color || "#1e293b"} !important;
 }
 .slide-body > .metric-card {
   width: 100% !important;
@@ -945,6 +995,61 @@ ${cfg.chapterSlide?.bgImage ? `
   border-radius: ${cfg.column?.radius || '6px'} !important;
   padding: ${cfg.column?.padding || '14px'} !important;
 }
+.slide-column.has-column-header {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+.slide-column.has-column-header > .slide-column-content {
+  padding: ${cfg.column?.padding || '14px'} !important;
+}
+.slide-column.has-column-header > .slide-column-header:not(.slide-column-header-colored) + .slide-column-content {
+  padding-top: 10px !important;
+}
+.slide-column-header {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: ${cfg.column?.padding || '14px'} ${cfg.column?.padding || '14px'} 0 ${cfg.column?.padding || '14px'};
+}
+.slide-column-header.slide-column-header-colored {
+  padding: 10px ${cfg.column?.padding || '14px'};
+  color: #ffffff;
+}
+.slide-column-header h4,
+.slide-column-header .doc-h4,
+.slide-body .slide-column-header h4 {
+  margin: 0 !important;
+  text-align: center !important;
+}
+.slide-column-header.slide-column-header-colored h4,
+.slide-column-header.slide-column-header-colored .doc-h4,
+.slide-body .slide-column-header.slide-column-header-colored h4 {
+  color: #ffffff !important;
+}
+.slide-body .slide-column-header-info,
+.slide-column-header-info {
+  background-color: ${cfg.badgeInfo?.border || cfg.badgeInfo?.color || '#0E2841'} !important;
+}
+.slide-body .slide-column-header-success,
+.slide-column-header-success {
+  background-color: ${cfg.badgeSuccess?.border || cfg.badgeSuccess?.color || '#196B24'} !important;
+}
+.slide-body .slide-column-header-warning,
+.slide-column-header-warning {
+  background-color: ${cfg.badgeWarning?.border || cfg.badgeWarning?.color || '#E97132'} !important;
+}
+.slide-body .slide-column-header-danger,
+.slide-column-header-danger {
+  background-color: ${cfg.badgeDanger?.border || cfg.badgeDanger?.color || '#C41718'} !important;
+}
+.slide-body .slide-column-header-important,
+.slide-column-header-important {
+  background-color: ${cfg.badgeImportant?.border || cfg.badgeImportant?.color || '#0F9ED5'} !important;
+}
+.slide-body .slide-column-header-neutral,
+.slide-column-header-neutral {
+  background-color: ${cfg.badgeNeutral?.border || '#cbd5e1'} !important;
+}
 .slide-column-content {
   display: flex !important;
   flex-direction: column !important;
@@ -953,6 +1058,60 @@ ${cfg.chapterSlide?.bgImage ? `
   width: 100% !important;
   box-sizing: border-box !important;
   gap: 10px;
+  font-size: calc(${cfg.column?.fontSize || '1rem'} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column-content p,
+.slide-body .slide-column-content li,
+.slide-body .slide-column-content ul,
+.slide-body .slide-column-content ol,
+.slide-column-content p,
+.slide-column-content li,
+.slide-column-content ul,
+.slide-column-content ol {
+  font-size: calc(${cfg.column?.fontSize || '1rem'} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column h3,
+.slide-body .slide-column h4,
+.slide-column .slide-column-header h4,
+.slide-column .doc-h4 {
+  font-size: calc(${cfg.h3.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column h5,
+.slide-column .doc-h5 {
+  font-size: calc(${cfg.h4.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column h6,
+.slide-column .doc-h6 {
+  font-size: calc(${cfg.h5?.size || '1.05rem'} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column blockquote,
+.slide-body .slide-column blockquote p {
+  font-size: calc(${cfg.quote.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .callout-header {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .callout-body,
+.slide-body .slide-column .callout-body p,
+.slide-body .slide-column .callout-body li {
+  font-size: calc(${cfg.column?.fontSize || '1rem'} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column pre,
+.slide-body .slide-column pre code {
+  font-size: calc(${cfg.code.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .badge {
+  font-size: calc(${cfg.badge?.size || '0.78rem'} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .doc-table th,
+.slide-body .slide-column .doc-table td {
+  font-size: calc(${cfg.table.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .metric-value {
+  font-size: calc(${cfg.metric.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .metric-label {
+  font-size: calc(0.85rem * var(--col-font-scale, 1)) !important;
 }
 .slide-column-content > *:first-child {
   margin-top: 0 !important;
@@ -1018,6 +1177,12 @@ ${cfg.chapterSlide?.bgImage ? `
   --report-column-border: ${cfg.column?.border || '#cbd5e1'};
   --report-column-radius: ${cfg.column?.radius || '6px'};
   --report-column-padding: ${cfg.column?.padding || '14px'};
+  --report-column-font-size: ${cfg.column?.fontSize || '0.95rem'};
+  --report-h5-size: ${cfg.h5?.size || '0.98rem'};
+  --report-quote-size: ${cfg.quote.size};
+  --report-code-size: ${cfg.code.size};
+  --report-badge-size: ${cfg.badge?.size || '0.82rem'};
+  --report-table-size: ${cfg.table.size};
   --report-mermaid-preset: ${cfg.mermaid?.preset || 'default'};
   --report-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
   --report-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
@@ -1063,6 +1228,42 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 .markdown-rendered-content .metric-card {
   border-top-color: ${cfg.metric.accentColor};
+}
+.markdown-rendered-content .metric-card.metric-card-info {
+  border-top-color: ${cfg.badgeInfo?.border || cfg.badgeInfo?.color || "#2F5496"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-info .metric-value {
+  color: ${cfg.badgeInfo?.color || "#2F5496"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-success {
+  border-top-color: ${cfg.badgeSuccess?.border || cfg.badgeSuccess?.color || "#70AD47"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-success .metric-value {
+  color: ${cfg.badgeSuccess?.color || "#3b6321"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-warning {
+  border-top-color: ${cfg.badgeWarning?.border || cfg.badgeWarning?.color || "#ED7D31"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-warning .metric-value {
+  color: ${cfg.badgeWarning?.color || "#a44810"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-danger {
+  border-top-color: ${cfg.badgeDanger?.border || cfg.badgeDanger?.color || "#C00000"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-danger .metric-value {
+  color: ${cfg.badgeDanger?.color || "#C00000"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-important {
+  border-top-color: ${cfg.badgeImportant?.border || cfg.badgeImportant?.color || "#5B9BD5"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-important .metric-value {
+  color: ${cfg.badgeImportant?.color || "#1f568a"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-neutral {
+  border-top-color: ${cfg.badgeNeutral?.border || "#cbd5e1"} !important;
+}
+.markdown-rendered-content .metric-card.metric-card-neutral .metric-value {
+  color: ${cfg.badgeNeutral?.color || "#475569"} !important;
 }
 .markdown-rendered-content .metric-value {
   font-family: '${cfg.metric.font}', sans-serif;
@@ -1192,6 +1393,61 @@ ${cfg.chapterSlide?.bgImage ? `
   border-radius: ${cfg.column?.radius || '6px'};
   padding: ${cfg.column?.padding || '14px'};
 }
+.slide-column.has-column-header {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.slide-column.has-column-header > .slide-column-content {
+  padding: ${cfg.column?.padding || '14px'} !important;
+}
+.slide-column.has-column-header > .slide-column-header:not(.slide-column-header-colored) + .slide-column-content {
+  padding-top: 12px !important;
+}
+.slide-column-header {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: ${cfg.column?.padding || '14px'} ${cfg.column?.padding || '14px'} 0 ${cfg.column?.padding || '14px'};
+}
+.slide-column-header.slide-column-header-colored {
+  padding: 10px ${cfg.column?.padding || '14px'};
+  color: #ffffff;
+}
+.slide-column-header h4,
+.slide-column-header .doc-h4,
+.markdown-rendered-content .slide-column-header h4 {
+  margin: 0 !important;
+  text-align: center !important;
+}
+.slide-column-header.slide-column-header-colored h4,
+.slide-column-header.slide-column-header-colored .doc-h4,
+.markdown-rendered-content .slide-column-header.slide-column-header-colored h4 {
+  color: #ffffff !important;
+}
+.markdown-rendered-content .slide-column-header-info,
+.slide-column-header-info {
+  background-color: ${cfg.badgeInfo?.border || cfg.badgeInfo?.color || '#2F5496'} !important;
+}
+.markdown-rendered-content .slide-column-header-success,
+.slide-column-header-success {
+  background-color: ${cfg.badgeSuccess?.border || cfg.badgeSuccess?.color || '#70AD47'} !important;
+}
+.markdown-rendered-content .slide-column-header-warning,
+.slide-column-header-warning {
+  background-color: ${cfg.badgeWarning?.border || cfg.badgeWarning?.color || '#ED7D31'} !important;
+}
+.markdown-rendered-content .slide-column-header-danger,
+.slide-column-header-danger {
+  background-color: ${cfg.badgeDanger?.border || cfg.badgeDanger?.color || '#C00000'} !important;
+}
+.markdown-rendered-content .slide-column-header-important,
+.slide-column-header-important {
+  background-color: ${cfg.badgeImportant?.border || cfg.badgeImportant?.color || '#5B9BD5'} !important;
+}
+.markdown-rendered-content .slide-column-header-neutral,
+.slide-column-header-neutral {
+  background-color: ${cfg.badgeNeutral?.border || '#cbd5e1'} !important;
+}
 .mermaid-card, .markdown-rendered-content .mermaid-card {
   background-color: ${cfg.mermaid?.bg || '#f8fafc'} !important;
   border-color: ${cfg.mermaid?.border || '#cbd5e1'} !important;
@@ -1204,6 +1460,63 @@ ${cfg.chapterSlide?.bgImage ? `
   width: 100%;
   box-sizing: border-box;
   gap: 12px;
+  font-size: calc(${cfg.column?.fontSize || '0.95rem'} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column-content p,
+.markdown-rendered-content .slide-column-content li,
+.markdown-rendered-content .slide-column-content ul,
+.markdown-rendered-content .slide-column-content ol,
+.slide-column-content p,
+.slide-column-content li,
+.slide-column-content ul,
+.slide-column-content ol {
+  font-size: calc(${cfg.column?.fontSize || '0.95rem'} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h3,
+.slide-column .doc-h3 {
+  font-size: calc(${cfg.h2.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h4,
+.slide-column .slide-column-header h4,
+.slide-column .doc-h4 {
+  font-size: calc(${cfg.h3.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h5,
+.slide-column .doc-h5 {
+  font-size: calc(${cfg.h4.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h6,
+.slide-column .doc-h6 {
+  font-size: calc(${cfg.h5?.size || '0.98rem'} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column blockquote,
+.markdown-rendered-content .slide-column blockquote p {
+  font-size: calc(${cfg.quote.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .callout-header {
+  font-size: calc(0.82rem * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .callout-body,
+.markdown-rendered-content .slide-column .callout-body p,
+.markdown-rendered-content .slide-column .callout-body li {
+  font-size: calc(${cfg.column?.fontSize || '0.95rem'} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column pre,
+.markdown-rendered-content .slide-column pre code {
+  font-size: calc(${cfg.code.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .badge {
+  font-size: calc(${cfg.badge?.size || '0.82rem'} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .doc-table th,
+.markdown-rendered-content .slide-column .doc-table td {
+  font-size: calc(${cfg.table.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .metric-value {
+  font-size: calc(${cfg.metric.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .metric-label {
+  font-size: calc(0.82rem * var(--col-font-scale, 1));
 }
 .slide-column-content > *:first-child {
   margin-top: 0;
@@ -1796,6 +2109,10 @@ export class StyleSettingsManager {
                     <div class="input-inline-group">
                       <label class="input-sublabel">Marge interne</label>
                       <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.padding" placeholder="14px">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Taille du texte</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.fontSize" placeholder="1rem">
                     </div>
                   </div>
                 </div>
@@ -2516,15 +2833,19 @@ export class StyleSettingsManager {
                 </blockquote>
 
                 <div class="slide-columns-row" style="margin: 12px 0;">
-                  <div class="slide-column">
+                  <div class="slide-column has-column-header">
+                    <div class="slide-column-header">
+                      <h4 class="doc-heading doc-h4">Colonne 1</h4>
+                    </div>
                     <div class="slide-column-content">
-                      <p style="margin: 0; font-weight: 700;">Colonne 1</p>
                       <p style="margin: 0;">Analyse qualitative et synthèse des observations.</p>
                     </div>
                   </div>
-                  <div class="slide-column">
+                  <div class="slide-column has-column-header">
+                    <div class="slide-column-header slide-column-header-colored slide-column-header-info">
+                      <h4 class="doc-heading doc-h4">Colonne 2</h4>
+                    </div>
                     <div class="slide-column-content">
-                      <p style="margin: 0; font-weight: 700;">Colonne 2</p>
                       <p style="margin: 0;">Recommandations et plan de mise en œuvre.</p>
                     </div>
                   </div>
@@ -2616,15 +2937,19 @@ export class StyleSettingsManager {
           </blockquote>
 
           <div class="slide-columns-row" style="margin: 14px 0;">
-            <div class="slide-column">
+            <div class="slide-column has-column-header">
+              <div class="slide-column-header">
+                <h4 class="doc-heading doc-h4">Volet A</h4>
+              </div>
               <div class="slide-column-content">
-                <p style="margin: 0; font-weight: 700;">Volet A</p>
                 <p style="margin: 0;">Indicateurs et constats préliminaires.</p>
               </div>
             </div>
-            <div class="slide-column">
+            <div class="slide-column has-column-header">
+              <div class="slide-column-header slide-column-header-colored slide-column-header-info">
+                <h4 class="doc-heading doc-h4">Volet B</h4>
+              </div>
               <div class="slide-column-content">
-                <p style="margin: 0; font-weight: 700;">Volet B</p>
                 <p style="margin: 0;">Mesures correctives et calendrier prévisionnel.</p>
               </div>
             </div>

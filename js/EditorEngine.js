@@ -13,6 +13,9 @@ import {
   collapseBase64ToCartouches,
   isMermaidHeaderLine,
   findUnfencedMermaidBlockEnd,
+  isExecutableHtmlFence,
+  isHtmlBlockOpenLine,
+  isHtmlBlockCloseLine,
   resolveBadgeClass,
   parseMetricTag,
   resolveMetricClass,
@@ -70,8 +73,11 @@ export function attachCartoucheDragEvents(cartoucheEl) {
   cartoucheEl.draggable = true;
 
   cartoucheEl.addEventListener('dragstart', (e) => {
-    // Si l'utilisateur manipule le texte dans le textarea d'un schéma Mermaid déplié, ne pas déclencher le drag
-    if (e.target.closest('.mermaid-code-textarea')) {
+    // Si l'utilisateur manipule le texte dans le textarea d'un bloc déplié, ne pas déclencher le drag
+    if (
+      e.target.closest('.mermaid-code-textarea') ||
+      e.target.closest('.html-code-textarea')
+    ) {
       e.preventDefault();
       return;
     }
@@ -80,7 +86,8 @@ export function attachCartoucheDragEvents(cartoucheEl) {
     cartoucheEl.classList.add('is-dragging');
 
     const isImage = cartoucheEl.classList.contains('image-cartouche');
-    const type = isImage ? 'image' : 'mermaid';
+    const isHtml = cartoucheEl.classList.contains('html-cartouche');
+    const type = isImage ? 'image' : isHtml ? 'html' : 'mermaid';
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-md2print-cartouche', type);
 
@@ -88,6 +95,10 @@ export function attachCartoucheDragEvents(cartoucheEl) {
       const id = cartoucheEl.dataset.imageId || '';
       const alt = cartoucheEl.dataset.imageAlt || 'image';
       e.dataTransfer.setData('text/plain', createImageCartouche(id, alt));
+    } else if (isHtml) {
+      const textarea = cartoucheEl.querySelector('.html-code-textarea');
+      const code = (textarea ? textarea.value : cartoucheEl.dataset.htmlCode) || '';
+      e.dataTransfer.setData('text/plain', '```html-exec\n' + code.trim() + '\n```');
     } else {
       const textarea = cartoucheEl.querySelector('.mermaid-code-textarea');
       const code = (textarea ? textarea.value : cartoucheEl.dataset.mermaidCode) || '';
@@ -101,7 +112,9 @@ export function attachCartoucheDragEvents(cartoucheEl) {
       currentDraggedCartouche = null;
     }
     document
-      .querySelectorAll('.image-cartouche.is-dragging, .mermaid-cartouche.is-dragging')
+      .querySelectorAll(
+        '.image-cartouche.is-dragging, .mermaid-cartouche.is-dragging, .html-cartouche.is-dragging'
+      )
       .forEach((el) => el.classList.remove('is-dragging'));
   });
 }
@@ -242,8 +255,128 @@ export function createMermaidCartoucheElement(code = '', options = {}) {
 }
 
 /**
+ * Crée l'élément DOM graphique représentant un bloc HTML/CSS/JS exécutable (cartouche ambrée pliable/dépliable).
+ * Par défaut, la cartouche est repliée et affiche le libellé [html] et une flèche basse ▼.
+ * Un clic sur la flèche déplie le code source au sein d'un éditeur textarea intégré.
+ * @param {string} code - Code source HTML / CSS / JS
+ * @param {object} [options={}] - Options d'initialisation
+ * @param {boolean} [options.isExpanded=false] - État initial déplié ou replié
+ * @param {function(): void} [options.onSync] - Callback de synchronisation lors des modifications du code
+ * @returns {HTMLSpanElement}
+ */
+export function createHtmlCartoucheElement(code = '', options = {}) {
+  const { isExpanded = false, onSync = null } = options;
+  const span = document.createElement('span');
+  span.className = 'html-cartouche' + (isExpanded ? ' is-expanded' : ' is-collapsed');
+  span.contentEditable = 'false';
+  span.dataset.htmlCode = code || '';
+
+  // En-tête de la cartouche avec bouton flèche
+  const header = document.createElement('span');
+  header.className = 'html-cartouche-header';
+  header.title =
+    'Bloc HTML / JS exécutable — Cliquer sur la flèche pour déplier / replier (Glisser-déposer pour déplacer)';
+
+  const badge = document.createElement('span');
+  badge.className = 'html-cartouche-label';
+  badge.textContent = '[html]';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'html-cartouche-toggle';
+  toggleBtn.setAttribute('aria-label', isExpanded ? 'Replier le bloc HTML' : 'Déplier le bloc HTML');
+  toggleBtn.textContent = isExpanded ? '▲' : '▼';
+
+  header.appendChild(badge);
+  header.appendChild(toggleBtn);
+
+  // Corps dépliable avec éditeur textarea
+  const body = document.createElement('span');
+  body.className = 'html-cartouche-body';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'html-code-textarea';
+  textarea.value = code || '';
+  textarea.placeholder =
+    '<div class="mon-composant">\n  <!-- Contenu HTML / CSS / JS -->\n</div>';
+  textarea.spellcheck = false;
+
+  // Empêcher le glisser-déposer de la cartouche lors de la manipulation du texte dans le textarea
+  textarea.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    span.draggable = false;
+  });
+  textarea.addEventListener('mouseup', () => {
+    span.draggable = true;
+  });
+  textarea.addEventListener('blur', () => {
+    span.draggable = true;
+  });
+
+  const adjustHeight = () => {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.max(90, textarea.scrollHeight + 4) + 'px';
+  };
+
+  body.appendChild(textarea);
+  span.appendChild(header);
+  span.appendChild(body);
+
+  attachCartoucheDragEvents(span);
+
+  const toggleExpand = (e) => {
+    e.stopPropagation();
+    const expanded = span.classList.toggle('is-expanded');
+    span.classList.toggle('is-collapsed', !expanded);
+    toggleBtn.textContent = expanded ? '▲' : '▼';
+    toggleBtn.setAttribute(
+      'aria-label',
+      expanded ? 'Replier le bloc HTML' : 'Déplier le bloc HTML'
+    );
+    if (expanded) {
+      adjustHeight();
+      textarea.focus();
+    }
+  };
+
+  toggleBtn.addEventListener('click', toggleExpand);
+  header.addEventListener('click', (e) => {
+    if (e.target !== toggleBtn) {
+      toggleExpand(e);
+    }
+  });
+
+  textarea.addEventListener('input', (e) => {
+    e.stopPropagation();
+    span.dataset.htmlCode = textarea.value;
+    adjustHeight();
+    span.dispatchEvent(new CustomEvent('cartouche-input', { bubbles: true }));
+    onSync?.();
+  });
+
+  textarea.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.setRangeText('  ', start, end, 'end');
+      span.dataset.htmlCode = textarea.value;
+      span.dispatchEvent(new CustomEvent('cartouche-input', { bubbles: true }));
+      onSync?.();
+    }
+  });
+
+  if (isExpanded) {
+    setTimeout(adjustHeight, 0);
+  }
+
+  return span;
+}
+
+/**
  * Sérialise le contenu DOM de l'éditeur (#mdEditor) en chaîne Markdown,
- * en convertissant chaque objet graphique .image-cartouche et .mermaid-cartouche en syntaxe Markdown.
+ * en convertissant chaque objet graphique .image-cartouche, .mermaid-cartouche et .html-cartouche en syntaxe Markdown.
  * @param {HTMLElement|null} editorEl - Conteneur DOM de l'éditeur
  * @returns {string}
  */
@@ -276,6 +409,22 @@ export function serializeEditorToMarkdown(editorEl) {
             result += '\n';
           }
           continue;
+        } else if (child.classList.contains('html-cartouche')) {
+          const textarea = child.querySelector('.html-code-textarea');
+          const code = (textarea ? textarea.value : child.dataset.htmlCode) || '';
+          if (result.length > 0 && !result.endsWith('\n')) {
+            result += '\n';
+          }
+          result += '```html-exec\n' + code.trim() + '\n```';
+          const next = child.nextSibling;
+          const nextIsNewline =
+            next &&
+            next.nodeType === Node.TEXT_NODE &&
+            next.nodeValue.startsWith('\n');
+          if (!nextIsNewline) {
+            result += '\n';
+          }
+          continue;
         } else if (child.tagName === 'BR') {
           if (child.dataset.sentinel === 'true') continue;
           result += '\n';
@@ -297,7 +446,7 @@ export function serializeEditorToMarkdown(editorEl) {
 
 /**
  * Calcule la longueur en unités de curseur d'un nœud DOM
- * (1 par caractère texte ou saut de ligne, 1 par objet graphique .image-cartouche, 0 pour la sentinelle).
+ * (1 par caractère texte ou saut de ligne, 1 par objet graphique cartouche, 0 pour la sentinelle).
  * @param {Node} node
  * @returns {number}
  */
@@ -308,7 +457,8 @@ export function getNodeUnitLength(node) {
   if (node.nodeType === Node.ELEMENT_NODE) {
     if (
       node.classList.contains('image-cartouche') ||
-      node.classList.contains('mermaid-cartouche')
+      node.classList.contains('mermaid-cartouche') ||
+      node.classList.contains('html-cartouche')
     ) {
       return 1;
     }
@@ -355,7 +505,8 @@ export function getPointOffset(root, targetContainer, targetOffset) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       if (
         node.classList.contains('image-cartouche') ||
-        node.classList.contains('mermaid-cartouche')
+        node.classList.contains('mermaid-cartouche') ||
+        node.classList.contains('html-cartouche')
       ) {
         if (node.contains(targetContainer)) {
           offset += 1;
@@ -426,7 +577,8 @@ export function findDomPosition(root, targetUnits) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       if (
         node.classList.contains('image-cartouche') ||
-        node.classList.contains('mermaid-cartouche')
+        node.classList.contains('mermaid-cartouche') ||
+        node.classList.contains('html-cartouche')
       ) {
         const parent = node.parentNode;
         const idx = Array.from(parent.childNodes).indexOf(node);
@@ -817,6 +969,24 @@ export function setEditorContent(
   if (!editorEl) return;
 
   const savedOffsets = preserveCaret ? getEditorSelectionOffsets(editorEl) : null;
+
+  // Mémorise les index des cartouches Mermaid et HTML qui étaient dépliées avant la réinitialisation du DOM
+  const openMermaidIndexes = new Set();
+  editorEl.querySelectorAll('.mermaid-cartouche').forEach((el, idx) => {
+    if (el.classList.contains('is-expanded')) {
+      openMermaidIndexes.add(idx);
+    }
+  });
+  let mermaidCartoucheCount = 0;
+
+  const openHtmlIndexes = new Set();
+  editorEl.querySelectorAll('.html-cartouche').forEach((el, idx) => {
+    if (el.classList.contains('is-expanded')) {
+      openHtmlIndexes.add(idx);
+    }
+  });
+  let htmlCartoucheCount = 0;
+
   editorEl.innerHTML = '';
 
   if (!markdownText) {
@@ -835,24 +1005,16 @@ export function setEditorContent(
   let activeCalloutType = null;
   let i = 0;
 
-  // Mémorise les index des cartouches Mermaid qui étaient dépliées pour conserver leur état
-  const openMermaidIndexes = new Set();
-  editorEl.querySelectorAll('.mermaid-cartouche').forEach((el, idx) => {
-    if (el.classList.contains('is-expanded')) {
-      openMermaidIndexes.add(idx);
-    }
-  });
-  let mermaidCartoucheCount = 0;
-
   while (i < lines.length) {
     const line = lines[i];
 
-    // Délimiteur de bloc de code (```) ou de schéma Mermaid (```mermaid)
+    // Délimiteur de bloc de code (```), de schéma Mermaid (```mermaid) ou de bloc HTML exécutable (```html-exec)
     if (line.trimStart().startsWith('```')) {
       activeCalloutType = null;
       const fenceLang = line.trimStart().replace(/^`+/, '').trim();
       let isMermaid = /^mermaid\b/i.test(fenceLang);
-      if (!isMermaid && !fenceLang) {
+      const isHtmlExec = !isMermaid && isExecutableHtmlFence(fenceLang);
+      if (!isMermaid && !isHtmlExec && !fenceLang) {
         let lookahead = i + 1;
         while (
           lookahead < lines.length &&
@@ -865,7 +1027,7 @@ export function setEditorContent(
           lookahead < lines.length && isMermaidHeaderLine(lines[lookahead]);
       }
 
-      if (isMermaid) {
+      if (isMermaid || isHtmlExec) {
         let hasClosingFence = false;
         let lookahead = i + 1;
         while (lookahead < lines.length) {
@@ -876,7 +1038,7 @@ export function setEditorContent(
           lookahead++;
         }
 
-        // Si le bloc Mermaid n'est pas encore fermé (ex: en cours de frappe dans l'éditeur),
+        // Si le bloc n'est pas encore fermé (ex: en cours de frappe dans l'éditeur),
         // on le formate en bloc de code pour permettre la saisie ligne par ligne
         if (!hasClosingFence) {
           inCodeBlock = true;
@@ -893,21 +1055,30 @@ export function setEditorContent(
           continue;
         }
 
-        const mermaidLines = [];
+        const innerLines = [];
         let j = i + 1;
         while (j < lines.length && !lines[j].trimStart().startsWith('```')) {
-          mermaidLines.push(lines[j]);
+          innerLines.push(lines[j]);
           j++;
         }
         if (j < lines.length && lines[j].trimStart().startsWith('```')) {
           j++; // Sauter la ligne de fermeture ```
         }
-        const mermaidCode = mermaidLines.join('\n');
-        const isExp = openMermaidIndexes.has(mermaidCartoucheCount);
-        mermaidCartoucheCount++;
-        const cartoucheEl = createMermaidCartoucheElement(mermaidCode, {
-          isExpanded: isExp,
-        });
+        const blockCode = innerLines.join('\n');
+        let cartoucheEl;
+        if (isHtmlExec) {
+          const isExp = openHtmlIndexes.has(htmlCartoucheCount);
+          htmlCartoucheCount++;
+          cartoucheEl = createHtmlCartoucheElement(blockCode, {
+            isExpanded: isExp,
+          });
+        } else {
+          const isExp = openMermaidIndexes.has(mermaidCartoucheCount);
+          mermaidCartoucheCount++;
+          cartoucheEl = createMermaidCartoucheElement(blockCode, {
+            isExpanded: isExp,
+          });
+        }
         fragment.appendChild(cartoucheEl);
         if (j < lines.length) {
           fragment.appendChild(document.createTextNode('\n'));
@@ -959,6 +1130,33 @@ export function setEditorContent(
       }
       i++;
       continue;
+    }
+
+    // Bloc HTML exécutable saisi avec la syntaxe [html] ... [/html] ou :::html ... :::
+    if (isHtmlBlockOpenLine(line)) {
+      let closeIdx = -1;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (isHtmlBlockCloseLine(lines[j])) {
+          closeIdx = j;
+          break;
+        }
+      }
+      if (closeIdx > i) {
+        activeCalloutType = null;
+        const htmlLines = lines.slice(i + 1, closeIdx);
+        const htmlCode = htmlLines.join('\n');
+        const isExp = openHtmlIndexes.has(htmlCartoucheCount);
+        htmlCartoucheCount++;
+        const cartoucheEl = createHtmlCartoucheElement(htmlCode, {
+          isExpanded: isExp,
+        });
+        fragment.appendChild(cartoucheEl);
+        if (closeIdx < lines.length - 1) {
+          fragment.appendChild(document.createTextNode('\n'));
+        }
+        i = closeIdx + 1;
+        continue;
+      }
     }
 
     // Schéma Mermaid saisi directement sans délimiteurs ``` (ex: graph TB, flowchart LR, sequenceDiagram...)
@@ -1169,7 +1367,9 @@ export function insertNodeAtEditorCaret(editorEl, node) {
  */
 export function clearCartoucheSelectionStyles(editorEl) {
   editorEl
-    ?.querySelectorAll('.image-cartouche.is-selected, .mermaid-cartouche.is-selected')
+    ?.querySelectorAll(
+      '.image-cartouche.is-selected, .mermaid-cartouche.is-selected, .html-cartouche.is-selected'
+    )
     .forEach((el) => el.classList.remove('is-selected'));
 }
 
@@ -1187,14 +1387,14 @@ export function updateCartoucheSelectionHighlight(editorEl) {
   }
   const range = sel.getRangeAt(0);
   editorEl
-    .querySelectorAll('.image-cartouche, .mermaid-cartouche')
+    .querySelectorAll('.image-cartouche, .mermaid-cartouche, .html-cartouche')
     .forEach((cartouche) => {
       cartouche.classList.toggle('is-selected', range.intersectsNode(cartouche));
     });
 }
 
 /**
- * Gère la suppression d'un objet graphique .image-cartouche ou .mermaid-cartouche avec Suppr (Delete) ou Backspace
+ * Gère la suppression d'un objet graphique .image-cartouche, .mermaid-cartouche ou .html-cartouche avec Suppr (Delete) ou Backspace
  * lorsqu'il est sélectionné (au clic ou dans une sélection de texte) ou adjacent au curseur.
  * @param {HTMLElement|null} editorEl - Conteneur DOM de l'éditeur
  * @param {KeyboardEvent} e - Événement clavier
@@ -1207,12 +1407,13 @@ export function handleCartoucheDeletion(editorEl, e, onSync) {
   const isCartouche = (n) =>
     n?.nodeType === Node.ELEMENT_NODE &&
     (n.classList.contains('image-cartouche') ||
-      n.classList.contains('mermaid-cartouche'));
+      n.classList.contains('mermaid-cartouche') ||
+      n.classList.contains('html-cartouche'));
 
   // 1. Cartouche(s) explicitement marquée(s) comme sélectionnée(s)
   const selectedCartouches = Array.from(
     editorEl.querySelectorAll(
-      '.image-cartouche.is-selected, .mermaid-cartouche.is-selected'
+      '.image-cartouche.is-selected, .mermaid-cartouche.is-selected, .html-cartouche.is-selected'
     )
   );
   if (selectedCartouches.length > 0) {
@@ -1229,7 +1430,7 @@ export function handleCartoucheDeletion(editorEl, e, onSync) {
   // 2. Plage de texte sélectionnée englobant ou intersectant une cartouche graphique
   if (!range.collapsed) {
     const intersecting = Array.from(
-      editorEl.querySelectorAll('.image-cartouche, .mermaid-cartouche')
+      editorEl.querySelectorAll('.image-cartouche, .mermaid-cartouche, .html-cartouche')
     ).filter((el) => range.intersectsNode(el));
     if (intersecting.length > 0) {
       e.preventDefault();

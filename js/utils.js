@@ -311,6 +311,36 @@ export const normalizeMermaidCode = (code = '') =>
  * @param {string} [line='']
  * @returns {boolean}
  */
+/**
+ * Indique si un identifiant de langage de bloc de code (ex: ```html-exec) désigne un bloc HTML exécutable.
+ * @param {string} [fenceLang='']
+ * @returns {boolean}
+ */
+export const isExecutableHtmlFence = (fenceLang = '') => {
+  const clean = String(fenceLang).trim().toLowerCase();
+  return /^(?:html-exec|html-live|html-run|html-widget|html!)(?:\s|$)/.test(clean);
+};
+
+/**
+ * Indique si une ligne ouvre un bloc HTML exécutable via la syntaxe courte [html] ou :::html.
+ * @param {string} [line='']
+ * @returns {boolean}
+ */
+export const isHtmlBlockOpenLine = (line = '') => {
+  const trimmed = String(line).trim().toLowerCase();
+  return trimmed === '[html]' || trimmed === ':::html' || trimmed === '::: html';
+};
+
+/**
+ * Indique si une ligne ferme un bloc HTML exécutable via [/html] ou :::.
+ * @param {string} [line='']
+ * @returns {boolean}
+ */
+export const isHtmlBlockCloseLine = (line = '') => {
+  const trimmed = String(line).trim().toLowerCase();
+  return trimmed === '[/html]' || trimmed === ':::';
+};
+
 export const isMermaidHeaderLine = (line = '') => {
   const trimmed = line.trim();
   return /^(?:graph\s+(?:TB|TD|BT|RL|LR)|flowchart\s+(?:TB|TD|BT|RL|LR)|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|pie(?:\s+title\b)?|mindmap|timeline|journey|gitGraph|quadrantChart|xychart(?:-beta)?)\b/i.test(
@@ -441,6 +471,25 @@ export const wrapUnfencedMermaidBlocks = (markdownText) => {
       out.push(...blockLines);
       out.push(closingFence);
       continue;
+    }
+
+    if (isHtmlBlockOpenLine(line)) {
+      let closeIdx = -1;
+      for (let h = i + 1; h < lines.length; h++) {
+        if (isHtmlBlockCloseLine(lines[h])) {
+          closeIdx = h;
+          break;
+        }
+      }
+      if (closeIdx > i) {
+        out.push('```html-exec');
+        for (let h = i + 1; h < closeIdx; h++) {
+          out.push(lines[h]);
+        }
+        out.push('```');
+        i = closeIdx + 1;
+        continue;
+      }
     }
 
     if (isMermaidHeaderLine(line)) {
@@ -2437,6 +2486,218 @@ export function parseMetricTag(valStr, part2, part3) {
 export function resolveMetricClass(rawVariant) {
   const k = (rawVariant || '').trim().toLowerCase();
   return METRIC_VARIANT_MAP[k] || 'metric-card-default';
+}
+
+/**
+ * Dictionnaire de correspondance des variantes de couleur pour les en-têtes de colonnes.
+ * Reprend la typologie des badges/tags (info, success, warning, danger, important, neutral).
+ * @type {Record<string, string>}
+ */
+export const COLUMN_COLOR_VARIANT_MAP = {
+  info: 'info',
+  note: 'info',
+  blue: 'info',
+  bleu: 'info',
+  success: 'success',
+  tip: 'success',
+  astuce: 'success',
+  valide: 'success',
+  ok: 'success',
+  green: 'success',
+  vert: 'success',
+  warning: 'warning',
+  warn: 'warning',
+  avertissement: 'warning',
+  orange: 'warning',
+  yellow: 'warning',
+  jaune: 'warning',
+  danger: 'danger',
+  error: 'danger',
+  critical: 'danger',
+  critique: 'danger',
+  attention: 'danger',
+  caution: 'danger',
+  red: 'danger',
+  rouge: 'danger',
+  urgent: 'danger',
+  important: 'important',
+  purple: 'important',
+  violet: 'important',
+  neutral: 'neutral',
+  neutre: 'neutral',
+  gray: 'neutral',
+  grey: 'neutral',
+  gris: 'neutral',
+  default: 'neutral',
+};
+
+/**
+ * Résout une couleur d'en-tête de colonne à partir d'une typologie de badge/tag ou d'un code hexadécimal.
+ * @param {string} rawColor - Typologie brute (ex: 'info', 'warning') ou couleur hexadécimale
+ * @returns {{ variant: string, hex: string }|null}
+ */
+export function resolveColumnColor(rawColor) {
+  const cleaned = (rawColor || '').trim();
+  if (!cleaned) return null;
+  const key = cleaned.toLowerCase();
+  if (COLUMN_COLOR_VARIANT_MAP[key]) {
+    return { variant: COLUMN_COLOR_VARIANT_MAP[key], hex: '' };
+  }
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(cleaned)) {
+    return { variant: '', hex: cleaned };
+  }
+  return null;
+}
+
+/**
+ * Analyse un ratio d'échelle typographique de colonne (ex: '0.8', '1,25', '80%').
+ * @param {string} rawScale - Chaîne brute du ratio
+ * @param {boolean} [requireDecimalOrPercent=false] - Exige un séparateur décimal ou '%' (évite les faux positifs sur titres courts)
+ * @returns {number|null} Facteur multiplicatif positif ou null si invalide
+ */
+export function parseColumnFontScale(rawScale, requireDecimalOrPercent = false) {
+  const cleaned = (rawScale || '').trim();
+  if (!cleaned) return null;
+  if (/^\d+(?:[.,]\d+)?%$/.test(cleaned)) {
+    const pct = parseFloat(cleaned.slice(0, -1).replace(',', '.'));
+    return Number.isFinite(pct) && pct > 0 && pct <= 1000 ? pct / 100 : null;
+  }
+  const regex = requireDecimalOrPercent ? /^\d+[.,]\d+$/ : /^\d+(?:[.,]\d+)?$/;
+  if (regex.test(cleaned)) {
+    const val = parseFloat(cleaned.replace(',', '.'));
+    return Number.isFinite(val) && val > 0 && val <= 10 ? val : null;
+  }
+  return null;
+}
+
+/**
+ * @typedef {object} ColumnTagParams
+ * @property {number} ratio - Facteur de dimensionnement proportionnel (défaut : 1)
+ * @property {string} title - Titre optionnel de la colonne (rendu en #### centré en haut)
+ * @property {string} colorVariant - Variante de couleur résolue ('info', 'success', 'warning', 'danger', 'important', 'neutral' ou '')
+ * @property {string} colorHex - Couleur hexadécimale directe éventuelle (si fournie)
+ * @property {number} fontScale - Ratio d'échelle de la police interne (titre et corps, défaut : 1)
+ */
+
+/**
+ * Analyse les paramètres d'une balise ouvrante de colonne :
+ *   [colonne:taille relative:titre:couleur:ratio police]
+ * Les 4 composantes après `colonne` sont optionnelles.
+ * Tolère une taille vide (`[colonne::Titre:info:0.85]`), une taille omise (`[colonne:Titre:info:0.85]`),
+ * ou la présence de deux-points dans le titre.
+ *
+ * @param {string} [rawArgs=''] - Chaîne brute située après `[colonne:` (sans les crochets)
+ * @returns {ColumnTagParams}
+ */
+export function parseColumnTagParams(rawArgs = '') {
+  const emptyResult = { ratio: 1, title: '', colorVariant: '', colorHex: '', fontScale: 1 };
+  if (!rawArgs || !rawArgs.trim()) {
+    return emptyResult;
+  }
+
+  const parts = rawArgs.split(':');
+  const firstRaw = parts[0].trim();
+  const isNumericRatio = /^\d+(?:[.,]\d+)?$/.test(firstRaw);
+
+  let ratio = 1;
+  let rest = [];
+
+  if (firstRaw === '' || isNumericRatio) {
+    if (isNumericRatio) {
+      const parsed = parseFloat(firstRaw.replace(',', '.'));
+      if (Number.isFinite(parsed) && parsed > 0) ratio = parsed;
+    }
+    rest = parts.slice(1);
+  } else {
+    rest = parts;
+  }
+
+  if (rest.length === 0) {
+    return { ratio, title: '', colorVariant: '', colorHex: '', fontScale: 1 };
+  }
+
+  if (rest.length === 1) {
+    return { ratio, title: rest[0].trim(), colorVariant: '', colorHex: '', fontScale: 1 };
+  }
+
+  if (rest.length === 2) {
+    const secondRaw = rest[1].trim();
+    if (secondRaw === '') {
+      return { ratio, title: rest[0].trim(), colorVariant: '', colorHex: '', fontScale: 1 };
+    }
+    const resolvedColor = resolveColumnColor(secondRaw);
+    if (resolvedColor) {
+      return {
+        ratio,
+        title: rest[0].trim(),
+        colorVariant: resolvedColor.variant,
+        colorHex: resolvedColor.hex,
+        fontScale: 1,
+      };
+    }
+    const parsedScale = parseColumnFontScale(secondRaw, true);
+    if (parsedScale !== null) {
+      return {
+        ratio,
+        title: rest[0].trim(),
+        colorVariant: '',
+        colorHex: '',
+        fontScale: parsedScale,
+      };
+    }
+    return { ratio, title: rest.join(':').trim(), colorVariant: '', colorHex: '', fontScale: 1 };
+  }
+
+  const lastRaw = rest[rest.length - 1].trim();
+  const lastScale = parseColumnFontScale(lastRaw, false);
+
+  if (lastRaw === '' || lastScale !== null) {
+    const fontScale = lastScale !== null ? lastScale : 1;
+    const beforeScale = rest.slice(0, -1);
+    const colorRaw = beforeScale[beforeScale.length - 1].trim();
+
+    if (colorRaw === '') {
+      return {
+        ratio,
+        title: beforeScale.slice(0, -1).join(':').trim(),
+        colorVariant: '',
+        colorHex: '',
+        fontScale,
+      };
+    }
+
+    const resolvedColor = resolveColumnColor(colorRaw);
+    if (resolvedColor) {
+      return {
+        ratio,
+        title: beforeScale.slice(0, -1).join(':').trim(),
+        colorVariant: resolvedColor.variant,
+        colorHex: resolvedColor.hex,
+        fontScale,
+      };
+    }
+
+    return {
+      ratio,
+      title: beforeScale.join(':').trim(),
+      colorVariant: '',
+      colorHex: '',
+      fontScale,
+    };
+  }
+
+  const resolvedLastColor = resolveColumnColor(lastRaw);
+  if (resolvedLastColor) {
+    return {
+      ratio,
+      title: rest.slice(0, -1).join(':').trim(),
+      colorVariant: resolvedLastColor.variant,
+      colorHex: resolvedLastColor.hex,
+      fontScale: 1,
+    };
+  }
+
+  return { ratio, title: rest.join(':').trim(), colorVariant: '', colorHex: '', fontScale: 1 };
 }
 
 

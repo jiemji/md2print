@@ -32,6 +32,7 @@ import {
 import {
   createCartoucheElement,
   createMermaidCartoucheElement,
+  createHtmlCartoucheElement,
   serializeEditorToMarkdown,
   getEditorSelectionOffsets,
   restoreEditorSelectionOffsets,
@@ -544,14 +545,23 @@ function toggleSyncScroll() {
 }
 
 /**
- * Détecte si l'utilisateur a saisi un bloc Mermaid brut fermé (```mermaid ... ```) non encore converti en cartouche.
+ * Détecte si l'utilisateur a saisi un bloc Mermaid (```mermaid ... ```) ou HTML exécutable
+ * (```html-exec ... ``` ou [html] ... [/html]) fermé non encore converti en cartouche.
  * @returns {void}
  */
 function checkForUnfencedCartouches() {
   const text = state.markdown || '';
   const mermaidMatches = text.match(/```mermaid[\s\S]*?```/gi) || [];
   const existingCartouches = dom.mdEditor.querySelectorAll('.mermaid-cartouche').length;
-  if (mermaidMatches.length > existingCartouches) {
+  const htmlFenceMatches =
+    text.match(/```(?:html-exec|html-live|html-run|html-widget|html!)[\s\S]*?```/gi) || [];
+  const htmlTagMatches =
+    text.match(/(?:\[\s*html\s*\][\s\S]*?\[\s*\/\s*html\s*\]|:::\s*html\s*\r?\n[\s\S]*?\r?\n:::)/gi) || [];
+  const existingHtmlCartouches = dom.mdEditor.querySelectorAll('.html-cartouche').length;
+  if (
+    mermaidMatches.length > existingCartouches ||
+    htmlFenceMatches.length + htmlTagMatches.length > existingHtmlCartouches
+  ) {
     syncFromEditorDOM();
   }
 }
@@ -579,7 +589,8 @@ function syncFromEditorDOM() {
   if (
     rawFromDom.length === 0 &&
     !dom.mdEditor.querySelector('.image-cartouche') &&
-    !dom.mdEditor.querySelector('.mermaid-cartouche')
+    !dom.mdEditor.querySelector('.mermaid-cartouche') &&
+    !dom.mdEditor.querySelector('.html-cartouche')
   ) {
     state.markdown = '';
     dom.mdEditor.innerHTML = '';
@@ -814,7 +825,7 @@ function initEventListeners() {
       state.isDirty = true;
       updateFileNameDisplay();
     }
-    if (e.data === '`' || e.data === '\n') {
+    if (e.data === '`' || e.data === '\n' || e.data === ']' || e.data === ':') {
       checkForUnfencedCartouches();
     }
     scheduleEditorTocUpdate(200);
@@ -838,7 +849,7 @@ function initEventListeners() {
     persistDraftNow();
   });
 
-  // Événement personnalisé émis lors de la frappe ou indentation dans un textarea Mermaid
+  // Événement personnalisé émis lors de la frappe ou indentation dans un textarea Mermaid ou HTML
   dom.mdEditor.addEventListener('cartouche-input', () => {
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
     if (!state.isDirty) {
@@ -849,15 +860,17 @@ function initEventListeners() {
     scheduleDraftSave(1500);
   });
 
-  // Clic sur une cartouche graphique [image] ou [mermaid] -> sélectionne l'objet graphique comme du texte
+  // Clic sur une cartouche graphique [image], [mermaid] ou [html] -> sélectionne l'objet graphique comme du texte
   dom.mdEditor.addEventListener('click', (e) => {
     if (
       e.target.closest('.mermaid-code-textarea') ||
-      e.target.closest('.mermaid-cartouche-toggle')
+      e.target.closest('.mermaid-cartouche-toggle') ||
+      e.target.closest('.html-code-textarea') ||
+      e.target.closest('.html-cartouche-toggle')
     ) {
       return;
     }
-    const cartouche = e.target.closest('.image-cartouche, .mermaid-cartouche');
+    const cartouche = e.target.closest('.image-cartouche, .mermaid-cartouche, .html-cartouche');
     clearCartoucheSelectionStyles(dom.mdEditor);
     if (cartouche) {
       cartouche.classList.add('is-selected');
@@ -884,7 +897,7 @@ function initEventListeners() {
     updateCartoucheSelectionHighlight(dom.mdEditor);
   });
 
-  // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Ctrl+M (schéma Mermaid), Tab et Enter
+  // Gestion des touches dans l'éditeur : Backspace/Delete sur cartouche, Ctrl+M (Mermaid), Ctrl+Shift+H / Alt+H (HTML), Tab et Enter
   dom.mdEditor.addEventListener('keydown', (e) => {
     if (e.target !== dom.mdEditor && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) {
       return;
@@ -914,6 +927,34 @@ function initEventListeners() {
       }
 
       showToast('Schéma Mermaid inséré', 'success');
+      return;
+    }
+
+    // Ctrl+Shift+H ou Alt+H : Insérer un bloc HTML/CSS/JS exécutable sous forme de cartouche dépliée
+    if (
+      (((e.ctrlKey || e.metaKey) && e.shiftKey) || e.altKey) &&
+      e.key.toLowerCase() === 'h'
+    ) {
+      e.preventDefault();
+      const sampleHtml =
+        '<div style="padding: 16px; border-radius: 10px; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25);">\n' +
+        '  <strong>Composant HTML Interactif</strong>\n' +
+        '</div>';
+      const cartoucheEl = createHtmlCartoucheElement(sampleHtml, { isExpanded: true });
+      insertNodeAtEditorCaret(dom.mdEditor, cartoucheEl);
+      syncFromEditorDOM();
+      updatePreview();
+      persistDraftNow();
+
+      const allCartouches = dom.mdEditor.querySelectorAll('.html-cartouche');
+      const lastCartouche = allCartouches[allCartouches.length - 1];
+      const textarea = lastCartouche?.querySelector('.html-code-textarea');
+      if (textarea) {
+        textarea.focus();
+        textarea.select();
+      }
+
+      showToast('Bloc HTML exécutable inséré', 'success');
       return;
     }
 
@@ -990,7 +1031,7 @@ function initEventListeners() {
         range &&
         dom.mdEditor.contains(range.startContainer) &&
         !draggedCartouche.contains(range.startContainer) &&
-        !range.startContainer?.closest?.('.mermaid-code-textarea')
+        !range.startContainer?.closest?.('.mermaid-code-textarea, .html-code-textarea')
       ) {
         const sel = window.getSelection();
         sel?.removeAllRanges();
@@ -1023,7 +1064,7 @@ function initEventListeners() {
         range &&
         dom.mdEditor.contains(range.startContainer) &&
         !draggedCartouche.contains(range.startContainer) &&
-        !range.startContainer?.closest?.('.mermaid-code-textarea')
+        !range.startContainer?.closest?.('.mermaid-code-textarea, .html-code-textarea')
       ) {
         // Retirer la cartouche de son emplacement d'origine
         draggedCartouche.remove();

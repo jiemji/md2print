@@ -156,6 +156,8 @@ export function blockToMarkdown(block) {
       return '---';
     case 'mermaid':
       return `\`\`\`mermaid\n${block.code || ''}\n\`\`\``;
+    case 'html_exec':
+      return `\`\`\`html-exec\n${block.code || ''}\n\`\`\``;
     case 'image':
       return `![${block.alt || ''}](${block.src || ''})`;
     case 'table': {

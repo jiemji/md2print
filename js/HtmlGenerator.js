@@ -16,10 +16,12 @@ import {
   normalizeMarkdown,
   resolveImagePaths,
   normalizeMermaidCode,
+  isExecutableHtmlFence,
   resolveCallout,
   resolveBadgeClass,
   parseMetricTag,
   resolveMetricClass,
+  parseColumnTagParams,
 } from './utils.js';
 import { planSlides } from './SlidePlanner.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
@@ -135,6 +137,10 @@ export const extractTOC = (normalizedMarkdown) => {
  * @property {number} start - Position de départ de la balise colonne dans le Markdown
  * @property {number} end - Position de fin de la balise fermante dans le Markdown
  * @property {number} ratio - Facteur de dimensionnement proportionnel (défaut : 1)
+ * @property {string} title - Titre optionnel affiché en H4 centré en haut de colonne
+ * @property {string} colorVariant - Variante de couleur d'en-tête ('info', 'success', 'warning', 'danger', 'important', 'neutral' ou '')
+ * @property {string} colorHex - Couleur hexadécimale directe éventuelle pour l'en-tête
+ * @property {number} fontScale - Ratio de taille de police interne à la colonne (défaut : 1)
  * @property {string} content - Contenu Markdown interne de la colonne
  * @property {string} raw - Markdown source complet du bloc colonne
  */
@@ -152,7 +158,7 @@ export const extractTOC = (normalizedMarkdown) => {
  *
  * Syntaxes reconnues :
  * - Balises simples : `[colonne]` ... `[/colonne]` (alias `[col]` ... `[/col]`)
- * - Proportions personnalisées : `[colonne:2]` ... `[/colonne]`
+ * - Paramètres étendus : `[colonne:taille:titre:couleur]` ... `[/colonne]` (les 3 derniers optionnels)
  * - Conteneurs globaux optionnels : `[colonnes]` ... `[/colonnes]` (alias `[cols]` ... `[/cols]`)
  * - Syntaxe alternative à triple deux-points : `:::colonne` ... `:::`
  *
@@ -180,16 +186,21 @@ export function extractAndGroupColumns(md) {
   const restoreCodeBlocks = (text) =>
     text.replace(/%%MD2PRINT_CODE_FENCE_(\d+)%%/g, (_, idx) => codeBlocks[Number(idx)] || '');
 
-  const colRegex = /(?:\[\s*col(?:onne)?(?::([0-9.]+))?\s*\]([\s\S]*?)\[\s*\/\s*col(?:onne)?\s*\]|:::\s*col(?:onne)?(?::([0-9.]+))?\s*\r?\n([\s\S]*?)\r?\n:::)/gi;
+  const colRegex = /(?:\[\s*col(?:onne)?\s*(?::([^\]]*))?\s*\]([\s\S]*?)\[\s*\/\s*col(?:onne)?\s*\]|:::\s*col(?:onne)?\s*(?::([^\r\n]*))?\r?\n([\s\S]*?)\r?\n:::)/gi;
   const matches = [];
   let m;
   while ((m = colRegex.exec(maskedMd)) !== null) {
-    const ratioStr = m[1] || m[3];
+    const rawArgs = m[1] !== undefined ? m[1] : m[3];
+    const parsedParams = parseColumnTagParams(rawArgs);
     const content = m[2] !== undefined ? m[2] : m[4];
     matches.push({
       start: m.index,
       end: m.index + m[0].length,
-      ratio: ratioStr ? parseFloat(ratioStr) : 1,
+      ratio: parsedParams.ratio,
+      title: parsedParams.title,
+      colorVariant: parsedParams.colorVariant,
+      colorHex: parsedParams.colorHex,
+      fontScale: parsedParams.fontScale,
       content: restoreCodeBlocks((content || '').trim()),
       raw: restoreCodeBlocks(m[0]),
     });
@@ -463,7 +474,7 @@ const convertRawEmptyLinesToPlaceholders = (md) => {
       const isClosingTag = /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?|frise|timeline)\s*\]|:::)$/i.test(nextLine);
       const isBetweenColumns =
         /^(?:\[\s*\/\s*(?:col(?:onne)?|cols?onnes?)\s*\]|:::)$/i.test(prevLine) &&
-        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\s*\]|:::\s*col)/i.test(nextLine);
+        /^(?:\[\s*(?:col(?:onne)?|cols?onnes?)\s*(?::[^\]]*)?\s*\]|:::\s*col)/i.test(nextLine);
       const isPlaceholderAdjacent =
         prevLine.startsWith('%%') || nextLine.startsWith('%%');
 
@@ -501,8 +512,27 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
       const colsHtml = group
         .map((col) => {
           const innerHtml = parseMarkdownToHTML(col.content, mermaidSvgMap);
-          const ratioStyle = col.ratio !== 1 ? ` style="flex: ${col.ratio} 1 0%;"` : '';
-          return `<div class="slide-column"${ratioStyle}><div class="slide-column-content">${innerHtml}</div></div>`;
+          const styleParts = [];
+          if (col.ratio !== 1) styleParts.push(`flex: ${col.ratio} 1 0%;`);
+          if (col.fontScale !== 1) styleParts.push(`--col-font-scale: ${col.fontScale};`);
+          const colStyleAttr = styleParts.length > 0 ? ` style="${styleParts.join(' ')}"` : '';
+          let headerHtml = '';
+          let hasHeaderClass = '';
+          const hasFontScaleClass = col.fontScale !== 1 ? ' has-column-font-scale' : '';
+          if (col.title) {
+            hasHeaderClass = ' has-column-header';
+            const titleHtml = parseMarkdownToHTML(`#### ${col.title}`, mermaidSvgMap);
+            let headerClass = 'slide-column-header';
+            let headerStyle = '';
+            if (col.colorVariant) {
+              headerClass += ` slide-column-header-colored slide-column-header-${col.colorVariant}`;
+            } else if (col.colorHex) {
+              headerClass += ' slide-column-header-colored';
+              headerStyle = ` style="background-color: ${escapeHtml(col.colorHex)}; color: #ffffff;"`;
+            }
+            headerHtml = `<div class="${headerClass}"${headerStyle}>${titleHtml}</div>`;
+          }
+          return `<div class="slide-column${hasHeaderClass}${hasFontScaleClass}"${colStyleAttr}>${headerHtml}<div class="slide-column-content">${innerHtml}</div></div>`;
         })
         .join('\n');
       return `<div class="slide-columns-row">\n${colsHtml}\n</div>`;
@@ -559,6 +589,9 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   // Rendu des schémas Mermaid dans un cadre ombré et des blocs de code avec coloration syntaxique
   renderer.code = ({ text, lang }) => {
     const cleanLang = (lang || '').trim().toLowerCase();
+    if (isExecutableHtmlFence(cleanLang)) {
+      return `<div class="html-exec-container">\n${text}\n</div>`;
+    }
     if (cleanLang === 'mermaid') {
       const trimmedCode = normalizeMermaidCode(text);
       const svgMarkup = mermaidSvgMap[trimmedCode];
@@ -999,6 +1032,36 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   width: 100% !important;
   margin: 14px 0 !important;
 }
+.slide-body .metric-card.metric-card-info {
+  border-top-color: var(--slide-accent-cyan, #0F9ED5) !important;
+}
+.slide-body .metric-card.metric-card-info .metric-value {
+  color: var(--slide-brand-dark, #0E2841) !important;
+}
+.slide-body .metric-card.metric-card-success {
+  border-top-color: var(--slide-accent-green, #196B24) !important;
+}
+.slide-body .metric-card.metric-card-success .metric-value {
+  color: var(--slide-accent-green, #196B24) !important;
+}
+.slide-body .metric-card.metric-card-warning {
+  border-top-color: var(--slide-brand-amber, #FBAE40) !important;
+}
+.slide-body .metric-card.metric-card-warning .metric-value {
+  color: #ad5319 !important;
+}
+.slide-body .metric-card.metric-card-danger {
+  border-top-color: var(--slide-brand-red, #C41718) !important;
+}
+.slide-body .metric-card.metric-card-danger .metric-value {
+  color: var(--slide-brand-red, #C41718) !important;
+}
+.slide-body .metric-card.metric-card-important {
+  border-top-color: var(--slide-accent-purple, #A02B93) !important;
+}
+.slide-body .metric-card.metric-card-important .metric-value {
+  color: var(--slide-accent-purple, #A02B93) !important;
+}
 .slide-image-box,
 .slide-body figure,
 .slide-body p:has(img) {
@@ -1093,6 +1156,55 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   min-height: 0 !important;
   box-sizing: border-box !important;
 }
+.slide-column.has-column-header {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+.slide-column.has-column-header > .slide-column-content {
+  padding: var(--slide-column-padding, 14px) !important;
+}
+.slide-column.has-column-header > .slide-column-header:not(.slide-column-header-colored) + .slide-column-content {
+  padding-top: 10px !important;
+}
+.slide-column-header {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: var(--slide-column-padding, 14px) var(--slide-column-padding, 14px) 0 var(--slide-column-padding, 14px);
+}
+.slide-column-header.slide-column-header-colored {
+  padding: 10px var(--slide-column-padding, 14px);
+  color: #ffffff;
+}
+.slide-column-header h4,
+.slide-column-header .doc-h4,
+.slide-body .slide-column-header h4 {
+  margin: 0 !important;
+  text-align: center !important;
+}
+.slide-column-header.slide-column-header-colored h4,
+.slide-column-header.slide-column-header-colored .doc-h4,
+.slide-body .slide-column-header.slide-column-header-colored h4 {
+  color: #ffffff !important;
+}
+.slide-column-header-info {
+  background-color: #0E2841;
+}
+.slide-column-header-success {
+  background-color: #196B24;
+}
+.slide-column-header-warning {
+  background-color: #E97132;
+}
+.slide-column-header-danger {
+  background-color: #C41718;
+}
+.slide-column-header-important {
+  background-color: #0F9ED5;
+}
+.slide-column-header-neutral {
+  background-color: #cbd5e1;
+}
 .slide-column-content {
   display: flex !important;
   flex-direction: column !important;
@@ -1101,6 +1213,117 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   width: 100% !important;
   box-sizing: border-box !important;
   gap: 10px;
+  font-size: calc(var(--slide-column-font-size, 1rem) * var(--col-font-scale, 1));
+}
+.slide-body .slide-column-content p,
+.slide-body .slide-column-content li,
+.slide-column-content p,
+.slide-column-content li {
+  font-size: calc(var(--slide-column-font-size, 1rem) * var(--col-font-scale, 1));
+}
+.slide-body .slide-column h3,
+.slide-body .slide-column h4,
+.slide-column .slide-column-header h4,
+.slide-column .doc-h4 {
+  font-size: calc(var(--slide-h4-size, 1.15rem) * var(--col-font-scale, 1));
+}
+.slide-body .slide-column h5,
+.slide-column .doc-h5 {
+  font-size: calc(var(--slide-h5-size, 1.05rem) * var(--col-font-scale, 1));
+}
+.slide-body .slide-column h6,
+.slide-column .doc-h6 {
+  font-size: calc(var(--slide-h6-size, 0.95rem) * var(--col-font-scale, 1));
+}
+/* Mise à l'échelle prioritaire lorsqu'un ratio explicite est passé sur la colonne */
+.slide-body .slide-column.has-column-font-scale > .slide-column-content,
+.slide-column.has-column-font-scale > .slide-column-content {
+  font-size: calc(var(--slide-column-font-size, 1rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .slide-column-content p,
+.slide-body .slide-column.has-column-font-scale .slide-column-content li,
+.slide-body .slide-column.has-column-font-scale .slide-column-content ul,
+.slide-body .slide-column.has-column-font-scale .slide-column-content ol,
+.slide-column.has-column-font-scale .slide-column-content p,
+.slide-column.has-column-font-scale .slide-column-content li,
+.slide-column.has-column-font-scale .slide-column-content ul,
+.slide-column.has-column-font-scale .slide-column-content ol {
+  font-size: calc(var(--slide-column-font-size, 1rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h1,
+.slide-column.has-column-font-scale .doc-main-title {
+  font-size: calc(var(--slide-title-cover-size, 2.8rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h2,
+.slide-column.has-column-font-scale .doc-h2 {
+  font-size: calc(var(--slide-title-content-size, 1.85rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h3,
+.slide-column.has-column-font-scale .doc-h3 {
+  font-size: calc(var(--slide-h3-size, 1.35rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h4,
+.slide-column.has-column-font-scale .slide-column-header h4,
+.slide-column.has-column-font-scale .doc-h4 {
+  font-size: calc(var(--slide-h4-size, 1.15rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h5,
+.slide-column.has-column-font-scale .doc-h5 {
+  font-size: calc(var(--slide-h5-size, 1.05rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale h6,
+.slide-column.has-column-font-scale .doc-h6 {
+  font-size: calc(var(--slide-h6-size, 0.95rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale blockquote,
+.slide-body .slide-column.has-column-font-scale blockquote p,
+.slide-column.has-column-font-scale blockquote,
+.slide-column.has-column-font-scale blockquote p {
+  font-size: calc(var(--slide-quote-size, 1.25rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .callout-header,
+.slide-column.has-column-font-scale .callout-header {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .callout-body,
+.slide-body .slide-column.has-column-font-scale .callout-body p,
+.slide-body .slide-column.has-column-font-scale .callout-body li,
+.slide-column.has-column-font-scale .callout-body,
+.slide-column.has-column-font-scale .callout-body p,
+.slide-column.has-column-font-scale .callout-body li {
+  font-size: calc(var(--slide-column-font-size, 1rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale pre,
+.slide-body .slide-column.has-column-font-scale pre code,
+.slide-column.has-column-font-scale pre,
+.slide-column.has-column-font-scale pre code {
+  font-size: calc(var(--slide-code-size, 1.05rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .badge,
+.slide-column.has-column-font-scale .badge {
+  font-size: calc(var(--slide-badge-size, 0.78rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .doc-table th,
+.slide-body .slide-column.has-column-font-scale .doc-table td,
+.slide-column.has-column-font-scale .doc-table th,
+.slide-column.has-column-font-scale .doc-table td {
+  font-size: calc(var(--slide-table-size, 1rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .metric-value,
+.slide-column.has-column-font-scale .metric-value {
+  font-size: calc(var(--slide-metric-val-size, 2rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .metric-label,
+.slide-column.has-column-font-scale .metric-label {
+  font-size: calc(0.85rem * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .timeline-title,
+.slide-column.has-column-font-scale .timeline-title {
+  font-size: calc(0.95rem * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .timeline-desc,
+.slide-column.has-column-font-scale .timeline-desc {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
 }
 .slide-column-content > *:first-child {
   margin-top: 0 !important;
@@ -1182,6 +1405,55 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   min-width: 0;
   box-sizing: border-box;
 }
+.slide-column.has-column-header {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.slide-column.has-column-header > .slide-column-content {
+  padding: var(--report-column-padding, 14px) !important;
+}
+.slide-column.has-column-header > .slide-column-header:not(.slide-column-header-colored) + .slide-column-content {
+  padding-top: 12px !important;
+}
+.slide-column-header {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: var(--report-column-padding, 14px) var(--report-column-padding, 14px) 0 var(--report-column-padding, 14px);
+}
+.slide-column-header.slide-column-header-colored {
+  padding: 10px var(--report-column-padding, 14px);
+  color: #ffffff;
+}
+.slide-column-header h4,
+.slide-column-header .doc-h4,
+.markdown-rendered-content .slide-column-header h4 {
+  margin: 0 !important;
+  text-align: center !important;
+}
+.slide-column-header.slide-column-header-colored h4,
+.slide-column-header.slide-column-header-colored .doc-h4,
+.markdown-rendered-content .slide-column-header.slide-column-header-colored h4 {
+  color: #ffffff !important;
+}
+.slide-column-header-info {
+  background-color: var(--report-color-h2, #2F5496);
+}
+.slide-column-header-success {
+  background-color: #70AD47;
+}
+.slide-column-header-warning {
+  background-color: #ED7D31;
+}
+.slide-column-header-danger {
+  background-color: #C00000;
+}
+.slide-column-header-important {
+  background-color: #5B9BD5;
+}
+.slide-column-header-neutral {
+  background-color: var(--report-border-color, #cbd5e1);
+}
 .slide-column-content {
   display: flex;
   flex-direction: column;
@@ -1189,6 +1461,120 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   width: 100%;
   box-sizing: border-box;
   gap: 12px;
+  font-size: calc(var(--report-column-font-size, 0.95rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column-content p,
+.markdown-rendered-content .slide-column-content li,
+.slide-column-content p,
+.slide-column-content li {
+  font-size: calc(var(--report-column-font-size, 0.95rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h3,
+.slide-column .doc-h3 {
+  font-size: calc(var(--report-h2-size, 1.35rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h4,
+.slide-column .slide-column-header h4,
+.slide-column .doc-h4 {
+  font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h5,
+.slide-column .doc-h5 {
+  font-size: calc(var(--report-h4-size, 1.05rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column h6,
+.slide-column .doc-h6 {
+  font-size: calc(var(--report-h5-size, 0.98rem) * var(--col-font-scale, 1));
+}
+/* Mise à l'échelle prioritaire lorsqu'un ratio explicite est passé sur la colonne */
+.markdown-rendered-content .slide-column.has-column-font-scale > .slide-column-content,
+.slide-column.has-column-font-scale > .slide-column-content {
+  font-size: calc(var(--report-column-font-size, 0.95rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-content p,
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-content li,
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-content ul,
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-content ol,
+.slide-column.has-column-font-scale .slide-column-content p,
+.slide-column.has-column-font-scale .slide-column-content li,
+.slide-column.has-column-font-scale .slide-column-content ul,
+.slide-column.has-column-font-scale .slide-column-content ol {
+  font-size: calc(var(--report-column-font-size, 0.95rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h1,
+.slide-column.has-column-font-scale .doc-main-title {
+  font-size: calc(var(--report-title-size, 2.25rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h2,
+.slide-column.has-column-font-scale .doc-h2 {
+  font-size: calc(var(--report-h1-size, 1.65rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h3,
+.slide-column.has-column-font-scale .doc-h3 {
+  font-size: calc(var(--report-h2-size, 1.35rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h4,
+.slide-column.has-column-font-scale .slide-column-header h4,
+.slide-column.has-column-font-scale .doc-h4 {
+  font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h5,
+.slide-column.has-column-font-scale .doc-h5 {
+  font-size: calc(var(--report-h4-size, 1.05rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale h6,
+.slide-column.has-column-font-scale .doc-h6 {
+  font-size: calc(var(--report-h5-size, 0.98rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale blockquote,
+.markdown-rendered-content .slide-column.has-column-font-scale blockquote p,
+.slide-column.has-column-font-scale blockquote,
+.slide-column.has-column-font-scale blockquote p {
+  font-size: calc(var(--report-quote-size, 0.95rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .callout-header,
+.slide-column.has-column-font-scale .callout-header {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .callout-body,
+.markdown-rendered-content .slide-column.has-column-font-scale .callout-body p,
+.markdown-rendered-content .slide-column.has-column-font-scale .callout-body li,
+.slide-column.has-column-font-scale .callout-body,
+.slide-column.has-column-font-scale .callout-body p,
+.slide-column.has-column-font-scale .callout-body li {
+  font-size: calc(var(--report-column-font-size, 0.95rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale pre,
+.markdown-rendered-content .slide-column.has-column-font-scale pre code,
+.slide-column.has-column-font-scale pre,
+.slide-column.has-column-font-scale pre code {
+  font-size: calc(var(--report-code-size, 0.88rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .badge,
+.slide-column.has-column-font-scale .badge {
+  font-size: calc(var(--report-badge-size, 0.72rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .doc-table th,
+.markdown-rendered-content .slide-column.has-column-font-scale .doc-table td,
+.slide-column.has-column-font-scale .doc-table th,
+.slide-column.has-column-font-scale .doc-table td {
+  font-size: calc(var(--report-table-size, 0.86rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .metric-value,
+.slide-column.has-column-font-scale .metric-value {
+  font-size: calc(var(--report-metric-val-size, 1.75rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .metric-label,
+.slide-column.has-column-font-scale .metric-label {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .timeline-title,
+.slide-column.has-column-font-scale .timeline-title {
+  font-size: calc(0.95rem * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .timeline-desc,
+.slide-column.has-column-font-scale .timeline-desc {
+  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
 }
 .slide-column-content > *:first-child {
   margin-top: 0;

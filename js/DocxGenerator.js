@@ -16,6 +16,7 @@ import {
   dataUrlToUint8Array,
   getImageDimensions,
   renderMermaidToPngDataUrl,
+  parseColumnTagParams,
 } from './utils.js';
 
 /**
@@ -278,8 +279,29 @@ async function buildDocxBlocks(cleanMd, docConfig) {
       );
     } else if (block.type === 'paragraph') {
       const rawTrim = (block.raw || '').trim();
-      // Omettre les balises de colonnes ([colonne], [/colonne]) pour ne pas insérer de paragraphes résiduels dans le document Word
-      if (/^\[\/?(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?\]$/i.test(rawTrim) || /^:::(?:col(?:onne)?|cols?onnes?)(?::[0-9.]+)?$/i.test(rawTrim)) {
+      // Omettre les balises de colonnes ([colonne...], [/colonne]) et émettre un titre H4 si un titre est défini
+      const colOpenMatch =
+        rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
+        rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i);
+      if (colOpenMatch) {
+        const { title } = parseColumnTagParams(colOpenMatch[1]);
+        if (title) {
+          const stH4 = docConfig?.styles?.h3;
+          blocks.push(
+            new window.docx.Paragraph({
+              children: toDocxRuns(extractInlineStyles(title)),
+              style: typeof stH4 === 'string' ? stH4 : undefined,
+              heading: typeof stH4 === 'string' ? undefined : window.docx.HeadingLevel.HEADING_4,
+              spacing: { before: 200, after: 100 },
+            })
+          );
+        }
+        continue;
+      }
+      if (
+        /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
+        /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
+      ) {
         continue;
       }
       const styleP = docConfig?.styles?.p;

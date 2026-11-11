@@ -22,6 +22,8 @@
   --mermaid-editor-fence: #2dd4bf;
   --mermaid-editor-bg: rgba(45, 212, 191, 0.09);
   --mermaid-editor-border: #14b8a6;
+  --html-cartouche-color: #f59e0b;
+  --html-editor-fg: #fcd34d;
   --header-height: 52px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: Consolas, "JetBrains Mono", "Courier New", monospace;
@@ -46,6 +48,8 @@
   --mermaid-editor-fence: #0d9488;
   --mermaid-editor-bg: rgba(13, 148, 136, 0.11);
   --mermaid-editor-border: #0d9488;
+  --html-cartouche-color: #d97706;
+  --html-editor-fg: #92400e;
 }
 
 *,
@@ -747,6 +751,144 @@ body {
 .mermaid-code-textarea:focus {
   border-color: var(--success-color);
   box-shadow: 0 0 0 1px var(--success-color);
+}
+
+/* === Objet Graphique Cartouche [html] (Pliable / Dépliable / Déplaçable) === */
+.html-cartouche {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--html-cartouche-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.html-cartouche.is-collapsed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(2 * 1.65em);
+  min-width: 110px;
+  padding: 0 14px;
+  margin: 4px 2px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.html-cartouche.is-collapsed:active {
+  cursor: grabbing;
+}
+
+.html-cartouche.is-expanded {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: calc(100% - 8px);
+  max-width: 820px;
+  padding: 10px 14px 14px;
+  margin: 8px 0;
+  cursor: default;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.html-cartouche:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--html-cartouche-color);
+}
+
+.html-cartouche.is-dragging {
+  opacity: 0.45;
+  outline: 2px dashed var(--html-cartouche-color);
+  outline-offset: 2px;
+}
+
+.html-cartouche.is-selected {
+  border-color: var(--html-cartouche-color);
+  box-shadow: 0 0 0 2px var(--html-cartouche-color);
+}
+
+.html-cartouche-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+
+.html-cartouche-header:active {
+  cursor: grabbing;
+}
+
+.html-cartouche-label {
+  color: var(--html-cartouche-color);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.html-cartouche-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.html-cartouche-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.html-cartouche-body {
+  display: none;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.html-cartouche.is-expanded .html-cartouche-body {
+  display: block;
+}
+
+.html-code-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
+  max-height: 500px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--html-editor-fg);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  resize: vertical;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.html-code-textarea:focus {
+  border-color: var(--html-cartouche-color);
+  box-shadow: 0 0 0 1px var(--html-cartouche-color);
 }
 
 /* === Formatage des Balises Titres (# à #####) dans l'Éditeur Markdown === */
