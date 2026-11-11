@@ -15,6 +15,7 @@
 import { parseToAST, extractInlineStyles } from './MarkdownParser.js';
 import {
   yieldToMain,
+  ensureJsZipLoaded,
   toSlug,
   resolveImagePaths,
   normalizeMarkdown,
@@ -847,6 +848,9 @@ export async function generatePresentationFromTemplate(
   const log = (msg) => {
     if (typeof onProgress === 'function') onProgress(msg);
   };
+
+  log('Chargement du moteur OpenXML...');
+  await ensureJsZipLoaded();
 
   if (!window.JSZip) {
     throw new Error('La bibliothèque JSZip est requise pour la génération PowerPoint OpenXML.');

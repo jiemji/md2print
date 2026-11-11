@@ -303,6 +303,93 @@ function normalizeColor(val) {
 }
 
 /**
+ * Restaure les Data-URLs d'images de fond des diapositives directement depuis les règles CSS ::after
+ * lorsqu'elles ne sont pas dupliquées dans l'en-tête JSON [md2print-config].
+ *
+ * @param {string} css - Contenu brut de la feuille CSS
+ * @param {StyleThemeConfig} cfg - Configuration cible à hydrater
+ * @param {boolean} [overrideExisting=false] - Si true, écrase également le nom et l'opacité existants
+ * @returns {void}
+ */
+function extractSlideBgImagesFromCss(css, cfg, overrideExisting = false) {
+  const coverImgMatches = [...css.matchAll(/\.slide\.slide-title::after\s*\{([^}]+)\}/g)];
+  if (coverImgMatches.length > 0) {
+    const lastCoverBlock = coverImgMatches[coverImgMatches.length - 1][1];
+    const imgUrlMatch = lastCoverBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.coverSlide) cfg.coverSlide = {};
+      if (overrideExisting || !cfg.coverSlide.bgImage) {
+        cfg.coverSlide.bgImage = imgUrlMatch[1];
+      }
+      if (overrideExisting || !cfg.coverSlide.bgImageName) {
+        cfg.coverSlide.bgImageName = 'Image restaurée';
+      }
+      const opMatch = lastCoverBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch && (overrideExisting || cfg.coverSlide.bgOpacity === undefined)) {
+        cfg.coverSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+      }
+    }
+  }
+
+  const chapterImgMatches = [...css.matchAll(/\.slide\.slide-chapter::after\s*\{([^}]+)\}/g)];
+  if (chapterImgMatches.length > 0) {
+    const lastChapterBlock = chapterImgMatches[chapterImgMatches.length - 1][1];
+    const imgUrlMatch = lastChapterBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.chapterSlide) cfg.chapterSlide = {};
+      if (overrideExisting || !cfg.chapterSlide.bgImage) {
+        cfg.chapterSlide.bgImage = imgUrlMatch[1];
+      }
+      if (overrideExisting || !cfg.chapterSlide.bgImageName) {
+        cfg.chapterSlide.bgImageName = 'Image restaurée';
+      }
+      const opMatch = lastChapterBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch && (overrideExisting || cfg.chapterSlide.bgOpacity === undefined)) {
+        cfg.chapterSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+      }
+    }
+  }
+
+  const contentImgMatches = [...css.matchAll(/\.slide\.slide-content::after\s*\{([^}]+)\}/g)];
+  if (contentImgMatches.length > 0) {
+    const lastContentBlock = contentImgMatches[contentImgMatches.length - 1][1];
+    const imgUrlMatch = lastContentBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.contentSlide) cfg.contentSlide = {};
+      if (overrideExisting || !cfg.contentSlide.bgImage) {
+        cfg.contentSlide.bgImage = imgUrlMatch[1];
+      }
+      if (overrideExisting || !cfg.contentSlide.bgImageName) {
+        cfg.contentSlide.bgImageName = 'Image restaurée';
+      }
+      const opMatch = lastContentBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch && (overrideExisting || cfg.contentSlide.bgOpacity === undefined)) {
+        cfg.contentSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+      }
+    }
+  }
+
+  const headerImgMatches = [...css.matchAll(/(?:\.slide\.slide-content\s+)?\.slide-header::after\s*\{([^}]+)\}/g)];
+  if (headerImgMatches.length > 0) {
+    const lastHeaderBlock = headerImgMatches[headerImgMatches.length - 1][1];
+    const imgUrlMatch = lastHeaderBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
+    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
+      if (!cfg.contentSlide) cfg.contentSlide = {};
+      if (overrideExisting || !cfg.contentSlide.headerBgImage) {
+        cfg.contentSlide.headerBgImage = imgUrlMatch[1];
+      }
+      if (overrideExisting || !cfg.contentSlide.headerBgImageName) {
+        cfg.contentSlide.headerBgImageName = 'Image restaurée';
+      }
+      const opMatch = lastHeaderBlock.match(/opacity:\s*([\d.]+)/);
+      if (opMatch && (overrideExisting || cfg.contentSlide.headerBgOpacity === undefined)) {
+        cfg.contentSlide.headerBgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
+      }
+    }
+  }
+}
+
+/**
  * Extrait la configuration complète des styles depuis un texte CSS (Vision Rapport ou Slide).
  * 1. Recherche prioritaire du bloc JSON intégré sous commentaire :
  *    /\* [md2print-config:mode=...] {JSON} [\/md2print-config] *\/
@@ -334,6 +421,9 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
           } else {
             defaults[k] = v;
           }
+        }
+        if (modeInTag === 'slide') {
+          extractSlideBgImagesFromCss(css, defaults, false);
         }
         return { mode: modeInTag, config: defaults };
       }
@@ -516,55 +606,7 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (isExplicitCssValue(timelineDescFontSize)) cfg.timeline.descFontSize = timelineDescFontSize;
 
   // Images de fond
-  const coverImgMatches = [...css.matchAll(/\.slide\.slide-title::after\s*\{([^}]+)\}/g)];
-  if (coverImgMatches.length > 0) {
-    const lastCoverBlock = coverImgMatches[coverImgMatches.length - 1][1];
-    const imgUrlMatch = lastCoverBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
-    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
-      cfg.coverSlide.bgImage = imgUrlMatch[1];
-      cfg.coverSlide.bgImageName = 'Image restaurée';
-      const opMatch = lastCoverBlock.match(/opacity:\s*([\d.]+)/);
-      if (opMatch) cfg.coverSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
-    }
-  }
-
-  const chapterImgMatches = [...css.matchAll(/\.slide\.slide-chapter::after\s*\{([^}]+)\}/g)];
-  if (chapterImgMatches.length > 0) {
-    const lastChapterBlock = chapterImgMatches[chapterImgMatches.length - 1][1];
-    const imgUrlMatch = lastChapterBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
-    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
-      cfg.chapterSlide.bgImage = imgUrlMatch[1];
-      cfg.chapterSlide.bgImageName = 'Image restaurée';
-      const opMatch = lastChapterBlock.match(/opacity:\s*([\d.]+)/);
-      if (opMatch) cfg.chapterSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
-    }
-  }
-
-  const contentImgMatches = [...css.matchAll(/\.slide\.slide-content::after\s*\{([^}]+)\}/g)];
-  if (contentImgMatches.length > 0) {
-    const lastContentBlock = contentImgMatches[contentImgMatches.length - 1][1];
-    const imgUrlMatch = lastContentBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
-    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
-      if (!cfg.contentSlide) cfg.contentSlide = {};
-      cfg.contentSlide.bgImage = imgUrlMatch[1];
-      cfg.contentSlide.bgImageName = 'Image restaurée';
-      const opMatch = lastContentBlock.match(/opacity:\s*([\d.]+)/);
-      if (opMatch) cfg.contentSlide.bgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
-    }
-  }
-
-  const headerImgMatches = [...css.matchAll(/(?:\.slide\.slide-content\s+)?\.slide-header::after\s*\{([^}]+)\}/g)];
-  if (headerImgMatches.length > 0) {
-    const lastHeaderBlock = headerImgMatches[headerImgMatches.length - 1][1];
-    const imgUrlMatch = lastHeaderBlock.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/);
-    if (imgUrlMatch && imgUrlMatch[1] && imgUrlMatch[1] !== 'none') {
-      if (!cfg.contentSlide) cfg.contentSlide = {};
-      cfg.contentSlide.headerBgImage = imgUrlMatch[1];
-      cfg.contentSlide.headerBgImageName = 'Image restaurée';
-      const opMatch = lastHeaderBlock.match(/opacity:\s*([\d.]+)/);
-      if (opMatch) cfg.contentSlide.headerBgOpacity = Math.round(parseFloat(opMatch[1]) * 100);
-    }
-  }
+  extractSlideBgImagesFromCss(css, cfg, true);
 
   return { mode, config: cfg };
 }
@@ -1670,9 +1712,29 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 `;
 
-  const metadataTag = `/* [md2print-config:mode=${mode}]\n${JSON.stringify(cfg)}\n[/md2print-config] */`;
+  // Allègement de l'en-tête JSON : les images Base64 de fond de diapositive sont déjà écrites
+  // dans les règles CSS ::after ci-dessus et restaurées par extractSlideBgImagesFromCss.
+  const metaCfg = { ...cfg };
+  if (isSlide) {
+    if (metaCfg.coverSlide?.bgImage) {
+      metaCfg.coverSlide = { ...metaCfg.coverSlide, bgImage: '' };
+    }
+    if (metaCfg.chapterSlide?.bgImage) {
+      metaCfg.chapterSlide = { ...metaCfg.chapterSlide, bgImage: '' };
+    }
+    if (metaCfg.contentSlide && (metaCfg.contentSlide.bgImage || metaCfg.contentSlide.headerBgImage)) {
+      metaCfg.contentSlide = {
+        ...metaCfg.contentSlide,
+        bgImage: '',
+        headerBgImage: '',
+      };
+    }
+  }
 
-  const usesPoppins = JSON.stringify(cfg).includes('Poppins');
+  const metaJson = JSON.stringify(metaCfg);
+  const metadataTag = `/* [md2print-config:mode=${mode}]\n${metaJson}\n[/md2print-config] */`;
+
+  const usesPoppins = metaJson.includes('Poppins');
   const fontImport = usesPoppins
     ? `@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,700&display=swap');\n\n`
     : '';

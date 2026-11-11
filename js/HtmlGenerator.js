@@ -791,7 +791,14 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
  * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision Slide
  * @returns {string} Code HTML autonome complet, prêt pour affichage iframe ou téléchargement standalone
  */
-export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
+/**
+ * Construit les fragments de contenu HTML, le sommaire et la feuille de style active
+ * nécessaires pour l'aperçu ou l'export HTML autonome.
+ * @param {string} rawMarkdown - Contenu Markdown source
+ * @param {object} [options={}] - Options de rendu
+ * @returns {{ docTitle: string, viewMode: string, isSlide: boolean, formattedDate: string, tocList: Array, tocItemsHTML: string, parsedContent: string, slidesHTML: string, activeCSS: string }}
+ */
+function buildPreviewParts(rawMarkdown, options = {}) {
   const {
     docTitle = 'Document',
     viewMode = 'report',
@@ -891,13 +898,24 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       .join('');
   }
 
-  const activeCSS =
-    isSlide
-      ? (slideCss || DEFAULT_SLIDE_CSS)
-      : (reportCss || DEFAULT_REPORT_CSS);
+  const activeCSS = isSlide
+    ? slideCss || DEFAULT_SLIDE_CSS
+    : reportCss || DEFAULT_REPORT_CSS;
 
-  const slideContainmentCSS = isSlide
-    ? `
+  return {
+    docTitle,
+    viewMode,
+    isSlide,
+    formattedDate,
+    tocList,
+    tocItemsHTML,
+    parsedContent,
+    slidesHTML,
+    activeCSS,
+  };
+}
+
+const SLIDE_CONTAINMENT_CSS = `
 /* === Maximisation adaptative de la scène 16:9 et centrage des contrôles === */
 .document-body {
   padding: 10px 10px 60px 10px !important;
@@ -1385,8 +1403,9 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 .slide-column table.doc-table {
   width: 100% !important;
 }
-`
-    : `
+`;
+
+const REPORT_CONTAINMENT_CSS = `
 /* === Rendu des lignes vides explicites en vision Rapport === */
 .empty-line {
   display: block;
@@ -1655,6 +1674,31 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 }
 `;
 
+/**
+ * Génère le document HTML complet et autonome (mode Rapport continu ou Diaporama 16:9).
+ * Embarque toutes les ressources nécessaires (images Base64, diagrammes Mermaid vectoriels pré-rendus,
+ * styles CSS réactifs calculés pour contraindre les slides en ratio 16:9 tout en maximisant l'espace utile,
+ * cartouche de numérotation centré, bandeau interactif et sommaire dynamique).
+ * @function generateStandaloneHTML
+ * @param {string} rawMarkdown - Contenu Markdown source avec syntaxe étendue (badges, métriques, colonnes, Mermaid)
+ * @param {object} [options={}] - Options de configuration de la génération
+ * @returns {string} Code HTML autonome complet, prêt pour affichage iframe ou téléchargement standalone
+ */
+export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
+  const {
+    docTitle,
+    viewMode,
+    isSlide,
+    formattedDate,
+    tocList,
+    tocItemsHTML,
+    parsedContent,
+    slidesHTML,
+    activeCSS,
+  } = buildPreviewParts(rawMarkdown, options);
+
+  const slideContainmentCSS = isSlide ? SLIDE_CONTAINMENT_CSS : REPORT_CONTAINMENT_CSS;
+
   const documentJS = `
     (function() {
       const isSlideMode = ${isSlide ? 'true' : 'false'};
@@ -1740,6 +1784,22 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       };
       window.getTotalSlides = function() {
         return totalSlides;
+      };
+
+      window.refreshSlides = function(preferredIndex) {
+        const slides = document.querySelectorAll('.slide');
+        totalSlides = slides.length;
+        if (totalSlides > 0) {
+          const targetIdx =
+            typeof preferredIndex === 'number' && preferredIndex >= 0
+              ? Math.min(preferredIndex, totalSlides - 1)
+              : Math.min(currentSlideIndex, totalSlides - 1);
+          showSlide(Math.max(0, targetIdx));
+        } else {
+          currentSlideIndex = 0;
+          updateSlideControls();
+        }
+        updateSlideScale();
       };
 
       window.prevSlide = function() {
@@ -1851,11 +1911,10 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
       }
 
       function initScrollSpy() {
-        const headings = document.querySelectorAll('.doc-heading');
-        const tocItems = document.querySelectorAll('.toc-item');
-
         window.addEventListener('scroll', () => {
           if (document.body.getAttribute('data-view-mode') === 'slide') return;
+          const headings = document.querySelectorAll('.doc-heading');
+          const tocItems = document.querySelectorAll('.toc-item');
           const bannerHeight = document.querySelector('.top-banner')?.offsetHeight || 56;
           let currentSlug = '';
 
@@ -1949,4 +2008,116 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   <script>${documentJS}</script>
 </body>
 </html>`;
+};
+
+/**
+ * Ré-exécute les balises <script> situées à l'intérieur des blocs HTML exécutables (.html-exec-container)
+ * après une mise à jour incrémentale via innerHTML.
+ * @param {Document} doc - Document DOM de l'iframe
+ * @param {Element} rootEl - Élément conteneur mis à jour
+ * @returns {void}
+ */
+function activateExecutableScripts(doc, rootEl) {
+  if (!doc || !rootEl) return;
+  const scripts = rootEl.querySelectorAll('.html-exec-container script');
+  scripts.forEach((oldScript) => {
+    const newScript = doc.createElement('script');
+    Array.from(oldScript.attributes).forEach((attr) =>
+      newScript.setAttribute(attr.name, attr.value)
+    );
+    newScript.textContent = oldScript.textContent;
+    oldScript.replaceWith(newScript);
+  });
+}
+
+/**
+ * Met à jour l'iframe d'aperçu de manière incrémentale lorsque le mode ('report' ou 'slide')
+ * est déjà initialisé, évitant ainsi de détruire le DOM et de re-parser les ~900 Ko de CSS
+ * à chaque frappe. Effectue une initialisation complète uniquement lors du premier chargement
+ * ou d'un changement de mode.
+ * @param {HTMLIFrameElement} iframe - Élément iframe d'aperçu
+ * @param {string} rawMarkdown - Contenu Markdown source
+ * @param {object} [options={}] - Options de rendu (docTitle, viewMode, localImages, mermaidSvgMap, etc.)
+ * @returns {{ didFullReload: boolean }} Indique si le document de l'iframe a été intégralement recréé
+ */
+export const updateIframePreview = (iframe, rawMarkdown, options = {}) => {
+  const doc = iframe?.contentDocument || iframe?.contentWindow?.document;
+  const win = iframe?.contentWindow;
+  if (!doc) return { didFullReload: false };
+
+  const targetMode = options.viewMode || 'report';
+  const currentMode = doc.body?.getAttribute('data-view-mode');
+  const styleEl = doc.getElementById('documentStyle');
+  const mainContainer =
+    targetMode === 'slide'
+      ? doc.getElementById('slideContainer')
+      : doc.querySelector('.markdown-rendered-content');
+  const tocListEl = doc.querySelector('.toc-list');
+  const tocCounterEl = doc.querySelector('.toc-counter');
+  const bannerTitleEl = doc.querySelector('.banner-main-title');
+
+  const canUpdateInPlace =
+    currentMode === targetMode &&
+    Boolean(styleEl) &&
+    Boolean(mainContainer) &&
+    Boolean(tocListEl) &&
+    Boolean(tocCounterEl) &&
+    Boolean(bannerTitleEl);
+
+  if (!canUpdateInPlace) {
+    const html = generateStandaloneHTML(rawMarkdown, options);
+    doc.open();
+    doc.write(html);
+    doc.close();
+    const newStyleEl = doc.getElementById('documentStyle');
+    if (newStyleEl) {
+      newStyleEl.__lastActiveCss =
+        targetMode === 'slide'
+          ? options.slideCss || DEFAULT_SLIDE_CSS
+          : options.reportCss || DEFAULT_REPORT_CSS;
+    }
+    return { didFullReload: true };
+  }
+
+  const {
+    docTitle,
+    isSlide,
+    tocList,
+    tocItemsHTML,
+    parsedContent,
+    slidesHTML,
+    activeCSS,
+  } = buildPreviewParts(rawMarkdown, options);
+
+  // Ne met à jour la feuille de style de ~900 Ko que si le CSS actif a réellement changé
+  if (styleEl.__lastActiveCss !== activeCSS) {
+    styleEl.textContent = `${activeCSS}\n${isSlide ? SLIDE_CONTAINMENT_CSS : REPORT_CONTAINMENT_CSS}`;
+    styleEl.__lastActiveCss = activeCSS;
+  }
+
+  const safeTitle = docTitle || 'Document';
+  if (doc.title !== safeTitle) {
+    doc.title = safeTitle;
+  }
+  if (bannerTitleEl.textContent !== safeTitle) {
+    bannerTitleEl.textContent = safeTitle;
+  }
+
+  tocCounterEl.textContent = String(tocList.length);
+  tocListEl.innerHTML = tocItemsHTML;
+
+  if (isSlide) {
+    const prevSlideIdx =
+      typeof win?.getCurrentSlideIndex === 'function' ? win.getCurrentSlideIndex() : 0;
+    mainContainer.innerHTML = slidesHTML;
+    activateExecutableScripts(doc, mainContainer);
+    if (typeof win?.refreshSlides === 'function') {
+      win.refreshSlides(prevSlideIdx);
+    }
+  } else {
+    mainContainer.innerHTML = parsedContent;
+    activateExecutableScripts(doc, mainContainer);
+  }
+
+  return { didFullReload: false };
 };

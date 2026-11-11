@@ -7,12 +7,39 @@
  * et des fichiers de configuration / modèles d'entreprise personnalisés (Word .docx et PowerPoint .potx).
  */
 
+import { showToast } from './utils.js';
+
 const DB_NAME = 'md2print_db';
 const DB_VERSION = 1;
 const STORE_STATE = 'app_state';
 const STORE_IMAGES = 'local_images';
 
 let dbInstancePromise = null;
+let lastQuotaWarningAt = 0;
+
+/**
+ * Journalise une erreur IndexedDB et avertit l'utilisateur en cas de dépassement du quota disque.
+ * @param {string} operation - Nom de l'opération en échec
+ * @param {unknown} err - Erreur interceptée
+ * @returns {void}
+ */
+function handleStorageError(operation, err) {
+  console.warn(`[StorageService] Échec lors de ${operation} :`, err);
+  const isQuotaError =
+    err &&
+    typeof err === 'object' &&
+    (err.name === 'QuotaExceededError' || err.code === 22);
+  if (isQuotaError && typeof document !== 'undefined') {
+    const now = Date.now();
+    if (now - lastQuotaWarningAt > 30000) {
+      lastQuotaWarningAt = now;
+      showToast(
+        "Espace de stockage local saturé : certaines données n'ont pas pu être sauvegardées.",
+        'error'
+      );
+    }
+  }
+}
 
 /**
  * Supprime les anciennes clés localStorage éventuellement créées par les versions précédentes.
@@ -96,8 +123,8 @@ export async function savePreferences(prefs) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement si IndexedDB est bloqué
+  } catch (err) {
+    handleStorageError('savePreferences', err);
   }
 }
 
@@ -121,8 +148,8 @@ export async function saveCustomConfig({ outputConfig, configFileName }) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('saveCustomConfig', err);
   }
 }
 
@@ -146,8 +173,8 @@ export async function saveCustomTemplate({ templateBuffer, templateFileName }) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('saveCustomTemplate', err);
   }
 }
 
@@ -171,8 +198,8 @@ export async function saveCustomPptTemplate({ pptTemplateBuffer, pptTemplateFile
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('saveCustomPptTemplate', err);
   }
 }
 
@@ -214,8 +241,8 @@ export async function saveCustomCss(cssPayload) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('saveCustomCss', err);
   }
 }
 
@@ -238,8 +265,8 @@ export async function saveThemeConfigs(configs) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('saveThemeConfigs', err);
   }
 }
 
@@ -262,8 +289,8 @@ export async function clearCustomConfigAndTemplate() {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('clearCustomConfigAndTemplate', err);
   }
 }
 
@@ -283,8 +310,8 @@ export async function clearCustomStyles() {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('clearCustomStyles', err);
   }
 }
 
@@ -336,8 +363,8 @@ export async function removeCustomStyleForMode(mode) {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('removeCustomStyleForMode', err);
   }
 }
 
@@ -398,8 +425,8 @@ export async function saveDraftState({
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement en cas d'erreur d'écriture IndexedDB
+  } catch (err) {
+    handleStorageError('saveDraftState', err);
   }
 }
 
@@ -418,8 +445,8 @@ export async function clearDraftState() {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
-    // Ignore silencieusement
+  } catch (err) {
+    handleStorageError('clearDraftState', err);
   }
 }
 
@@ -484,7 +511,8 @@ export async function loadStoredState() {
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
-  } catch {
+  } catch (err) {
+    handleStorageError('loadStoredState', err);
     return {
       prefs: null,
       draft: null,
@@ -493,6 +521,7 @@ export async function loadStoredState() {
       customTemplate: null,
       customPptTemplate: null,
       customCss: null,
+      customThemeConfigs: null,
     };
   }
 }

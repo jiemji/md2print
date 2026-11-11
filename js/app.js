@@ -22,6 +22,7 @@ import {
   escapeHtml,
   extractTitle,
   downloadBlob,
+  showToast,
   readFileAsText,
   readFileAsArrayBuffer,
   readFileAsDataURL,
@@ -65,7 +66,7 @@ import {
 } from './StorageService.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 import { StyleSettingsManager, parseConfigFromCss } from './StyleSettingsManager.js';
-import { generateStandaloneHTML } from './HtmlGenerator.js';
+import { generateStandaloneHTML, updateIframePreview } from './HtmlGenerator.js';
 import { generateDocx } from './DocxGenerator.js';
 import { generatePptx } from './PptxGenerator.js';
 import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
@@ -396,8 +397,8 @@ async function restoreFromIndexedDB() {
  * @returns {Promise<void>}
  */
 async function loadDefaultConfigAndTemplate(forceReset = false) {
-  const cacheBust = `?t=${Date.now()}`;
-  const fetchOpts = { cache: 'no-store' };
+  const cacheBust = forceReset ? `?t=${Date.now()}` : '';
+  const fetchOpts = forceReset ? { cache: 'no-store' } : { cache: 'no-cache' };
 
   if (forceReset || !state.outputConfig) {
     try {
@@ -1707,7 +1708,7 @@ async function updatePreview() {
   const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
   setMermaidTheme(activeMermaidPreset);
   const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
-  const html = generateStandaloneHTML(state.markdown, {
+  const { didFullReload } = updateIframePreview(iframe, state.markdown, {
     docTitle: resolveDocumentTitle(),
     viewMode: state.currentViewport,
     localImages: state.localImages,
@@ -1717,23 +1718,18 @@ async function updatePreview() {
     slideCss: state.slideCss,
   });
 
-  const doc = iframe.contentDocument || iframe.contentWindow?.document;
-  if (!doc) return;
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
   const iframeWin = iframe.contentWindow;
   if (iframeWin && state.currentViewport === 'report') {
-    if (prevIframeScroll > 0) {
-      iframeWin.scrollTo(0, prevIframeScroll);
-    }
+    if (didFullReload) {
+      if (prevIframeScroll > 0) {
+        iframeWin.scrollTo(0, prevIframeScroll);
+      }
 
-    // Le défilement de la fenêtre WYSIWYG entraîne la fenêtre non-WYSIWYG (l'éditeur)
-    iframeWin.addEventListener('scroll', () => {
-      syncScrollIframeToEditor();
-    });
+      // Le défilement de la fenêtre WYSIWYG entraîne la fenêtre non-WYSIWYG (l'éditeur)
+      iframeWin.addEventListener('scroll', () => {
+        syncScrollIframeToEditor();
+      });
+    }
   } else if (iframeWin && state.currentViewport === 'slide') {
     updatePlannedSlides();
     syncSlideToCursor();
@@ -1908,33 +1904,6 @@ function initResizer() {
     document.body.classList.remove('resizing-active');
     persistPreferencesNow();
   });
-}
-
-// --- Système de Notifications Textuelles (Sans icône ni émoji) ---
-
-let activeToastTimer = null;
-
-/**
- * Affiche une notification textuelle temporaire en bas à droite de l'écran.
- * @param {string} message - Texte de la notification
- * @param {'info'|'success'|'error'} [type='info'] - Type de notification
- * @returns {void}
- */
-function showToast(message, type = 'info') {
-  if (!dom.toastContainer) return;
-  dom.toastContainer.innerHTML = '';
-  if (activeToastTimer) clearTimeout(activeToastTimer);
-
-  const toast = document.createElement('div');
-  toast.className = `toast ${type === 'error' ? 'toast--error' : type === 'success' ? 'toast--success' : ''}`;
-  toast.textContent = message;
-  dom.toastContainer.appendChild(toast);
-
-  activeToastTimer = setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(6px)';
-    setTimeout(() => toast.remove(), 200);
-  }, 3200);
 }
 
 // --- Gestion du Masquage de l'Éditeur & du Sommaire des Titres (#, ##, ###) ---
@@ -2180,7 +2149,7 @@ function jumpToEditorHeading(lineIndex, rawText, level) {
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (state.currentViewport === 'slide') {

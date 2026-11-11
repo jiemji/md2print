@@ -12,6 +12,7 @@
 import { parseToAST, extractInlineStyles } from './MarkdownParser.js';
 import {
   yieldToMain,
+  ensureDocxLoaded,
   resolveImagePaths,
   normalizeMarkdown,
   ensureOfficeCompatibleImage,
@@ -39,6 +40,8 @@ export async function generateDocx(
   localImages = {},
   onProgress
 ) {
+  onProgress?.('Chargement du moteur Word...');
+  await ensureDocxLoaded();
   if (!window.docx) {
     throw new Error("La bibliothèque docx n'est pas chargée.");
   }
