@@ -77,6 +77,7 @@ import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
  * @property {Object} table - Couleurs et bordures des tableaux
  * @property {Object} mermaid - Couleurs et bordures des diagrammes Mermaid
  * @property {{ bg: string, border: string, padding: string, radius: string, fontSize?: string }} column - Couleurs, bordures, marges et taille de police des colonnes
+ * @property {{ nodeSize: string, nodeFontSize?: string, titleFontSize?: string, descFontSize?: string }} [timeline] - Paramètres des pastilles et polices de la frise chronologique ([frise])
  * @property {SlideBackgroundConfig} [coverSlide] - Spécifique diaporama : slide de couverture
  * @property {SlideBackgroundConfig} [chapterSlide] - Spécifique diaporama : slide de chapitre
  * @property {SlideContentConfig} [contentSlide] - Spécifique diaporama : slide de contenu
@@ -154,6 +155,12 @@ export const DEFAULT_STYLE_CONFIG = {
       radius: '6px',
       fontSize: '0.95rem',
     },
+    timeline: {
+      nodeSize: '57px',
+      nodeFontSize: '0.88rem',
+      titleFontSize: '0.95rem',
+      descFontSize: '0.82rem',
+    },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C00000', borderLeftWidth: 10 },
     contentSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, headerBg: '#ffffff', headerBgImage: '', headerBgImageName: '', headerBgOpacity: 100, borderTopColor: '#C00000', borderTopWidth: 6, paddingX: 56 },
@@ -224,6 +231,12 @@ export const DEFAULT_STYLE_CONFIG = {
       padding: '14px',
       radius: '6px',
       fontSize: '1rem',
+    },
+    timeline: {
+      nodeSize: '57px',
+      nodeFontSize: '0.88rem',
+      titleFontSize: '0.95rem',
+      descFontSize: '0.82rem',
     },
     coverSlide: { bg: '#ffffff', bgImage: '', bgImageName: '', bgOpacity: 100, borderTopColor: '#C41718', borderTopWidth: 8 },
     chapterSlide: { bg: '#f8fafc', bgImage: '', bgImageName: '', bgOpacity: 100, borderLeftColor: '#C41718', borderLeftWidth: 10 },
@@ -423,6 +436,19 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (cssVars[`${prefix}column-padding`]) cfg.column.padding = cssVars[`${prefix}column-padding`];
   if (cssVars[`${prefix}column-font-size`]) cfg.column.fontSize = cssVars[`${prefix}column-font-size`];
 
+  // Frise chronologique ([frise])
+  cfg.timeline = {
+    nodeSize: '57px',
+    nodeFontSize: '0.88rem',
+    titleFontSize: '0.95rem',
+    descFontSize: '0.82rem',
+    ...(cfg.timeline || {}),
+  };
+  if (cssVars[`${prefix}timeline-node-size`]) cfg.timeline.nodeSize = cssVars[`${prefix}timeline-node-size`];
+  if (cssVars[`${prefix}timeline-node-font-size`]) cfg.timeline.nodeFontSize = cssVars[`${prefix}timeline-node-font-size`];
+  if (cssVars[`${prefix}timeline-title-font-size`]) cfg.timeline.titleFontSize = cssVars[`${prefix}timeline-title-font-size`];
+  if (cssVars[`${prefix}timeline-desc-font-size`]) cfg.timeline.descFontSize = cssVars[`${prefix}timeline-desc-font-size`];
+
   // Mermaid
   if (cssVars[`${prefix}mermaid-preset`]) cfg.mermaid.preset = cssVars[`${prefix}mermaid-preset`];
   if (cssVars[`${prefix}mermaid-bg`]) cfg.mermaid.bg = normalizeColor(cssVars[`${prefix}mermaid-bg`]);
@@ -478,6 +504,16 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (colBg) cfg.column.bg = normalizeColor(colBg);
   const colFontSize = extractRuleProp('\\.slide-column-content', 'font-size');
   if (colFontSize) cfg.column.fontSize = colFontSize;
+
+  const isExplicitCssValue = (val) => Boolean(val && !val.startsWith('var(') && !val.startsWith('calc(') && val !== 'inherit');
+  const timelineNodeWidth = extractRuleProp('\\.timeline-node', 'width');
+  if (isExplicitCssValue(timelineNodeWidth)) cfg.timeline.nodeSize = timelineNodeWidth;
+  const timelineNodeFontSize = extractRuleProp('\\.timeline-node', 'font-size');
+  if (isExplicitCssValue(timelineNodeFontSize)) cfg.timeline.nodeFontSize = timelineNodeFontSize;
+  const timelineTitleFontSize = extractRuleProp('\\.timeline-title', 'font-size');
+  if (isExplicitCssValue(timelineTitleFontSize)) cfg.timeline.titleFontSize = timelineTitleFontSize;
+  const timelineDescFontSize = extractRuleProp('\\.timeline-desc(?:,\\s*\\.timeline-desc\\s+p)?', 'font-size');
+  if (isExplicitCssValue(timelineDescFontSize)) cfg.timeline.descFontSize = timelineDescFontSize;
 
   // Images de fond
   const coverImgMatches = [...css.matchAll(/\.slide\.slide-title::after\s*\{([^}]+)\}/g)];
@@ -560,6 +596,23 @@ function formatHeadingCss(h, fallbackFont, defaultSize, defaultColor) {
 }
 
 /**
+ * Normalise une dimension CSS saisie par l'utilisateur en ajoutant une unité par défaut aux nombres nus.
+ * @param {string|number|null|undefined} rawValue - Valeur brute saisie
+ * @param {string} fallback - Valeur CSS par défaut si vide
+ * @param {'px'|'rem'} [defaultUnit='px'] - Unité appliquée aux valeurs purement numériques
+ * @returns {string} Valeur CSS prête à l'emploi
+ */
+function normalizeCssSize(rawValue, fallback, defaultUnit = 'px') {
+  if (rawValue === null || rawValue === undefined) return fallback;
+  const trimmed = String(rawValue).trim();
+  if (!trimmed) return fallback;
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return `${parseFloat(trimmed)}${defaultUnit}`;
+  }
+  return trimmed;
+}
+
+/**
  * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
  * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales, taille de texte des colonnes).
  * - Applique les règles impératives de confinement de diapositive, superposition d'images d'arrière-plan,
@@ -582,6 +635,11 @@ export function generateThemeCss(mode, config) {
     : (typeof rawPadX === 'number' || /^-?\d+(\.\d+)?$/.test(String(rawPadX).trim())
         ? `${parseInt(rawPadX, 10)}px`
         : String(rawPadX).trim());
+
+  const timelineNodeSize = normalizeCssSize(cfg.timeline?.nodeSize, '57px', 'px');
+  const timelineNodeFontSize = normalizeCssSize(cfg.timeline?.nodeFontSize, '0.88rem', 'rem');
+  const timelineTitleFontSize = normalizeCssSize(cfg.timeline?.titleFontSize, '0.95rem', 'rem');
+  const timelineDescFontSize = normalizeCssSize(cfg.timeline?.descFontSize, '0.82rem', 'rem');
 
   // Surcharges CSS explicites injectées à la suite du thème de base
   const overrides = isSlide
@@ -630,6 +688,10 @@ export function generateThemeCss(mode, config) {
   --slide-code-size: ${cfg.code.size};
   --slide-badge-size: ${cfg.badge?.size || '0.78rem'};
   --slide-table-size: ${cfg.table.size};
+  --slide-timeline-node-size: ${timelineNodeSize};
+  --slide-timeline-node-font-size: ${timelineNodeFontSize};
+  --slide-timeline-title-font-size: ${timelineTitleFontSize};
+  --slide-timeline-desc-font-size: ${timelineDescFontSize};
 }
 
 /* === Titres & Hiérarchie === */
@@ -1113,6 +1175,16 @@ ${cfg.chapterSlide?.bgImage ? `
 .slide-body .slide-column .metric-label {
   font-size: calc(0.85rem * var(--col-font-scale, 1)) !important;
 }
+.slide-body .slide-column .timeline-node {
+  font-size: calc(${timelineNodeFontSize} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .timeline-title {
+  font-size: calc(${timelineTitleFontSize} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .timeline-desc,
+.slide-body .slide-column .timeline-desc p {
+  font-size: calc(${timelineDescFontSize} * var(--col-font-scale, 1)) !important;
+}
 .slide-column-content > *:first-child {
   margin-top: 0 !important;
 }
@@ -1145,6 +1217,26 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 .slide-column table.doc-table {
   width: 100% !important;
+}
+.process-timeline::before {
+  top: calc((${timelineNodeSize} - 3px) / 2) !important;
+}
+.timeline-node-wrapper {
+  height: ${timelineNodeSize} !important;
+}
+.timeline-node {
+  width: ${timelineNodeSize} !important;
+  height: ${timelineNodeSize} !important;
+  min-width: ${timelineNodeSize} !important;
+  min-height: ${timelineNodeSize} !important;
+  font-size: ${timelineNodeFontSize} !important;
+}
+.timeline-title {
+  font-size: ${timelineTitleFontSize} !important;
+}
+.timeline-desc,
+.timeline-desc p {
+  font-size: ${timelineDescFontSize} !important;
 }
 `
     : `
@@ -1187,6 +1279,10 @@ ${cfg.chapterSlide?.bgImage ? `
   --report-mermaid-bg: ${cfg.mermaid?.bg || '#f8fafc'};
   --report-mermaid-border: ${cfg.mermaid?.border || '#cbd5e1'};
   --report-mermaid-border-left: ${cfg.mermaid?.borderLeft || '#2F5496'};
+  --report-timeline-node-size: ${timelineNodeSize};
+  --report-timeline-node-font-size: ${timelineNodeFontSize};
+  --report-timeline-title-font-size: ${timelineTitleFontSize};
+  --report-timeline-desc-font-size: ${timelineDescFontSize};
 }
 
 /* === Titres & Hiérarchie === */
@@ -1518,6 +1614,16 @@ ${cfg.chapterSlide?.bgImage ? `
 .markdown-rendered-content .slide-column .metric-label {
   font-size: calc(0.82rem * var(--col-font-scale, 1));
 }
+.markdown-rendered-content .slide-column .timeline-node {
+  font-size: calc(${timelineNodeFontSize} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .timeline-title {
+  font-size: calc(${timelineTitleFontSize} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .timeline-desc,
+.markdown-rendered-content .slide-column .timeline-desc p {
+  font-size: calc(${timelineDescFontSize} * var(--col-font-scale, 1));
+}
 .slide-column-content > *:first-child {
   margin-top: 0;
 }
@@ -1541,6 +1647,26 @@ ${cfg.chapterSlide?.bgImage ? `
     flex-direction: column !important;
     gap: 16px;
   }
+}
+.process-timeline::before {
+  top: calc((${timelineNodeSize} - 3px) / 2);
+}
+.timeline-node-wrapper {
+  height: ${timelineNodeSize};
+}
+.timeline-node {
+  width: ${timelineNodeSize};
+  height: ${timelineNodeSize};
+  min-width: ${timelineNodeSize};
+  min-height: ${timelineNodeSize};
+  font-size: ${timelineNodeFontSize};
+}
+.timeline-title {
+  font-size: ${timelineTitleFontSize};
+}
+.timeline-desc,
+.timeline-desc p {
+  font-size: ${timelineDescFontSize};
 }
 `;
 
@@ -2113,6 +2239,30 @@ export class StyleSettingsManager {
                     <div class="input-inline-group">
                       <label class="input-sublabel">Taille du texte</label>
                       <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.fontSize" placeholder="1rem">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="config-row">
+                  <div class="config-label-col">
+                    <span class="config-tag-label">Frise chronologique ([frise])</span>
+                  </div>
+                  <div class="config-inputs-col">
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Diamètre des cercles</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="timeline.nodeSize" placeholder="57px">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Police des bulles</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="timeline.nodeFontSize" placeholder="0.88rem">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Police du titre</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="timeline.titleFontSize" placeholder="0.95rem">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Police des sous-titres</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="timeline.descFontSize" placeholder="0.82rem">
                     </div>
                   </div>
                 </div>
@@ -2851,6 +3001,38 @@ export class StyleSettingsManager {
                   </div>
                 </div>
 
+                <div class="process-timeline-wrapper" style="margin: 12px 0;">
+                  <div class="process-timeline" style="--timeline-steps: 3;">
+                    <div class="timeline-step">
+                      <div class="timeline-node-wrapper">
+                        <div class="timeline-node timeline-node-primary">T0</div>
+                      </div>
+                      <div class="timeline-content">
+                        <div class="timeline-title">Détection</div>
+                        <div class="timeline-desc">Alerte initiale</div>
+                      </div>
+                    </div>
+                    <div class="timeline-step">
+                      <div class="timeline-node-wrapper">
+                        <div class="timeline-node timeline-node-warning">4 h</div>
+                      </div>
+                      <div class="timeline-content">
+                        <div class="timeline-title">Qualification</div>
+                        <div class="timeline-desc">Analyse d'impact</div>
+                      </div>
+                    </div>
+                    <div class="timeline-step">
+                      <div class="timeline-node-wrapper">
+                        <div class="timeline-node timeline-node-success">24 h</div>
+                      </div>
+                      <div class="timeline-content">
+                        <div class="timeline-title">Clôture</div>
+                        <div class="timeline-desc">Retour nominal</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <figure class="mermaid-card" style="margin: 12px 0;">
                   <div class="mermaid-diagram" style="padding: 10px; display: flex; justify-content: center; align-items: center;">
                     <svg viewBox="0 0 360 80" style="width: 100%; max-height: 80px; display: block; margin: auto;">
@@ -2951,6 +3133,38 @@ export class StyleSettingsManager {
               </div>
               <div class="slide-column-content">
                 <p style="margin: 0;">Mesures correctives et calendrier prévisionnel.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="process-timeline-wrapper" style="margin: 14px 0;">
+            <div class="process-timeline" style="--timeline-steps: 3;">
+              <div class="timeline-step">
+                <div class="timeline-node-wrapper">
+                  <div class="timeline-node timeline-node-primary">T0</div>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Initialisation</div>
+                  <div class="timeline-desc">Lancement du chantier</div>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node-wrapper">
+                  <div class="timeline-node timeline-node-warning">J+15</div>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Contrôle</div>
+                  <div class="timeline-desc">Revue intermédiaire</div>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node-wrapper">
+                  <div class="timeline-node timeline-node-success">J+30</div>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Validation</div>
+                  <div class="timeline-desc">Mise en production</div>
+                </div>
               </div>
             </div>
           </div>

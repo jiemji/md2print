@@ -1001,6 +1001,26 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   flex-shrink: 0 !important;
   margin: 14px 0 !important;
 }
+.process-timeline::before {
+  top: calc((var(--slide-timeline-node-size, 57px) - 3px) / 2) !important;
+}
+.timeline-node-wrapper {
+  height: var(--slide-timeline-node-size, 57px) !important;
+}
+.timeline-node {
+  width: var(--slide-timeline-node-size, 57px) !important;
+  height: var(--slide-timeline-node-size, 57px) !important;
+  min-width: var(--slide-timeline-node-size, 57px) !important;
+  min-height: var(--slide-timeline-node-size, 57px) !important;
+  font-size: var(--slide-timeline-node-font-size, 0.88rem) !important;
+}
+.timeline-title {
+  font-size: var(--slide-timeline-title-font-size, 0.95rem) !important;
+}
+.timeline-desc,
+.timeline-desc p {
+  font-size: var(--slide-timeline-desc-font-size, 0.82rem) !important;
+}
 /* === Dimensionnement pleine largeur et partage horizontal des KPI / Chiffres clés === */
 .metric-group-row,
 .slide-body p:has(.metric-card) {
@@ -1318,13 +1338,19 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 .slide-column.has-column-font-scale .metric-label {
   font-size: calc(0.85rem * var(--col-font-scale, 1)) !important;
 }
+.slide-body .slide-column.has-column-font-scale .timeline-node,
+.slide-column.has-column-font-scale .timeline-node {
+  font-size: calc(var(--slide-timeline-node-font-size, 0.88rem) * var(--col-font-scale, 1)) !important;
+}
 .slide-body .slide-column.has-column-font-scale .timeline-title,
 .slide-column.has-column-font-scale .timeline-title {
-  font-size: calc(0.95rem * var(--col-font-scale, 1)) !important;
+  font-size: calc(var(--slide-timeline-title-font-size, 0.95rem) * var(--col-font-scale, 1)) !important;
 }
 .slide-body .slide-column.has-column-font-scale .timeline-desc,
-.slide-column.has-column-font-scale .timeline-desc {
-  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+.slide-body .slide-column.has-column-font-scale .timeline-desc p,
+.slide-column.has-column-font-scale .timeline-desc,
+.slide-column.has-column-font-scale .timeline-desc p {
+  font-size: calc(var(--slide-timeline-desc-font-size, 0.82rem) * var(--col-font-scale, 1)) !important;
 }
 .slide-column-content > *:first-child {
   margin-top: 0 !important;
@@ -1390,6 +1416,26 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
   display: block;
 }
 /* === Colonnes multiples côte à côte en mode Rapport === */
+.process-timeline::before {
+  top: calc((var(--report-timeline-node-size, 57px) - 3px) / 2);
+}
+.timeline-node-wrapper {
+  height: var(--report-timeline-node-size, 57px);
+}
+.timeline-node {
+  width: var(--report-timeline-node-size, 57px);
+  height: var(--report-timeline-node-size, 57px);
+  min-width: var(--report-timeline-node-size, 57px);
+  min-height: var(--report-timeline-node-size, 57px);
+  font-size: var(--report-timeline-node-font-size, 0.88rem);
+}
+.timeline-title {
+  font-size: var(--report-timeline-title-font-size, 0.95rem);
+}
+.timeline-desc,
+.timeline-desc p {
+  font-size: var(--report-timeline-desc-font-size, 0.82rem);
+}
 .slide-columns-row {
   display: flex;
   flex-direction: row;
@@ -1569,13 +1615,19 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
 .slide-column.has-column-font-scale .metric-label {
   font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
 }
+.markdown-rendered-content .slide-column.has-column-font-scale .timeline-node,
+.slide-column.has-column-font-scale .timeline-node {
+  font-size: calc(var(--report-timeline-node-font-size, 0.88rem) * var(--col-font-scale, 1)) !important;
+}
 .markdown-rendered-content .slide-column.has-column-font-scale .timeline-title,
 .slide-column.has-column-font-scale .timeline-title {
-  font-size: calc(0.95rem * var(--col-font-scale, 1)) !important;
+  font-size: calc(var(--report-timeline-title-font-size, 0.95rem) * var(--col-font-scale, 1)) !important;
 }
 .markdown-rendered-content .slide-column.has-column-font-scale .timeline-desc,
-.slide-column.has-column-font-scale .timeline-desc {
-  font-size: calc(0.82rem * var(--col-font-scale, 1)) !important;
+.markdown-rendered-content .slide-column.has-column-font-scale .timeline-desc p,
+.slide-column.has-column-font-scale .timeline-desc,
+.slide-column.has-column-font-scale .timeline-desc p {
+  font-size: calc(var(--report-timeline-desc-font-size, 0.82rem) * var(--col-font-scale, 1)) !important;
 }
 .slide-column-content > *:first-child {
   margin-top: 0;

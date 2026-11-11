@@ -137,6 +137,10 @@ export const DEFAULT_REPORT_CSS = `/* ==========================================
   --report-metric-accent: #2F5496;       /* Liseré haut en bleu corporatif */
   --report-metric-bg-start: #ffffff;
   --report-metric-bg-end: #f8fafc;
+  --report-timeline-node-size: 57px;
+  --report-timeline-node-font-size: 0.88rem;
+  --report-timeline-title-font-size: 0.95rem;
+  --report-timeline-desc-font-size: 0.82rem;
 }
 
 /* ==========================================================================
@@ -961,7 +965,7 @@ blockquote p:last-child {
 .process-timeline::before {
   content: '';
   position: absolute;
-  top: 18px;
+  top: calc((var(--report-timeline-node-size, 57px) - 3px) / 2);
   left: calc(50% / var(--timeline-steps, 5));
   right: calc(50% / var(--timeline-steps, 5));
   height: 3px;
@@ -986,16 +990,16 @@ blockquote p:last-child {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 38px;
+  height: var(--report-timeline-node-size, 57px);
   margin-bottom: 12px;
   position: relative;
 }
 
 .timeline-node {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
+  width: var(--report-timeline-node-size, 57px);
+  height: var(--report-timeline-node-size, 57px);
+  min-width: var(--report-timeline-node-size, 57px);
+  min-height: var(--report-timeline-node-size, 57px);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1003,7 +1007,7 @@ blockquote p:last-child {
   color: #ffffff;
   font-family: var(--report-font-heading, inherit);
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: var(--report-timeline-node-font-size, 0.88rem);
   letter-spacing: -0.01em;
   text-align: center;
   background-color: var(--report-color-h2, #2F5496);
@@ -1059,7 +1063,7 @@ blockquote p:last-child {
 .timeline-title {
   font-family: var(--report-font-heading, inherit);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: var(--report-timeline-title-font-size, 0.95rem);
   line-height: 1.25;
   color: var(--report-color-h2, #2F5496);
   margin-bottom: 6px;
@@ -1068,13 +1072,14 @@ blockquote p:last-child {
 
 .timeline-desc {
   font-family: var(--report-font-body, inherit);
-  font-size: 0.82rem;
+  font-size: var(--report-timeline-desc-font-size, 0.82rem);
   line-height: 1.35;
   color: var(--report-color-muted, #595959);
   word-break: break-word;
 }
 
 .timeline-desc p {
+  font-size: inherit;
   margin: 0;
 }
 
@@ -1389,6 +1394,10 @@ export const DEFAULT_SLIDE_CSS = `/* ===========================================
   --slide-metric-val-size: clamp(3.6rem, 5.5rem, 6.5rem);
   --slide-metric-accent: #C41718;        /* Liseré supérieur rouge signature */
   --slide-metric-val-color: #0E2841;     /* Valeur en bleu nuit très contrasté */
+  --slide-timeline-node-size: 57px;
+  --slide-timeline-node-font-size: 0.88rem;
+  --slide-timeline-title-font-size: 0.95rem;
+  --slide-timeline-desc-font-size: 0.82rem;
 }
 
 /* ==========================================================================
@@ -2508,7 +2517,7 @@ html, body {
 .process-timeline::before {
   content: '';
   position: absolute;
-  top: 18px;
+  top: calc((var(--slide-timeline-node-size, 57px) - 3px) / 2);
   left: calc(50% / var(--timeline-steps, 5));
   right: calc(50% / var(--timeline-steps, 5));
   height: 3px;
@@ -2533,16 +2542,16 @@ html, body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 38px;
+  height: var(--slide-timeline-node-size, 57px);
   margin-bottom: 12px;
   position: relative;
 }
 
 .timeline-node {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
+  width: var(--slide-timeline-node-size, 57px);
+  height: var(--slide-timeline-node-size, 57px);
+  min-width: var(--slide-timeline-node-size, 57px);
+  min-height: var(--slide-timeline-node-size, 57px);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -2550,7 +2559,7 @@ html, body {
   color: #ffffff;
   font-family: var(--slide-font-heading, inherit);
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: var(--slide-timeline-node-font-size, 0.88rem);
   letter-spacing: -0.01em;
   text-align: center;
   background-color: var(--slide-brand-dark, #0E2841);
@@ -2606,7 +2615,7 @@ html, body {
 .timeline-title {
   font-family: var(--slide-font-heading, inherit);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: var(--slide-timeline-title-font-size, 0.95rem);
   line-height: 1.25;
   color: var(--slide-text-main, #0E2841);
   margin-bottom: 6px;
@@ -2615,13 +2624,14 @@ html, body {
 
 .timeline-desc {
   font-family: var(--slide-font-body, inherit);
-  font-size: 0.82rem;
+  font-size: var(--slide-timeline-desc-font-size, 0.82rem);
   line-height: 1.35;
   color: var(--slide-text-muted, #64748b);
   word-break: break-word;
 }
 
 .timeline-desc p {
+  font-size: inherit;
   margin: 0;
 }
 
