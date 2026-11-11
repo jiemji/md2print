@@ -3,7 +3,9 @@
  * @description Génération Word (.docx) côté client depuis le Markdown normalisé.
  * Supporte les images Base64, les schémas Mermaid rastérisés en PNG haute résolution 2x,
  * les alertes/callouts avec bordure colorée, les blocs de code, citations, tableaux,
+ * la conversion des en-têtes de colonnes ([colonne:...:titre:...]) en titres Word (HEADING_4),
  * et l'injection OpenXML dans un modèle personnalisé via JSZip.
+ * Les blocs HTML exécutables (```html-exec) sont ignorés lors de l'export Word bureautique.
  * @requires MarkdownParser
  * @requires utils
  */
@@ -64,10 +66,18 @@ export async function generateDocx(
 }
 
 /**
- * Construit les blocs docx depuis le Markdown normalisé.
- * @param {string} cleanMd
- * @param {object} docConfig
- * @returns {Promise<Array>}
+ * Construit l'ensemble des paragraphes, tableaux et éléments docx depuis le Markdown normalisé.
+ * Analyse l'arbre syntaxique abstrait (AST) généré par MarkdownParser :
+ * - Associe les titres H1..H6 aux styles de paragraphe Word correspondants.
+ * - Filtre les balises structurelles de colonnes ([colonne], [/colonne]) et convertit les titres
+ *   de colonnes définis en sous-titres Word de niveau 4 (HEADING_4).
+ * - Télécharge et convertit les images et schémas Mermaid en objets ImageRun OpenXML.
+ *
+ * @async
+ * @function buildDocxBlocks
+ * @param {string} cleanMd - Texte Markdown nettoyé et normalisé
+ * @param {object} docConfig - Configuration de mise en page et styles Word
+ * @returns {Promise<Array<object>>} Tableau de paragraphes et tableaux OpenXML docx
  */
 async function buildDocxBlocks(cleanMd, docConfig) {
   const ast = parseToAST(cleanMd);

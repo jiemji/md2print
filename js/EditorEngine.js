@@ -1,7 +1,7 @@
 /**
  * @module EditorEngine
  * @description Moteur de l'éditeur Markdown non-WYSIWYG (contenteditable="true").
- * Gère les objets graphiques .image-cartouche et .mermaid-cartouche, la préservation
+ * Gère les objets graphiques .image-cartouche, .mermaid-cartouche et .html-cartouche, la préservation
  * exacte des offsets de sélection (1 caractère = 1 unité, 1 cartouche = 1 unité),
  * la sentinelle finale <br data-sentinel="true">, l'alignement des tableaux en grille CSS,
  * le retour à la ligne des colonnes de plus de 60 caractères, et le formatage syntaxique
@@ -65,7 +65,7 @@ export function getCaretRangeFromPoint(clientX, clientY) {
 }
 
 /**
- * Attache les écouteurs de glisser-déposer sur une cartouche graphique (.image-cartouche ou .mermaid-cartouche).
+ * Attache les écouteurs de glisser-déposer sur une cartouche graphique (.image-cartouche, .mermaid-cartouche ou .html-cartouche).
  * @param {HTMLElement} cartoucheEl
  * @returns {void}
  */

@@ -515,7 +515,8 @@ function fitBoundsToAspectRatio(targetBounds, imgW, imgH) {
 
 /**
  * Extrait le texte brut sans balisage d'un bloc AST pour l'injection dans les métadonnées de présentation.
- * Filtre les balises de structure ([colonne], [/colonne]) et concatène les segments de texte enrichi (runs).
+ * Filtre les balises de structure ([colonne], [/colonne]), extrait le titre de colonne si présent
+ * ([colonne:...:titre:...]), et concatène les segments de texte enrichi (runs).
  *
  * @function blockToPlainText
  * @param {object} block - Bloc AST (paragraph, list_item, etc.)
@@ -557,6 +558,7 @@ export function blockToPlainText(block) {
  *  - Titre `##` (Niveau 2) : Déclenche une diapositive de chapitre (`chapter` ou `h2`).
  *  - Titre `###` (Niveau 3) : Crée une diapositive de contenu (`content` ou `h3`) et mémorise son titre.
  *  - Titres supérieurs à `###` (`####`..`######`) : N'entraînent aucun saut de diapositive et sont intégrés comme sous-sections dans la diapositive courante.
+ *  - Balises de colonnes `[colonne:...:titre:...]` : Les balises structurelles sont filtrées et leur titre est converti en sous-titre de niveau 4 (`####`).
  *  - Séparateur horizontal (`---`) : Force la création d'une nouvelle diapositive en reprenant le titre du dernier `###` qui précède.
  *
  * @function segmentMarkdownToSlides

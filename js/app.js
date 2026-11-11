@@ -1,10 +1,12 @@
 /**
  * @module app
  * @description Contrôleur principal de l'application SPA md2print.
- * Orchestre les interactions utilisateur, la synchronisation temps réel entre l'éditeur Markdown
- * et l'aperçu WYSIWYG (rapport paginé et diaporamas 16:9), le volet de sommaire hiérarchique (#, ##, ###),
- * le masquage adaptatif de l'éditeur pour l'affichage plein écran, la gestion du thème (sombre, sépia),
- * la persistance locale IndexedDB, et les exportations documentaires (HTML autonome, Word .docx, PowerPoint .pptx).
+ * Orchestre les interactions utilisateur, la manipulation de cartouches graphiques dépliables
+ * et déplaçables par glisser-déposer (.image-cartouche, .mermaid-cartouche, .html-cartouche),
+ * la synchronisation temps réel entre l'éditeur Markdown et l'aperçu WYSIWYG (rapport paginé et diaporamas 16:9),
+ * le volet de sommaire hiérarchique (#, ##, ###), le masquage adaptatif de l'éditeur pour l'affichage plein écran,
+ * la gestion du thème (sombre, sépia), la persistance locale IndexedDB, et les exportations documentaires
+ * (HTML autonome, Word .docx, PowerPoint .pptx).
  * @requires module:utils
  * @requires module:EditorEngine
  * @requires module:StorageService

@@ -2,7 +2,9 @@
  * @module utils
  * @description Fonctions utilitaires partagées : manipulation de fichiers, génération de slugs,
  * normalisation Markdown, gestion et rastérisation d'images/schémas Mermaid,
- * et résolutions de balises personnalisées (callouts, badges, métriques).
+ * blocs de code HTML exécutables (```html-exec, [html]...[/html]),
+ * résolutions de balises personnalisées (callouts, badges, métriques [chiffre:...]),
+ * et analyse des paramètres de colonnes ([colonne:taille:titre:couleur:ratio]).
  */
 
 /**
@@ -306,12 +308,6 @@ export const normalizeMermaidCode = (code = '') =>
     .trim();
 
 /**
- * Indique si une ligne correspond à l'en-tête de déclaration d'un diagramme Mermaid
- * (ex: graph TB, flowchart LR, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie...).
- * @param {string} [line='']
- * @returns {boolean}
- */
-/**
  * Indique si un identifiant de langage de bloc de code (ex: ```html-exec) désigne un bloc HTML exécutable.
  * @param {string} [fenceLang='']
  * @returns {boolean}
@@ -341,6 +337,12 @@ export const isHtmlBlockCloseLine = (line = '') => {
   return trimmed === '[/html]' || trimmed === ':::';
 };
 
+/**
+ * Indique si une ligne correspond à l'en-tête de déclaration d'un diagramme Mermaid
+ * (ex: graph TB, flowchart LR, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie...).
+ * @param {string} [line='']
+ * @returns {boolean}
+ */
 export const isMermaidHeaderLine = (line = '') => {
   const trimmed = line.trim();
   return /^(?:graph\s+(?:TB|TD|BT|RL|LR)|flowchart\s+(?:TB|TD|BT|RL|LR)|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|pie(?:\s+title\b)?|mindmap|timeline|journey|gitGraph|quadrantChart|xychart(?:-beta)?)\b/i.test(

@@ -130,9 +130,11 @@ export function splitMdBySections(mdText) {
 
 /**
  * Reconstruit le texte Markdown d'un bloc AST.
- * Utilise la propriété `raw` d'origine en priorité, avec un fallback structuré.
- * @param {object} block - Bloc AST
- * @returns {string}
+ * Utilise la propriété `raw` d'origine en priorité, avec un fallback structuré pour tous les types
+ * de blocs reconnus (titres, listes, tableaux, images, diagrammes Mermaid et blocs HTML exécutables).
+ *
+ * @param {object} block - Bloc AST (header, list_item, mermaid, html_exec, table, image...)
+ * @returns {string} Représentation textuelle Markdown du bloc
  */
 export function blockToMarkdown(block) {
   if (!block) return '';

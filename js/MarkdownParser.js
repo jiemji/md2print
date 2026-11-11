@@ -3,13 +3,15 @@
  * @description Parseur Markdown vers AST structuré et analyseur récursif de styles inline (pour DOCX et PPTX).
  *
  * Produit un tableau de blocs typés :
- * - { type: 'header', level, text, runs, raw }
- * - { type: 'paragraph', runs, isCode, isQuote, callout, raw }
- * - { type: 'list_item', listType, level, text, runs, raw }
- * - { type: 'table', rows: string[][], raw }
- * - { type: 'image', alt: string, src: string, raw }
- * - { type: 'mermaid', code: string, raw }
- * - { type: 'separator', raw }
+ * - { type: 'header', level: number, text: string, runs: Array, raw: string }
+ * - { type: 'paragraph', runs: Array, isCode: boolean, isQuote: boolean, callout: object, raw: string }
+ * - { type: 'list_item', listType: 'bullet'|'ordered', level: number, text: string, runs: Array, raw: string }
+ * - { type: 'table', rows: string[][], raw: string }
+ * - { type: 'image', alt: string, src: string, raw: string }
+ * - { type: 'mermaid', code: string, raw: string }
+ * - { type: 'html_exec', code: string, raw: string }
+ * - { type: 'empty_line', count: number, raw: string }
+ * - { type: 'separator', raw: string }
  * @requires utils
  */
 
@@ -36,7 +38,7 @@ const DEFAULT_FORMAT = Object.freeze({
  * Extrait récursivement les styles inline d'un texte Markdown et retourne un tableau de runs formatés.
  * Gère : `code`, [libellé](url), ***gras+italique***, **gras**, __souligné__, <u>souligné</u>,
  * ~~barré~~, *italique*, _italique_, badges inline ([badge:type:texte]),
- * métriques/chiffres ([chiffre:valeur:libellé]) ainsi que leurs imbrications.
+ * métriques/chiffres ([chiffre:valeur:libellé:variante]) ainsi que leurs imbrications.
  * @param {string} text - Segment de texte Markdown à analyser
  * @param {object} [inheritedFormat=DEFAULT_FORMAT] - Format parent hérité lors de l'analyse récursive
  * @returns {Array<{text: string, format: object}>}
@@ -237,9 +239,12 @@ const parseTable = (lines, startIndex) => {
 };
 
 /**
- * Parse un texte Markdown complet en un AST structuré.
- * @param {string} mdText
- * @returns {Array<object>}
+ * Parse un texte Markdown complet en un AST structuré avec conservation des métadonnées de lignes.
+ * Détecte les en-têtes, paragraphes, listes à puces/ordonnées, tableaux, images,
+ * diagrammes Mermaid, blocs HTML exécutables (```html-exec), séparateurs horizontaux et lignes vides.
+ *
+ * @param {string} mdText - Texte Markdown complet
+ * @returns {Array<object>} Tableau de nœuds AST typés
  */
 export const parseToAST = (mdText) => {
   if (!mdText) return [];

@@ -1,11 +1,12 @@
 /**
  * @module HtmlGenerator
  * @description Génération du document HTML autonome et du flux de prévisualisation iframe.
- * Intègre le CSS (thème Azur classique), le sommaire latéral repliable avec ScrollSpy,
+ * Intègre le CSS (thèmes Rapport et Slide), le sommaire latéral repliable avec ScrollSpy,
  * les schémas Mermaid vectoriels, les alertes/callouts GitHub, les badges inline,
- * les cartouches de données/métriques agrandies (5x), la disposition multi-colonnes flexible
- * ([colonne]...[/colonne]) avec partage horizontal de l'espace, et le support des modes
- * Rapport continu et Diaporama interactif 16:9.
+ * les cartouches de données/métriques agrandies (5x), les blocs de composants HTML/JS exécutables,
+ * la disposition multi-colonnes flexible ([colonne:taille:titre:couleur:ratio]) avec en-têtes
+ * centrés (H4), palette typologique de couleur de fond/bordure, ajustement d'échelle de police
+ * interne (--col-font-scale), et le support des modes Rapport continu et Diaporama interactif 16:9.
  * @requires utils
  * @requires SlidePlanner
  * @requires defaultThemeStyles
@@ -158,7 +159,7 @@ export const extractTOC = (normalizedMarkdown) => {
  *
  * Syntaxes reconnues :
  * - Balises simples : `[colonne]` ... `[/colonne]` (alias `[col]` ... `[/col]`)
- * - Paramètres étendus : `[colonne:taille:titre:couleur]` ... `[/colonne]` (les 3 derniers optionnels)
+ * - Paramètres étendus : `[colonne:taille relative:titre:couleur:ratio police]` ... `[/colonne]` (les 4 derniers optionnels)
  * - Conteneurs globaux optionnels : `[colonnes]` ... `[/colonnes]` (alias `[cols]` ... `[/cols]`)
  * - Syntaxe alternative à triple deux-points : `:::colonne` ... `:::`
  *

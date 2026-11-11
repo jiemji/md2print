@@ -1,15 +1,15 @@
-import { MERMAID_THEME_PRESETS } from './utils.js';
 /**
  * @module StyleSettingsManager
  * @description Contrôleur de la page de paramétrage interactif des styles, couleurs,
  * polices et dimensions pour chaque type de balise (Vision Rapport et Vision Slide).
  * Gère également les arrière-plans d'images, l'opacité, la transparence des bandeaux,
- * les marges latérales et l'import/export de thèmes personnalisés.
+ * les marges latérales, la taille du texte des colonnes, et l'import/export de thèmes personnalisés.
  * 
  * Fonctionne 100 % hors-ligne, sans dépendance externe ni icône.
+ * @requires module:utils
  * @requires module:defaultThemeStyles
  */
-
+import { MERMAID_THEME_PRESETS } from './utils.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 
 /**
@@ -76,7 +76,7 @@ import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
  * @property {Object} code - Paramètres des blocs et extraits de code
  * @property {Object} table - Couleurs et bordures des tableaux
  * @property {Object} mermaid - Couleurs et bordures des diagrammes Mermaid
- * @property {Object} column - Couleurs et marges des conteneurs multi-colonnes
+ * @property {{ bg: string, border: string, padding: string, radius: string, fontSize?: string }} column - Couleurs, bordures, marges et taille de police des colonnes
  * @property {SlideBackgroundConfig} [coverSlide] - Spécifique diaporama : slide de couverture
  * @property {SlideBackgroundConfig} [chapterSlide] - Spécifique diaporama : slide de chapitre
  * @property {SlideContentConfig} [contentSlide] - Spécifique diaporama : slide de contenu
@@ -561,9 +561,9 @@ function formatHeadingCss(h, fallbackFont, defaultSize, defaultColor) {
 
 /**
  * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
- * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales).
+ * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales, taille de texte des colonnes).
  * - Applique les règles impératives de confinement de diapositive, superposition d'images d'arrière-plan,
- *   transparence des bandeaux et disposition multi-colonnes flexible.
+ *   transparence des bandeaux, disposition multi-colonnes flexible et mise à l'échelle typographique (--col-font-scale).
  * - Intègre en tête le bloc de métadonnées JSON standard [md2print-config:mode=...] assurant la persistance.
  *
  * @function generateThemeCss
