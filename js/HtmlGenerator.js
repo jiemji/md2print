@@ -23,7 +23,10 @@ import {
   parseMetricTag,
   resolveMetricClass,
   parseColumnTagParams,
+  parseTimelineStep,
 } from './utils.js';
+
+export { parseTimelineStep };
 import { planSlides } from './SlidePlanner.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 
@@ -231,87 +234,6 @@ export function extractAndGroupColumns(md) {
   if (currentGroup.length > 0) groups.push(currentGroup);
 
   return { cleaned: restoreCodeBlocks(maskedMd), groups, restoreCodeBlocks, maskedMd };
-}
-
-/**
- * @typedef {Object} TimelineStep
- * @property {string} badge - Libellé textuel court du jalon (ex: 'T0', '4 h')
- * @property {string} colorName - Identifiant de la variante de couleur ('primary', 'danger', 'warning', 'success', 'info', 'purple', 'muted')
- * @property {string} title - Titre en gras de l'étape
- * @property {string} desc - Description ou texte explicatif associé
- */
-
-/**
- * Analyse une ligne d'étape de frise chronologique et en extrait les composants structurés.
- * Formats pris en charge :
- *  - `- **Jalon** (couleur) | **Titre** | Description`
- *  - `- Jalon (couleur) : Titre : Description`
- *  - `1. Jalon | Titre | Description`
- * @function parseTimelineStep
- * @param {string} rawLine - Ligne brute Markdown à analyser
- * @returns {TimelineStep|null} Objet d'étape structuré ou null si la ligne est vide
- */
-export function parseTimelineStep(rawLine) {
-  if (!rawLine || !rawLine.trim()) return null;
-  const trimmed = rawLine.trim();
-  if (trimmed === '%%MD2PRINT_EMPTY_LINE%%') return null;
-  const withoutBullet = trimmed.replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
-  if (!withoutBullet) return null;
-
-  let parts = [];
-  if (withoutBullet.includes('|')) {
-    parts = withoutBullet.split('|').map((p) => p.trim());
-  } else if (withoutBullet.includes(' : ')) {
-    parts = withoutBullet.split(' : ').map((p) => p.trim());
-  } else {
-    const match = withoutBullet.match(/^(\*\*[^*]+\*\*|\([^)]+\))\s*(.*)/);
-    if (match) {
-      parts = [match[1].trim(), match[2].trim()];
-    } else {
-      parts = [withoutBullet];
-    }
-  }
-
-  const badgeRaw = parts[0] || '';
-  const titleRaw = parts[1] || '';
-  const descRaw = parts.slice(2).join(' | ').trim();
-
-  let colorName = 'primary';
-  let badgeText = badgeRaw;
-
-  const colorMatch = badgeText.match(/\(([^)]+)\)/);
-  if (colorMatch) {
-    const rawColor = colorMatch[1].trim().toLowerCase();
-    badgeText = badgeText.replace(/\([^)]+\)/, '').trim();
-    if (/^(danger|rouge|red|critique|alerte?)$/.test(rawColor)) {
-      colorName = 'danger';
-    } else if (/^(warning|orange|amber|attention)$/.test(rawColor)) {
-      colorName = 'warning';
-    } else if (/^(success|vert|green|valide|ok)$/.test(rawColor)) {
-      colorName = 'success';
-    } else if (/^(info|bleu|blue|cyan)$/.test(rawColor)) {
-      colorName = 'info';
-    } else if (/^(purple|violet|magenta)$/.test(rawColor)) {
-      colorName = 'purple';
-    } else if (/^(muted|gris|gray|grey)$/.test(rawColor)) {
-      colorName = 'muted';
-    } else if (/^(dark|sombre|navy)$/.test(rawColor)) {
-      colorName = 'dark';
-    }
-  }
-
-  const cleanBadge = badgeText.replace(/[*_`]/g, '').trim();
-  let cleanTitle = titleRaw.replace(/^[*_`\s]+|[*_`\s]+$/g, '').trim();
-  if (!cleanTitle && !descRaw) {
-    cleanTitle = cleanBadge;
-  }
-
-  return {
-    badge: cleanBadge,
-    colorName,
-    title: cleanTitle,
-    desc: descRaw,
-  };
 }
 
 /**

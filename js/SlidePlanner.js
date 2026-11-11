@@ -162,6 +162,13 @@ export function blockToMarkdown(block) {
       return `\`\`\`html-exec\n${block.code || ''}\n\`\`\``;
     case 'image':
       return `![${block.alt || ''}](${block.src || ''})`;
+    case 'timeline': {
+      const lines = (block.steps || []).map((s) => {
+        const colorPart = s.colorName && s.colorName !== 'primary' ? ` (${s.colorName})` : '';
+        return `- **${s.badge || ''}**${colorPart} | **${s.title || ''}** | ${s.desc || ''}`;
+      });
+      return `\`\`\`\n\n\`\`\`\n[frise]\n${lines.join('\n')}\n[/frise]`.replace(/^```\n\n```\n/, '');
+    }
     case 'table': {
       if (!block.rows || !block.rows.length) return '';
       const header = `| ${block.rows[0].join(' | ')} |`;

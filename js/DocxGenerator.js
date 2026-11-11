@@ -20,6 +20,7 @@ import {
   getImageDimensions,
   renderMermaidToPngDataUrl,
   parseColumnTagParams,
+  TIMELINE_COLOR_MAP,
 } from './utils.js';
 
 /**
@@ -69,11 +70,53 @@ export async function generateDocx(
 }
 
 /**
+ * Détecte si un bloc AST est une balise d'ouverture de colonne (`[colonne...]` ou `:::colonne...`).
+ * @param {object} block
+ * @returns {RegExpMatchArray|null}
+ */
+function matchColumnOpenTag(block) {
+  if (block?.type !== 'paragraph') return null;
+  const rawTrim = (block.raw || '').trim();
+  return (
+    rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
+    rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i)
+  );
+}
+
+/**
+ * Détecte si un bloc AST est une balise de fermeture de colonne (`[/colonne]` ou `:::`).
+ * @param {object} block
+ * @returns {boolean}
+ */
+function isColumnCloseTag(block) {
+  if (block?.type !== 'paragraph') return false;
+  const rawTrim = (block.raw || '').trim();
+  return (
+    /^\[\/(?:col(?:onne)?)\]$/i.test(rawTrim) ||
+    /^:::(?:\s*\/\s*(?:col(?:onne)?))?$/i.test(rawTrim)
+  );
+}
+
+/**
+ * Détecte si un bloc AST est un conteneur englobant optionnel (`[colonnes]`, `[/colonnes]`).
+ * @param {object} block
+ * @returns {boolean}
+ */
+function isColumnsContainerTag(block) {
+  if (block?.type !== 'paragraph') return false;
+  const rawTrim = (block.raw || '').trim();
+  return (
+    /^\[\/?(?:colonnes|cols)\]$/i.test(rawTrim) ||
+    /^:::\s*\/?\s*(?:colonnes|cols)$/i.test(rawTrim)
+  );
+}
+
+/**
  * Construit l'ensemble des paragraphes, tableaux et éléments docx depuis le Markdown normalisé.
  * Analyse l'arbre syntaxique abstrait (AST) généré par MarkdownParser :
  * - Associe les titres H1..H6 aux styles de paragraphe Word correspondants.
- * - Filtre les balises structurelles de colonnes ([colonne], [/colonne]) et convertit les titres
- *   de colonnes définis en sous-titres Word de niveau 4 (HEADING_4).
+ * - Regroupe les blocs `[colonne:...]` ... `[/colonne]` adjacents en tableaux multi-colonnes côte à côte.
+ * - Convertit les frises chronologiques `[frise]...[/frise]` en tableaux horizontaux structurés.
  * - Télécharge et convertit les images et schémas Mermaid en objets ImageRun OpenXML.
  *
  * @async
@@ -84,13 +127,79 @@ export async function generateDocx(
  */
 async function buildDocxBlocks(cleanMd, docConfig) {
   const ast = parseToAST(cleanMd);
+  return buildDocxBlocksFromAst(ast, docConfig, { isFirstH1: true });
+}
+
+/**
+ * Compile récursivement une tranche de nœuds AST en éléments OpenXML docx.
+ * @param {Array<object>} ast - Liste de nœuds AST
+ * @param {object} docConfig - Configuration de mise en page et styles Word
+ * @param {{ isFirstH1: boolean }} state - État partagé pour le premier H1
+ * @returns {Promise<Array<object>>}
+ */
+async function buildDocxBlocksFromAst(ast, docConfig, state = { isFirstH1: true }) {
   const blocks = [];
-  let isFirstH1 = true;
 
   for (let idx = 0; idx < ast.length; idx++) {
     const block = ast[idx];
     const nextBlock = ast[idx + 1];
     const hasEmptyNext = nextBlock?.type === 'empty_line';
+
+    if (isColumnsContainerTag(block)) {
+      continue;
+    }
+
+    const firstColMatch = matchColumnOpenTag(block);
+    if (firstColMatch) {
+      const columnsGroup = [];
+      let cursor = idx;
+
+      while (cursor < ast.length) {
+        const colMatch = matchColumnOpenTag(ast[cursor]);
+        if (!colMatch) break;
+
+        const params = parseColumnTagParams(colMatch[1]);
+        const astSlice = [];
+        cursor++;
+
+        while (cursor < ast.length && !isColumnCloseTag(ast[cursor])) {
+          astSlice.push(ast[cursor]);
+          cursor++;
+        }
+        if (cursor < ast.length && isColumnCloseTag(ast[cursor])) {
+          cursor++;
+        }
+
+        columnsGroup.push({ params, astSlice });
+
+        const savedCursor = cursor;
+        while (
+          cursor < ast.length &&
+          (ast[cursor].type === 'empty_line' || isColumnsContainerTag(ast[cursor]))
+        ) {
+          cursor++;
+        }
+        if (cursor < ast.length && matchColumnOpenTag(ast[cursor])) {
+          continue;
+        }
+        cursor = savedCursor;
+        break;
+      }
+
+      idx = cursor - 1;
+      if (columnsGroup.length > 0) {
+        const colTable = await createDocxColumnsTable(columnsGroup, docConfig, state);
+        blocks.push(colTable);
+      }
+      continue;
+    }
+
+    if (block.type === 'timeline') {
+      if (block.steps && block.steps.length > 0) {
+        blocks.push(createDocxTimelineTable(block.steps));
+      }
+      continue;
+    }
 
     if (block.type === 'empty_line') {
       const count = Math.max(1, Number(block.count) || 1);
@@ -108,8 +217,8 @@ async function buildDocxBlocks(cleanMd, docConfig) {
     }
 
     if (block.type === 'header') {
-      if (block.level === 1 && isFirstH1) {
-        isFirstH1 = false;
+      if (block.level === 1 && state.isFirstH1) {
+        state.isFirstH1 = false;
         const style = docConfig?.styles?.globalTitle || docConfig?.styles?.h1;
         blocks.push(
           new window.docx.Paragraph({
@@ -291,30 +400,7 @@ async function buildDocxBlocks(cleanMd, docConfig) {
         })
       );
     } else if (block.type === 'paragraph') {
-      const rawTrim = (block.raw || '').trim();
-      // Omettre les balises de colonnes ([colonne...], [/colonne]) et émettre un titre H4 si un titre est défini
-      const colOpenMatch =
-        rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
-        rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i);
-      if (colOpenMatch) {
-        const { title } = parseColumnTagParams(colOpenMatch[1]);
-        if (title) {
-          const stH4 = docConfig?.styles?.h3;
-          blocks.push(
-            new window.docx.Paragraph({
-              children: toDocxRuns(extractInlineStyles(title)),
-              style: typeof stH4 === 'string' ? stH4 : undefined,
-              heading: typeof stH4 === 'string' ? undefined : window.docx.HeadingLevel.HEADING_4,
-              spacing: { before: 200, after: 100 },
-            })
-          );
-        }
-        continue;
-      }
-      if (
-        /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
-        /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
-      ) {
+      if (isColumnCloseTag(block) || isColumnsContainerTag(block)) {
         continue;
       }
       const styleP = docConfig?.styles?.p;
@@ -420,6 +506,206 @@ function createDocxTable(rowsData, docConfig) {
         }),
       });
     }),
+  });
+}
+
+/**
+ * Crée un tableau horizontal Word représentant une frise chronologique (`[frise]...[/frise]`).
+ * La première ligne affiche les jalons colorés centrés avec une bordure inférieure épaisse formant l'axe,
+ * et la seconde ligne présente les titres en gras suivis de leur description.
+ *
+ * @param {Array<{ badge: string, colorName: string, title: string, desc: string }>} steps
+ * @returns {object} Instance `window.docx.Table`
+ */
+function createDocxTimelineTable(steps) {
+  const count = Math.max(1, steps.length);
+  const colPct = Math.floor(100 / count);
+  const lightBorder = {
+    style: window.docx.BorderStyle.SINGLE,
+    size: 4,
+    color: 'E2E8F0',
+  };
+
+  const badgeCells = steps.map((step, idx) => {
+    const palette = TIMELINE_COLOR_MAP[step.colorName] || TIMELINE_COLOR_MAP.primary;
+    const label = step.badge || String(idx + 1);
+    return new window.docx.TableCell({
+      width: { size: colPct, type: window.docx.WidthType.PERCENTAGE },
+      shading: { fill: palette.bg },
+      margins: { top: 100, bottom: 100, left: 120, right: 120 },
+      borders: {
+        top: { style: window.docx.BorderStyle.SINGLE, size: 6, color: palette.border },
+        bottom: { style: window.docx.BorderStyle.SINGLE, size: 18, color: palette.border },
+        left: lightBorder,
+        right: lightBorder,
+      },
+      children: [
+        new window.docx.Paragraph({
+          alignment: window.docx.AlignmentType.CENTER,
+          children: [
+            new window.docx.TextRun({
+              text: label,
+              bold: true,
+              color: palette.text,
+              size: 22,
+            }),
+          ],
+          spacing: { before: 60, after: 60 },
+        }),
+      ],
+    });
+  });
+
+  const bodyCells = steps.map((step) => {
+    const cellParas = [];
+    if (step.title && (step.title !== step.badge || !step.desc)) {
+      cellParas.push(
+        new window.docx.Paragraph({
+          alignment: window.docx.AlignmentType.CENTER,
+          children: toDocxRuns(extractInlineStyles(step.title), {
+            bold: true,
+            color: '0F172A',
+          }),
+          spacing: { before: 80, after: step.desc ? 60 : 80 },
+        })
+      );
+    }
+    if (step.desc) {
+      cellParas.push(
+        new window.docx.Paragraph({
+          alignment: window.docx.AlignmentType.CENTER,
+          children: toDocxRuns(extractInlineStyles(step.desc), {
+            color: '475569',
+            size: 18,
+          }),
+          spacing: { before: 20, after: 80 },
+        })
+      );
+    }
+    if (cellParas.length === 0) {
+      cellParas.push(new window.docx.Paragraph({ children: [] }));
+    }
+
+    return new window.docx.TableCell({
+      width: { size: colPct, type: window.docx.WidthType.PERCENTAGE },
+      shading: { fill: 'FFFFFF' },
+      margins: { top: 100, bottom: 100, left: 120, right: 120 },
+      borders: {
+        top: lightBorder,
+        bottom: lightBorder,
+        left: lightBorder,
+        right: lightBorder,
+      },
+      children: cellParas,
+    });
+  });
+
+  return new window.docx.Table({
+    width: { size: 100, type: window.docx.WidthType.PERCENTAGE },
+    rows: [
+      new window.docx.TableRow({ children: badgeCells }),
+      new window.docx.TableRow({ children: bodyCells }),
+    ],
+  });
+}
+
+const COL_VARIANT_PALETTE = {
+  info: { border: '0284C7', headerText: '0369A1', cellBg: 'F8FAFC' },
+  success: { border: '16A34A', headerText: '15803D', cellBg: 'F0FDF4' },
+  warning: { border: 'D97706', headerText: 'B45309', cellBg: 'FFFBEB' },
+  danger: { border: 'DC2626', headerText: 'B91C1C', cellBg: 'FEF2F2' },
+  important: { border: '7C3AED', headerText: '6D28D9', cellBg: 'FAF5FF' },
+  neutral: { border: '64748B', headerText: '334155', cellBg: 'F8FAFC' },
+};
+
+/**
+ * Construit un tableau multi-colonnes côte à côte pour restituer les groupes `[colonne:...]` ... `[/colonne]` dans Word.
+ * Respecte les proportions relatives (`ratio`), affiche les titres d'en-tête centrés et applique les variantes de couleur.
+ *
+ * @param {Array<{ params: object, astSlice: Array<object> }>} columnsGroup
+ * @param {object} docConfig
+ * @param {{ isFirstH1: boolean }} state
+ * @returns {Promise<object>} Instance `window.docx.Table`
+ */
+async function createDocxColumnsTable(columnsGroup, docConfig, state) {
+  const totalRatio =
+    columnsGroup.reduce((sum, col) => sum + (Number(col.params?.ratio) || 1), 0) || 1;
+
+  const cells = [];
+  for (const col of columnsGroup) {
+    const ratio = Number(col.params?.ratio) || 1;
+    const widthPct = Math.max(10, Math.round((ratio / totalRatio) * 100));
+    const variant = col.params?.colorVariant || '';
+    const customHex = (col.params?.colorHex || '').replace(/^#/, '').toUpperCase();
+    const palette = COL_VARIANT_PALETTE[variant] || null;
+    const borderColor = customHex || palette?.border || 'E2E8F0';
+    const headerColor = customHex || palette?.headerText || '1E293B';
+    const cellBg = palette?.cellBg || 'FFFFFF';
+    const hasAccent = Boolean(palette || customHex);
+
+    const innerBlocks = await buildDocxBlocksFromAst(col.astSlice, docConfig, state);
+    const cellChildren = [];
+
+    if (col.params?.title) {
+      const stH4 = docConfig?.styles?.h3;
+      cellChildren.push(
+        new window.docx.Paragraph({
+          alignment: window.docx.AlignmentType.CENTER,
+          children: toDocxRuns(extractInlineStyles(col.params.title), {
+            bold: true,
+            color: headerColor,
+          }),
+          style: typeof stH4 === 'string' ? stH4 : undefined,
+          heading: typeof stH4 === 'string' ? undefined : window.docx.HeadingLevel.HEADING_4,
+          border: {
+            bottom: {
+              style: window.docx.BorderStyle.SINGLE,
+              size: hasAccent ? 12 : 6,
+              color: borderColor,
+              space: 4,
+            },
+          },
+          spacing: { before: 80, after: 140 },
+        })
+      );
+    }
+
+    cellChildren.push(...innerBlocks);
+
+    const lastChild = cellChildren[cellChildren.length - 1];
+    if (!lastChild || !(lastChild instanceof window.docx.Paragraph)) {
+      cellChildren.push(new window.docx.Paragraph({ children: [] }));
+    }
+
+    const sideBorder = {
+      style: window.docx.BorderStyle.SINGLE,
+      size: hasAccent ? 6 : 4,
+      color: borderColor,
+    };
+
+    cells.push(
+      new window.docx.TableCell({
+        width: { size: widthPct, type: window.docx.WidthType.PERCENTAGE },
+        shading: { fill: cellBg },
+        margins: { top: 140, bottom: 140, left: 180, right: 180 },
+        borders: {
+          top: {
+            style: window.docx.BorderStyle.SINGLE,
+            size: hasAccent ? 16 : 4,
+            color: borderColor,
+          },
+          bottom: sideBorder,
+          left: sideBorder,
+          right: sideBorder,
+        },
+        children: cellChildren,
+      })
+    );
+  }
+
+  return new window.docx.Table({
+    width: { size: 100, type: window.docx.WidthType.PERCENTAGE },
+    rows: [new window.docx.TableRow({ children: cells })],
   });
 }
 

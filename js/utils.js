@@ -25,6 +25,8 @@ import {
   resolveColumnColor,
   parseColumnFontScale,
   parseColumnTagParams,
+  TIMELINE_COLOR_MAP,
+  parseTimelineStep,
 } from './tagParsers.js';
 
 import {
@@ -60,6 +62,8 @@ export {
   resolveColumnColor,
   parseColumnFontScale,
   parseColumnTagParams,
+  TIMELINE_COLOR_MAP,
+  parseTimelineStep,
   normalizeMermaidCode,
   isMermaidHeaderLine,
   findUnfencedMermaidBlockEnd,

@@ -525,6 +525,11 @@ function fitBoundsToAspectRatio(targetBounds, imgW, imgH) {
  */
 export function blockToPlainText(block) {
   if (!block) return '';
+  if (block.type === 'timeline') {
+    return (block.steps || [])
+      .map((s) => [s.badge, s.title, s.desc].filter(Boolean).join(' : '))
+      .join(' | ');
+  }
   const rawTrim = (block.raw || block.text || '').trim();
   const colOpenMatch =
     rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
@@ -534,8 +539,8 @@ export function blockToPlainText(block) {
     return title || '';
   }
   if (
-    /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
-    /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
+    /^\[(?:\/(?:col(?:onne)?|cols?onnes?|frise|timeline)|(?:colonnes|cols|frise|timeline))\]$/i.test(rawTrim) ||
+    /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?|frise|timeline))?$/i.test(rawTrim)
   ) {
     return '';
   }
@@ -577,8 +582,20 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
   let currentSection = null;
   let lastH3Title = null;
   let currentSlide = null;
+  let activeColumn = null;
+
+  const pushSlideContentItem = (slide, item) => {
+    slide.items.push(item);
+    if (activeColumn) {
+      activeColumn.items.push(item);
+    } else if (slide.columns && slide.columns.length > 0) {
+      if (!slide.postColumnItems) slide.postColumnItems = [];
+      slide.postColumnItems.push(item);
+    }
+  };
 
   const flushSlide = () => {
+    activeColumn = null;
     if (currentSlide) {
       if (currentSlide.items) {
         while (
@@ -696,7 +713,7 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
           items: [],
         };
       }
-      currentSlide.items.push({
+      pushSlideContentItem(currentSlide, {
         type: 'header',
         level: block.level,
         text: block.text,
@@ -744,7 +761,7 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
         !currentSlide.images?.length &&
         !currentSlide.mermaids?.length;
       for (let k = 0; k < count; k++) {
-        currentSlide.items.push({
+        pushSlideContentItem(currentSlide, {
           type: 'empty_line',
           isLeading: isLeading && k === 0,
         });
@@ -752,7 +769,50 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       continue;
     }
 
-    if (block.type === 'table') {
+    if (block.type === 'timeline') {
+      const steps = block.steps || [];
+      if (steps.length > 0) {
+        const hasOtherContent =
+          activeColumn ||
+          currentSlide.table ||
+          currentSlide.items.some((it) => it.type !== 'empty_line');
+
+        if (!hasOtherContent) {
+          const headerRow = steps.map((s, idx) => s.badge || String(idx + 1));
+          const bodyRow = steps.map((s) => {
+            const hasDistinctTitle = s.title && s.title !== s.badge;
+            const t = hasDistinctTitle ? `**${s.title}**` : '';
+            const d = s.desc || '';
+            return [t, d].filter(Boolean).join(' — ');
+          });
+          currentSlide.table = [headerRow, bodyRow];
+        } else {
+          for (const step of steps) {
+            const runs = [];
+            if (step.badge) {
+              runs.push({ text: `[${step.badge}] `, format: { bold: true } });
+            }
+            if (step.title && step.title !== step.badge) {
+              runs.push({ text: step.title, format: { bold: true } });
+            }
+            if (step.desc) {
+              runs.push({
+                text: `${runs.length > 0 ? ' — ' : ''}${step.desc}`,
+                format: {},
+              });
+            }
+            const fullText = runs.map((r) => r.text).join('');
+            pushSlideContentItem(currentSlide, {
+              type: 'list_item',
+              level: 0,
+              text: fullText,
+              runs: runs.length > 0 ? runs : [{ text: fullText }],
+            });
+          }
+        }
+        currentSlide.isExplicit = false;
+      }
+    } else if (block.type === 'table') {
       currentSlide.table = block.rows;
       currentSlide.isExplicit = false;
     } else if (block.type === 'image') {
@@ -764,7 +824,7 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
       currentSlide.mermaids.push(block);
       currentSlide.isExplicit = false;
     } else if (block.type === 'list_item') {
-      currentSlide.items.push({
+      pushSlideContentItem(currentSlide, {
         type: 'list_item',
         level: block.level || 0,
         text: block.text,
@@ -774,30 +834,44 @@ export function segmentMarkdownToSlides(mdText, docTitle, prototypes, layoutsCon
     } else if (block.type === 'paragraph') {
       const rawTrim = (block.raw || block.text || '').trim();
       // Filtrer les balises structurelles de colonnes ([colonne...], [/colonne], etc.)
-      // et émettre un en-tête de niveau 4 si un titre est défini sur la colonne
+      // et enregistrer chaque colonne pour un positionnement côte à côte dans la diapositive
       const colOpenMatch =
         rawTrim.match(/^\[(?:col(?:onne)?)(?:\s*:\s*([^\]]*))?\]$/i) ||
         rawTrim.match(/^:::\s*(?:col(?:onne)?)(?:\s*:\s*([^\r\n]*))?$/i);
       if (colOpenMatch) {
-        const { title } = parseColumnTagParams(colOpenMatch[1]);
-        if (title) {
-          currentSlide.items.push({
+        const colParams = parseColumnTagParams(colOpenMatch[1]);
+        if (!currentSlide.columns) {
+          currentSlide.preColumnItems = [...currentSlide.items];
+          currentSlide.columns = [];
+          currentSlide.postColumnItems = [];
+        }
+        activeColumn = { ...colParams, items: [] };
+        currentSlide.columns.push(activeColumn);
+        if (colParams.title) {
+          pushSlideContentItem(currentSlide, {
             type: 'header',
             level: 4,
-            text: title,
-            runs: extractInlineStyles(title),
+            text: colParams.title,
+            runs: extractInlineStyles(colParams.title),
           });
-          currentSlide.isExplicit = false;
         }
+        currentSlide.isExplicit = false;
         continue;
       }
       if (
-        /^\[(?:\/(?:col(?:onne)?|cols?onnes?)|(?:colonnes|cols))\]$/i.test(rawTrim) ||
-        /^:::(?:\s*\/?\s*(?:col(?:onne)?|cols?onnes?))?$/i.test(rawTrim)
+        /^\[\/(?:col(?:onne)?)\]$/i.test(rawTrim) ||
+        /^:::(?:\s*\/\s*(?:col(?:onne)?))?$/i.test(rawTrim)
+      ) {
+        activeColumn = null;
+        continue;
+      }
+      if (
+        /^\[(?:\/?(?:cols?onnes?|frise|timeline))\]$/i.test(rawTrim) ||
+        /^:::\s*\/?\s*(?:cols?onnes?|frise|timeline)$/i.test(rawTrim)
       ) {
         continue;
       }
-      currentSlide.items.push({
+      pushSlideContentItem(currentSlide, {
         type: 'paragraph',
         text: block.text,
         runs: block.runs || [{ text: block.text }],
@@ -1097,41 +1171,157 @@ export async function generatePresentationFromTemplate(
           }
         }
       } else {
-        // Rendu des paragraphes et listes à puces
-        const paragraphsXml = slideItem.items
-          .map((it) => {
-            if (it.type === 'empty_line') {
-              const ptSz = it.isLeading ? '800' : '1200';
-              return `
+        const renderItemsToParagraphsXml = (itemsList) =>
+          (itemsList || [])
+            .map((it) => {
+              if (it.type === 'empty_line') {
+                const ptSz = it.isLeading ? '800' : '1200';
+                return `
           <a:p>
             <a:pPr marL="0" indent="0"><a:buNone/></a:pPr>
             <a:endParaRPr lang="fr-FR" sz="${ptSz}"/>
           </a:p>`;
-            } else if (it.type === 'list_item') {
-              const lvl = Math.min(it.level || 0, 4);
-              return `
+              } else if (it.type === 'list_item') {
+                const lvl = Math.min(it.level || 0, 4);
+                return `
           <a:p>
             <a:pPr lvl="${lvl}"/>
             ${formatRunsToXml(it.runs)}
           </a:p>`;
-            } else {
-              return `
+              } else {
+                const isColHeader = it.type === 'header';
+                const runsToRender = isColHeader
+                  ? (it.runs || []).map((r) => ({ ...r, format: { ...r.format, bold: true } }))
+                  : it.runs;
+                return `
           <a:p>
-            <a:pPr marL="0" indent="0"><a:buNone/></a:pPr>
-            ${formatRunsToXml(it.runs)}
+            <a:pPr marL="0" indent="0"${isColHeader ? ' algn="ctr"' : ''}><a:buNone/></a:pPr>
+            ${formatRunsToXml(runsToRender)}
           </a:p>`;
-            }
-          })
-          .join('');
+              }
+            })
+            .join('');
 
-        const bodyPhXml =
-          layout.bodyType === 'obj'
-            ? `<p:ph idx="${layout.bodyIdx || '1'}"/>`
-            : layout.bodyIdx
-            ? `<p:ph type="body" idx="${layout.bodyIdx}"/>`
-            : `<p:ph type="body"/>`;
+        if (slideItem.columns && slideItem.columns.length >= 2) {
+          const baseBounds = layout.bodyBounds || {
+            x: '735013',
+            y: '1144588',
+            cx: '10937875',
+            cy: '5137150',
+          };
+          const bounds = applyEmptyLineShift(baseBounds);
+          let colAreaY = parseInt(bounds.y, 10);
+          let colAreaCy = parseInt(bounds.cy, 10);
+          const totalCx = parseInt(bounds.cx, 10);
+          const baseX = parseInt(bounds.x, 10);
 
-        spTreeShapes += `
+          const preItems = (slideItem.preColumnItems || []).filter(
+            (it) => it.type !== 'empty_line'
+          );
+          const postItems = (slideItem.postColumnItems || []).filter(
+            (it) => it.type !== 'empty_line'
+          );
+
+          if (preItems.length > 0) {
+            const preH = Math.min(900000, Math.floor(colAreaCy * 0.22));
+            const preXml = renderItemsToParagraphsXml(preItems);
+            spTreeShapes += `
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="${shapeId++}" name="Introduction colonnes"/>
+          <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="${baseX}" y="${colAreaY}"/><a:ext cx="${totalCx}" cy="${preH}"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr anchor="t"/>
+          <a:lstStyle/>
+          ${preXml}
+        </p:txBody>
+      </p:sp>`;
+            colAreaY += preH + 120000;
+            colAreaCy -= preH + 120000;
+          }
+
+          let postH = 0;
+          if (postItems.length > 0) {
+            postH = Math.min(950000, Math.floor(colAreaCy * 0.25));
+            colAreaCy -= postH + 120000;
+          }
+
+          const cols = slideItem.columns;
+          const gapEmu = 180000;
+          const availableCx = Math.max(
+            1000000,
+            totalCx - gapEmu * Math.max(0, cols.length - 1)
+          );
+          const totalRatio =
+            cols.reduce((sum, col) => sum + (Number(col.ratio) || 1), 0) || 1;
+
+          let currentX = baseX;
+          cols.forEach((col, colIdx) => {
+            const ratio = Number(col.ratio) || 1;
+            const colCx = Math.floor((ratio / totalRatio) * availableCx);
+            const colXml = renderItemsToParagraphsXml(col.items);
+            spTreeShapes += `
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="${shapeId++}" name="Colonne ${colIdx + 1}"/>
+          <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="${currentX}" y="${colAreaY}"/><a:ext cx="${colCx}" cy="${Math.max(800000, colAreaCy)}"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr anchor="t"/>
+          <a:lstStyle/>
+          ${colXml || `<a:p><a:r><a:rPr lang="fr-FR"/><a:t></a:t></a:r></a:p>`}
+        </p:txBody>
+      </p:sp>`;
+            currentX += colCx + gapEmu;
+          });
+
+          if (postItems.length > 0) {
+            const postY = colAreaY + Math.max(800000, colAreaCy) + 120000;
+            const postXml = renderItemsToParagraphsXml(postItems);
+            spTreeShapes += `
+      <p:sp>
+        <p:nvSpPr>
+          <p:cNvPr id="${shapeId++}" name="Synthèse colonnes"/>
+          <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="${baseX}" y="${postY}"/><a:ext cx="${totalCx}" cy="${postH}"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr anchor="t"/>
+          <a:lstStyle/>
+          ${postXml}
+        </p:txBody>
+      </p:sp>`;
+          }
+        } else {
+          // Rendu des paragraphes et listes à puces standard dans le placeholder body du masque
+          const paragraphsXml = renderItemsToParagraphsXml(slideItem.items);
+
+          const bodyPhXml =
+            layout.bodyType === 'obj'
+              ? `<p:ph idx="${layout.bodyIdx || '1'}"/>`
+              : layout.bodyIdx
+              ? `<p:ph type="body" idx="${layout.bodyIdx}"/>`
+              : `<p:ph type="body"/>`;
+
+          spTreeShapes += `
       <p:sp>
         <p:nvSpPr>
           <p:cNvPr id="${shapeId++}" name="Contenu"/>
@@ -1145,6 +1335,7 @@ export async function generatePresentationFromTemplate(
           ${paragraphsXml || `<a:p><a:r><a:rPr lang="fr-FR"/><a:t></a:t></a:r></a:p>`}
         </p:txBody>
       </p:sp>`;
+        }
       }
     }
 

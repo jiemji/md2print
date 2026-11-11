@@ -10,6 +10,7 @@
  * - { type: 'image', alt: string, src: string, raw: string }
  * - { type: 'mermaid', code: string, raw: string }
  * - { type: 'html_exec', code: string, raw: string }
+ * - { type: 'timeline', steps: Array, raw: string }
  * - { type: 'empty_line', count: number, raw: string }
  * - { type: 'separator', raw: string }
  * @requires utils
@@ -21,6 +22,7 @@ import {
   parseMetricTag,
   resolveMetricClass,
   isExecutableHtmlFence,
+  parseTimelineStep,
 } from './utils.js';
 
 const DEFAULT_FORMAT = Object.freeze({
@@ -364,6 +366,40 @@ export const parseToAST = (mdText) => {
         runs: extractInlineStyles(text),
       });
       i++;
+      continue;
+    }
+
+    // --- Frise chronologique ([frise]...[/frise], [timeline]...[/timeline], :::frise...:::) ---
+    const isBracketTimelineOpen = /^\[\s*(?:frise|timeline)\s*\]$/i.test(trimmedBoth);
+    const isColonTimelineOpen = /^:::\s*(?:frise|timeline)$/i.test(trimmedBoth);
+    if (isBracketTimelineOpen || isColonTimelineOpen) {
+      const startLine = i;
+      const rawTimelineLines = [lines[i]];
+      const steps = [];
+      i++;
+      while (i < lines.length) {
+        const curTrimmed = lines[i].trim();
+        const isClosing = isBracketTimelineOpen
+          ? /^\[\s*\/\s*(?:frise|timeline)\s*\]$/i.test(curTrimmed)
+          : /^:::(?:\s*\/\s*(?:frise|timeline))?$/i.test(curTrimmed);
+        rawTimelineLines.push(lines[i]);
+        if (isClosing) {
+          i++;
+          break;
+        }
+        const step = parseTimelineStep(lines[i]);
+        if (step && (step.badge || step.title)) {
+          steps.push(step);
+        }
+        i++;
+      }
+      ast.push({
+        type: 'timeline',
+        steps,
+        raw: rawTimelineLines.join('\n'),
+        startLine,
+        endLine: Math.max(startLine, i - 1),
+      });
       continue;
     }
 

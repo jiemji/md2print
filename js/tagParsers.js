@@ -95,17 +95,21 @@ export const BADGE_CONFIGS = {
   info: 'badge-info',
   note: 'badge-info',
   blue: 'badge-info',
+  bleu: 'badge-info',
   success: 'badge-success',
+  succes: 'badge-success',
   tip: 'badge-success',
   astuce: 'badge-success',
   valide: 'badge-success',
   ok: 'badge-success',
   green: 'badge-success',
+  vert: 'badge-success',
   warning: 'badge-warning',
   warn: 'badge-warning',
   avertissement: 'badge-warning',
   orange: 'badge-warning',
   yellow: 'badge-warning',
+  jaune: 'badge-warning',
   danger: 'badge-danger',
   error: 'badge-danger',
   critical: 'badge-danger',
@@ -113,6 +117,7 @@ export const BADGE_CONFIGS = {
   attention: 'badge-danger',
   caution: 'badge-danger',
   red: 'badge-danger',
+  rouge: 'badge-danger',
   important: 'badge-important',
   purple: 'badge-important',
   violet: 'badge-important',
@@ -120,6 +125,7 @@ export const BADGE_CONFIGS = {
   neutre: 'badge-neutral',
   gray: 'badge-neutral',
   grey: 'badge-neutral',
+  gris: 'badge-neutral',
   default: 'badge-neutral',
 };
 
@@ -139,6 +145,7 @@ export function resolveBadgeClass(rawType) {
  */
 export const KNOWN_METRIC_VARIANTS = new Set([
   'success',
+  'succes',
   'danger',
   'warning',
   'info',
@@ -166,6 +173,7 @@ export const KNOWN_METRIC_VARIANTS = new Set([
  */
 export const METRIC_VARIANT_MAP = {
   success: 'metric-card-success',
+  succes: 'metric-card-success',
   vert: 'metric-card-success',
   ok: 'metric-card-success',
   tip: 'metric-card-success',
@@ -449,4 +457,102 @@ export function parseColumnTagParams(rawArgs = '') {
 
   return { ratio, title: rest.join(':').trim(), colorVariant: '', colorHex: '', fontScale: 1 };
 }
+
+/**
+ * Palette de couleurs pour les étapes de frise chronologique (`[frise]...[/frise]`),
+ * utilisée par les moteurs d'export Office (Word/PowerPoint).
+ * @type {Object<string, { border: string, bg: string, text: string }>}
+ */
+export const TIMELINE_COLOR_MAP = {
+  primary: { border: '0B5ED7', bg: 'EFF6FF', text: '0B5ED7' },
+  danger: { border: 'DC2626', bg: 'FEF2F2', text: 'B91C1C' },
+  warning: { border: 'D97706', bg: 'FFFBEB', text: 'B45309' },
+  success: { border: '16A34A', bg: 'F0FDF4', text: '15803D' },
+  info: { border: '0891B2', bg: 'ECFEFF', text: '0E7490' },
+  purple: { border: '9333EA', bg: 'FAF5FF', text: '7E22CE' },
+  muted: { border: '64748B', bg: 'F8FAFC', text: '475569' },
+  dark: { border: '1E293B', bg: 'F1F5F9', text: '0F172A' },
+};
+
+/**
+ * @typedef {Object} TimelineStep
+ * @property {string} badge - Libellé textuel court du jalon (ex: 'T0', '4 h')
+ * @property {string} colorName - Identifiant de la variante de couleur ('primary', 'danger', 'warning', 'success', 'info', 'purple', 'muted', 'dark')
+ * @property {string} title - Titre en gras de l'étape
+ * @property {string} desc - Description ou texte explicatif associé
+ */
+
+/**
+ * Analyse une ligne d'étape de frise chronologique et en extrait les composants structurés.
+ * Formats pris en charge :
+ *  - `- **Jalon** (couleur) | **Titre** | Description`
+ *  - `- Jalon (couleur) : Titre : Description`
+ *  - `1. Jalon | Titre | Description`
+ * @function parseTimelineStep
+ * @param {string} rawLine - Ligne brute Markdown à analyser
+ * @returns {TimelineStep|null} Objet d'étape structuré ou null si la ligne est vide
+ */
+export function parseTimelineStep(rawLine) {
+  if (!rawLine || !rawLine.trim()) return null;
+  const trimmed = rawLine.trim();
+  if (trimmed === '%%MD2PRINT_EMPTY_LINE%%') return null;
+  const withoutBullet = trimmed.replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
+  if (!withoutBullet) return null;
+
+  let parts = [];
+  if (withoutBullet.includes('|')) {
+    parts = withoutBullet.split('|').map((p) => p.trim());
+  } else if (withoutBullet.includes(' : ')) {
+    parts = withoutBullet.split(' : ').map((p) => p.trim());
+  } else {
+    const match = withoutBullet.match(/^(\*\*[^*]+\*\*|\([^)]+\))\s*(.*)/);
+    if (match) {
+      parts = [match[1].trim(), match[2].trim()];
+    } else {
+      parts = [withoutBullet];
+    }
+  }
+
+  const badgeRaw = parts[0] || '';
+  const titleRaw = parts[1] || '';
+  const descRaw = parts.slice(2).join(' | ').trim();
+
+  let colorName = 'primary';
+  let badgeText = badgeRaw;
+
+  const colorMatch = badgeText.match(/\(([^)]+)\)/);
+  if (colorMatch) {
+    const rawColor = colorMatch[1].trim().toLowerCase();
+    badgeText = badgeText.replace(/\([^)]+\)/, '').trim();
+    if (/^(danger|rouge|red|critique|alerte?)$/.test(rawColor)) {
+      colorName = 'danger';
+    } else if (/^(warning|orange|amber|attention)$/.test(rawColor)) {
+      colorName = 'warning';
+    } else if (/^(success|vert|green|valide|ok)$/.test(rawColor)) {
+      colorName = 'success';
+    } else if (/^(info|bleu|blue|cyan)$/.test(rawColor)) {
+      colorName = 'info';
+    } else if (/^(purple|violet|magenta)$/.test(rawColor)) {
+      colorName = 'purple';
+    } else if (/^(muted|gris|gray|grey)$/.test(rawColor)) {
+      colorName = 'muted';
+    } else if (/^(dark|sombre|navy)$/.test(rawColor)) {
+      colorName = 'dark';
+    }
+  }
+
+  const cleanBadge = badgeText.replace(/[*_`]/g, '').trim();
+  let cleanTitle = titleRaw.replace(/^[*_`\s]+|[*_`\s]+$/g, '').trim();
+  if (!cleanTitle && !descRaw) {
+    cleanTitle = cleanBadge;
+  }
+
+  return {
+    badge: cleanBadge,
+    colorName,
+    title: cleanTitle,
+    desc: descRaw,
+  };
+}
+
 
