@@ -1790,11 +1790,25 @@ function syncSlideToCursor() {
 // --- Exports (HTML, DOCX, PPTX) ---
 
 /**
- * F4 — Exporte le document au format HTML autonome (.html) avec CSS, schémas Mermaid vectoriels et menu de navigation.
+ * F4 — Exporte le document au format HTML autonome (.html) avec CSS nettoyé,
+ * compression automatique des images locales et CSS héritées d'IndexedDB,
+ * schémas Mermaid vectoriels et menu de navigation.
+ * @async
  * @returns {Promise<void>}
  */
 async function handleExportHtml() {
   state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+
+  // Garantit que toute image locale ou image CSS restaurée d'IndexedDB est optimisée avant export
+  for (const [imgKey, rawUrl] of Object.entries(state.localImages)) {
+    state.localImages[imgKey] = await compressImageDataUrl(rawUrl);
+  }
+  if (state.currentViewport === 'slide' && state.slideCss) {
+    state.slideCss = await compressEmbeddedImagesInText(state.slideCss);
+  } else if (state.reportCss) {
+    state.reportCss = await compressEmbeddedImagesInText(state.reportCss);
+  }
+
   const title = resolveDocumentTitle();
   const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
   setMermaidTheme(activeMermaidPreset);

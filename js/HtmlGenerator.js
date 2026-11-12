@@ -6,7 +6,8 @@
  * les cartouches de données/métriques agrandies (5x), les blocs de composants HTML/JS exécutables,
  * la disposition multi-colonnes flexible ([colonne:taille:titre:couleur:ratio]) avec en-têtes
  * centrés (H4), palette typologique de couleur de fond/bordure, ajustement d'échelle de police
- * interne (--col-font-scale), et le support des modes Rapport continu et Diaporama interactif 16:9.
+ * interne (--col-font-scale), les frises chronologiques ([frise]...[/frise]),
+ * la mise à jour incrémentale de l'iframe d'aperçu, et le support des modes Rapport continu et Diaporama interactif 16:9.
  * @requires utils
  * @requires SlidePlanner
  * @requires defaultThemeStyles
@@ -696,28 +697,34 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
 };
 
 /**
- * Génère le document HTML complet et autonome (mode Rapport continu ou Diaporama 16:9).
- * Embarque toutes les ressources nécessaires (images Base64, diagrammes Mermaid vectoriels pré-rendus,
- * styles CSS réactifs calculés pour contraindre les slides en ratio 16:9 tout en maximisant l'espace utile,
- * cartouche de numérotation centré, bandeau interactif et sommaire dynamique).
- * @function generateStandaloneHTML
- * @param {string} rawMarkdown - Contenu Markdown source avec syntaxe étendue (badges, métriques, colonnes, Mermaid)
- * @param {object} [options={}] - Options de configuration de la génération
- * @param {string} [options.docTitle='Document'] - Titre principal du document ou de la présentation
- * @param {'report'|'slide'} [options.viewMode='report'] - Mode d'affichage ('report' pour flux continu, 'slide' pour diaporama)
- * @param {Record<string, string>} [options.localImages={}] - Dictionnaire associatif des images locales Base64
- * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des diagrammes Mermaid pré-générés en SVG
- * @param {object|null} [options.pptConfig=null] - Configuration PowerPoint issue de output_config.json
- * @param {string} [options.templateId='default'] - Identifiant du modèle PPTX de référence
- * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision Rapport
- * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision Slide
- * @returns {string} Code HTML autonome complet, prêt pour affichage iframe ou téléchargement standalone
+ * Supprime le bloc de métadonnées JSON `/* [md2print-config...] [/md2print-config] * /` d'une feuille CSS
+ * afin d'éviter la duplication des images Base64 de fond dans le HTML exporté et l'iframe d'aperçu.
+ * @param {string|null} css - Feuille CSS brute
+ * @returns {string} Feuille CSS nettoyée prête pour injection dans `<style>`
  */
+function stripThemeConfigComment(css) {
+  if (!css || typeof css !== 'string') return '';
+  return css
+    .replace(
+      /\/\*\s*\[md2print-config(?::mode=(?:report|slide))?\][\s\S]*?\[\/md2print-config\]\s*\*\//g,
+      ''
+    )
+    .trimStart();
+}
+
 /**
  * Construit les fragments de contenu HTML, le sommaire et la feuille de style active
  * nécessaires pour l'aperçu ou l'export HTML autonome.
  * @param {string} rawMarkdown - Contenu Markdown source
  * @param {object} [options={}] - Options de rendu
+ * @param {string} [options.docTitle='Document'] - Titre principal du document ou de la présentation
+ * @param {'report'|'slide'} [options.viewMode='report'] - Mode d'affichage ('report' ou 'slide')
+ * @param {Record<string, string>} [options.localImages={}] - Dictionnaire des images locales Base64
+ * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des diagrammes Mermaid pré-générés en SVG
+ * @param {object|null} [options.pptConfig=null] - Configuration PowerPoint issue de output_config.json
+ * @param {string} [options.templateId='default'] - Identifiant du modèle PPTX de référence
+ * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision Rapport
+ * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision Slide
  * @returns {{ docTitle: string, viewMode: string, isSlide: boolean, formattedDate: string, tocList: Array, tocItemsHTML: string, parsedContent: string, slidesHTML: string, activeCSS: string }}
  */
 function buildPreviewParts(rawMarkdown, options = {}) {
@@ -820,9 +827,10 @@ function buildPreviewParts(rawMarkdown, options = {}) {
       .join('');
   }
 
-  const activeCSS = isSlide
+  const rawActiveCSS = isSlide
     ? slideCss || DEFAULT_SLIDE_CSS
     : reportCss || DEFAULT_REPORT_CSS;
+  const activeCSS = stripThemeConfigComment(rawActiveCSS);
 
   return {
     docTitle,
@@ -1602,8 +1610,16 @@ const REPORT_CONTAINMENT_CSS = `
  * styles CSS réactifs calculés pour contraindre les slides en ratio 16:9 tout en maximisant l'espace utile,
  * cartouche de numérotation centré, bandeau interactif et sommaire dynamique).
  * @function generateStandaloneHTML
- * @param {string} rawMarkdown - Contenu Markdown source avec syntaxe étendue (badges, métriques, colonnes, Mermaid)
+ * @param {string} rawMarkdown - Contenu Markdown source avec syntaxe étendue (badges, métriques, colonnes, frises, Mermaid)
  * @param {object} [options={}] - Options de configuration de la génération
+ * @param {string} [options.docTitle='Document'] - Titre principal du document ou de la présentation
+ * @param {'report'|'slide'} [options.viewMode='report'] - Mode d'affichage ('report' pour flux continu, 'slide' pour diaporama)
+ * @param {Record<string, string>} [options.localImages={}] - Dictionnaire associatif des images locales Base64
+ * @param {Record<string, string>} [options.mermaidSvgMap={}] - Dictionnaire des diagrammes Mermaid pré-générés en SVG
+ * @param {object|null} [options.pptConfig=null] - Configuration PowerPoint issue de output_config.json
+ * @param {string} [options.templateId='default'] - Identifiant du modèle PPTX de référence
+ * @param {string|null} [options.reportCss=null] - Feuille de style CSS personnalisée pour la vision Rapport
+ * @param {string|null} [options.slideCss=null] - Feuille de style CSS personnalisée pour la vision Slide
  * @returns {string} Code HTML autonome complet, prêt pour affichage iframe ou téléchargement standalone
  */
 export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
@@ -1954,7 +1970,7 @@ function activateExecutableScripts(doc, rootEl) {
 
 /**
  * Met à jour l'iframe d'aperçu de manière incrémentale lorsque le mode ('report' ou 'slide')
- * est déjà initialisé, évitant ainsi de détruire le DOM et de re-parser les ~900 Ko de CSS
+ * est déjà initialisé, évitant ainsi de détruire le DOM et de re-parser la feuille de style active
  * à chaque frappe. Effectue une initialisation complète uniquement lors du premier chargement
  * ou d'un changement de mode.
  * @param {HTMLIFrameElement} iframe - Élément iframe d'aperçu
@@ -1993,10 +2009,11 @@ export const updateIframePreview = (iframe, rawMarkdown, options = {}) => {
     doc.close();
     const newStyleEl = doc.getElementById('documentStyle');
     if (newStyleEl) {
-      newStyleEl.__lastActiveCss =
+      const rawCss =
         targetMode === 'slide'
           ? options.slideCss || DEFAULT_SLIDE_CSS
           : options.reportCss || DEFAULT_REPORT_CSS;
+      newStyleEl.__lastActiveCss = stripThemeConfigComment(rawCss);
     }
     return { didFullReload: true };
   }
@@ -2011,7 +2028,7 @@ export const updateIframePreview = (iframe, rawMarkdown, options = {}) => {
     activeCSS,
   } = buildPreviewParts(rawMarkdown, options);
 
-  // Ne met à jour la feuille de style de ~900 Ko que si le CSS actif a réellement changé
+  // Ne met à jour la feuille de style que si le CSS actif a réellement changé
   if (styleEl.__lastActiveCss !== activeCSS) {
     styleEl.textContent = `${activeCSS}\n${isSlide ? SLIDE_CONTAINMENT_CSS : REPORT_CONTAINMENT_CSS}`;
     styleEl.__lastActiveCss = activeCSS;
