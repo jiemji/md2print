@@ -11,10 +11,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 
-  <!-- Bibliothèques tierces locales (100 % hors-ligne ; JSZip et docx sont chargés à la demande lors de l'export) -->
-  <script defer src="vendor/marked.min.js"></script>
-  <script defer src="vendor/highlight.min.js"></script>
-  <script defer src="vendor/mermaid.min.js"></script>
+  <!-- Bibliothèque Marked.js locale (Mermaid, Highlight.js, JSZip et docx sont chargés à la demande) -->
+  <script defer fetchpriority="high" src="vendor/marked.min.js"></script>
 </head>
 <body>
   <div class="app-container">

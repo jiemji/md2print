@@ -329,10 +329,21 @@ function formatRunsToXml(runs) {
     const iAttr = r.format?.italic ? ' i="1"' : '';
     const uAttr = r.format?.underline ? ' u="sng"' : '';
     const sAttr = r.format?.strike ? ' strike="sngStrike"' : '';
+    const szAttr = r.format?.metric ? ' sz="2800"' : r.format?.badge ? ' sz="1100"' : '';
+    const rawColor = r.format?.color ? String(r.format.color).replace(/^#/, '').toUpperCase() : '';
+    const colorXml = /^[0-9A-F]{6}$/.test(rawColor)
+      ? `<a:solidFill><a:srgbClr val="${rawColor}"/></a:solidFill>`
+      : '';
+    const rawBg = r.format?.background
+      ? String(r.format.background).replace(/^#/, '').toUpperCase()
+      : '';
+    const highlightXml = /^[0-9A-F]{6}$/.test(rawBg)
+      ? `<a:highlight><a:srgbClr val="${rawBg}"/></a:highlight>`
+      : '';
     const codeFont = r.format?.code
       ? '<a:latin typeface="Consolas"/><a:cs typeface="Consolas"/>'
       : '';
-    const rPr = `<a:rPr lang="fr-FR"${bAttr}${iAttr}${uAttr}${sAttr}>${codeFont}</a:rPr>`;
+    const rPr = `<a:rPr lang="fr-FR"${szAttr}${bAttr}${iAttr}${uAttr}${sAttr}>${colorXml}${highlightXml}${codeFont}</a:rPr>`;
 
     const lines = String(r.text ?? '').split('\n');
     lines.forEach((line, idx) => {
@@ -389,7 +400,11 @@ function buildTableGraphicFrame(rows, shapeId, bounds, tableFormat = {}) {
             .map((r) => {
               const b = isHeader || r.format?.bold ? ' b="1"' : '';
               const it = r.format?.italic ? ' i="1"' : '';
-              return `<a:r><a:rPr lang="fr-FR"${b}${it}><a:solidFill><a:srgbClr val="${textHex}"/></a:solidFill></a:rPr><a:t>${escapeXml(
+              const runColor =
+                !isHeader && r.format?.color
+                  ? String(r.format.color).replace(/^#/, '').toUpperCase()
+                  : textHex;
+              return `<a:r><a:rPr lang="fr-FR"${b}${it}><a:solidFill><a:srgbClr val="${runColor}"/></a:solidFill></a:rPr><a:t>${escapeXml(
                 r.text
               )}</a:t></a:r>`;
             })

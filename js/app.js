@@ -34,6 +34,7 @@ import {
   pruneUnusedLocalImages,
   renderMermaidBlocksMap,
   setMermaidTheme,
+  ensureHighlightLoadedIfNeeded,
 } from './utils.js';
 import {
   createCartoucheElement,
@@ -68,10 +69,8 @@ import {
   loadStoredState,
 } from './StorageService.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
-import { StyleSettingsManager, parseConfigFromCss } from './StyleSettingsManager.js';
+import { parseConfigFromCss } from './themeCssEngine.js';
 import { generateStandaloneHTML, updateIframePreview } from './HtmlGenerator.js';
-import { generateDocx } from './DocxGenerator.js';
-import { generatePptx } from './PptxGenerator.js';
 import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 
 /**
@@ -620,15 +619,17 @@ function syncFromEditorDOM() {
 let styleSettingsManager = null;
 
 /**
- * Récupère ou instancie en singleton le gestionnaire de paramétrage des styles de balises (StyleSettingsManager).
+ * Récupère ou instancie en singleton le gestionnaire de paramétrage des styles de balises (StyleSettingsManager),
+ * chargé dynamiquement à la demande lors de l'ouverture de l'onglet Styles.
  * Configure les callbacks métier :
  * - onApply : sauvegarde les styles modifiés et les configurations JSON dans IndexedDB et actualise l'aperçu.
  * - onReset : recharge le fichier CSS de référence serveur (slide.css ou report.css), purge les surcharges d'IndexedDB pour ce mode et réinitialise l'interface.
  * - onClose : masque l'interface de paramétrage et restaure l'espace de travail d'édition.
- * @returns {StyleSettingsManager|null} Instance du gestionnaire ou null si le conteneur DOM est absent
+ * @returns {Promise<import('./StyleSettingsManager.js').StyleSettingsManager|null>} Instance du gestionnaire ou null si le conteneur DOM est absent
  */
-function getOrCreateStyleSettingsManager() {
+async function getOrCreateStyleSettingsManager() {
   if (!styleSettingsManager && dom.pageStyleConfig) {
+    const { StyleSettingsManager } = await import('./StyleSettingsManager.js');
     styleSettingsManager = new StyleSettingsManager({
       container: dom.pageStyleConfig,
       onApply: async ({ reportCss, slideCss, configs }) => {
@@ -682,10 +683,10 @@ function getOrCreateStyleSettingsManager() {
 
 /**
  * Affiche la page plein écran de paramétrage des styles de balises.
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function openStyleSettingsPage() {
-  const manager = getOrCreateStyleSettingsManager();
+async function openStyleSettingsPage() {
+  const manager = await getOrCreateStyleSettingsManager();
   if (manager) {
     if (state.themeConfigs) {
       if (state.themeConfigs.report) {
@@ -1715,7 +1716,10 @@ async function updatePreview() {
 
   const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
   setMermaidTheme(activeMermaidPreset);
-  const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
+  const [mermaidSvgMap] = await Promise.all([
+    renderMermaidBlocksMap(state.markdown),
+    ensureHighlightLoadedIfNeeded(state.markdown),
+  ]);
   const { didFullReload } = updateIframePreview(iframe, state.markdown, {
     docTitle: resolveDocumentTitle(),
     viewMode: state.currentViewport,
@@ -1812,7 +1816,10 @@ async function handleExportHtml() {
   const title = resolveDocumentTitle();
   const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
   setMermaidTheme(activeMermaidPreset);
-  const mermaidSvgMap = await renderMermaidBlocksMap(state.markdown);
+  const [mermaidSvgMap] = await Promise.all([
+    renderMermaidBlocksMap(state.markdown),
+    ensureHighlightLoadedIfNeeded(state.markdown),
+  ]);
   const html = generateStandaloneHTML(state.markdown, {
     docTitle: title,
     viewMode: state.currentViewport,
@@ -1846,6 +1853,7 @@ async function handleExportDocx() {
   showToast('Génération du fichier Word (.docx) en cours...');
 
   try {
+    const { generateDocx } = await import('./DocxGenerator.js');
     const blob = await generateDocx(
       state.markdown,
       title,
@@ -1878,6 +1886,7 @@ async function handleExportPptx() {
   showToast('Génération de la présentation PowerPoint (.pptx) en cours...');
 
   try {
+    const { generatePptx } = await import('./PptxGenerator.js');
     const blob = await generatePptx(
       state.markdown,
       title,

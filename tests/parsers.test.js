@@ -17,7 +17,11 @@ import { planSlides, findSlideIndexForLine } from '../js/SlidePlanner.js';
 import { extractAndGroupColumns, extractAndRenderTimelines } from '../js/HtmlGenerator.js';
 import { segmentMarkdownToSlides, blockToPlainText } from '../js/PptxTemplateEngine.js';
 import { generateDocx } from '../js/DocxGenerator.js';
-import { parseConfigFromCss } from '../js/StyleSettingsManager.js';
+import {
+  parseConfigFromCss,
+  generateThemeCss,
+  DEFAULT_STYLE_CONFIG,
+} from '../js/themeCssEngine.js';
 import { compressImageDataUrl, compressEmbeddedImagesInText } from '../js/utils.js';
 
 describe('tagParsers — Callouts, Badges, KPIs, Colonnes et Frises', () => {
@@ -126,8 +130,13 @@ describe('MarkdownParser — AST et styles inline', () => {
     );
     assert.ok(runs.some((r) => r.text === 'gras' && r.format.bold === true));
     assert.ok(runs.some((r) => r.text === 'code' && r.format.code === true));
-    assert.ok(runs.some((r) => r.format.badge === true && r.format.badgeType === 'info'));
-    assert.ok(runs.some((r) => r.format.metric === true && r.format.metricVal === '98%'));
+    const badgeRun = runs.find((r) => r.format.badge === true && r.format.badgeType === 'info');
+    assert.ok(badgeRun);
+    assert.equal(badgeRun.format.color, '1D4ED8');
+    assert.equal(badgeRun.format.background, 'DBEAFE');
+    const metricRun = runs.find((r) => r.format.metric === true && r.format.metricVal === '98%');
+    assert.ok(metricRun);
+    assert.equal(metricRun.format.color, '16A34A');
   });
 
   it('parseToAST construit des noeuds types incluant table, callout et timeline ([frise])', () => {
@@ -311,6 +320,15 @@ describe('HtmlGenerator & StyleSettingsManager — Extraction colonnes, frises e
     assert.equal(parsed.config.timeline.badgeFontSize, '1.3rem');
     assert.equal(parsed.config.timeline.titleFontSize, '1.1rem');
     assert.equal(parsed.config.timeline.descFontSize, '0.9rem');
+
+    // Vérification de la non-duplication Base64 dans generateThemeCss
+    const slideCfg = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG.slide));
+    slideCfg.contentSlide.bgImage = 'data:image/jpeg;base64,SAMPLE_BG_DATA';
+    const generatedCss = generateThemeCss('slide', slideCfg);
+    const matches = generatedCss.match(/SAMPLE_BG_DATA/g) || [];
+    assert.equal(matches.length, 1, 'L image Base64 ne doit apparaitre qu une seule fois dans le CSS');
+    const reparsed = parseConfigFromCss(generatedCss, 'slide');
+    assert.equal(reparsed.config.contentSlide.bgImage, 'data:image/jpeg;base64,SAMPLE_BG_DATA');
   });
 
   it('generateDocx construit des tableaux Word multi-colonnes pour [colonne] et [frise]', async () => {

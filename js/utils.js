@@ -38,6 +38,7 @@ import {
   getMermaidTheme,
   setMermaidTheme,
   clearMermaidCache,
+  ensureMermaidLoaded,
   renderMermaidToSvg,
   renderMermaidBlocksMap,
   MERMAID_FRAME,
@@ -72,6 +73,7 @@ export {
   getMermaidTheme,
   setMermaidTheme,
   clearMermaidCache,
+  ensureMermaidLoaded,
   renderMermaidToSvg,
   renderMermaidBlocksMap,
   MERMAID_FRAME,
@@ -135,6 +137,38 @@ export const ensureDocxLoaded = async () => {
     ),
     ensureJsZipLoaded(),
   ]);
+};
+
+/**
+ * Garantit que la bibliothèque locale Highlight.js (vendor/highlight.min.js) est chargée en mémoire.
+ * @returns {Promise<void>}
+ */
+export const ensureHighlightLoaded = () =>
+  loadVendorScript(
+    'vendor/highlight.min.js',
+    () => typeof window !== 'undefined' && Boolean(window.hljs)
+  );
+
+/**
+ * Charge Highlight.js à la demande uniquement si le texte Markdown contient un bloc de code
+ * autre que Mermaid ou HTML exécutable.
+ * @param {string} markdownText - Contenu Markdown à inspecter
+ * @returns {Promise<void>}
+ */
+export const ensureHighlightLoadedIfNeeded = async (markdownText) => {
+  if (!markdownText || typeof window === 'undefined' || window.hljs) return;
+  const codeFenceRegex = /^```+([^\r\n]*)/gm;
+  let match;
+  while ((match = codeFenceRegex.exec(markdownText)) !== null) {
+    const lang = (match[1] || '').trim().toLowerCase();
+    if (lang && lang !== 'mermaid' && !isExecutableHtmlFence(lang)) {
+      await ensureHighlightLoaded();
+      return;
+    }
+  }
+  if (/^```+\s*$/m.test(markdownText)) {
+    await ensureHighlightLoaded();
+  }
 };
 
 /**

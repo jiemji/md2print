@@ -36,6 +36,33 @@ const DEFAULT_FORMAT = Object.freeze({
   linkUrl: null,
 });
 
+const BADGE_OFFICE_COLORS = Object.freeze({
+  'badge-info': { color: '1D4ED8', background: 'DBEAFE' },
+  'badge-success': { color: '15803D', background: 'DCFCE7' },
+  'badge-warning': { color: 'B45309', background: 'FEF3C7' },
+  'badge-danger': { color: 'B91C1C', background: 'FEE2E2' },
+  'badge-important': { color: '6D28D9', background: 'EDE9FE' },
+  'badge-neutral': { color: '334155', background: 'F1F5F9' },
+});
+
+const METRIC_OFFICE_COLORS = Object.freeze({
+  'metric-card-info': '0284C7',
+  'metric-card-success': '16A34A',
+  'metric-card-warning': 'D97706',
+  'metric-card-danger': 'DC2626',
+  'metric-card-important': '7C3AED',
+  'metric-card-neutral': '475569',
+});
+
+const CALLOUT_OFFICE_COLORS = Object.freeze({
+  note: '0284C7',
+  info: '0284C7',
+  tip: '16A34A',
+  important: '7C3AED',
+  warning: 'D97706',
+  danger: 'DC2626',
+});
+
 /**
  * Extrait récursivement les styles inline d'un texte Markdown et retourne un tableau de runs formatés.
  * Gère : `code`, [libellé](url), ***gras+italique***, **gras**, __souligné__, <u>souligné</u>,
@@ -143,6 +170,8 @@ export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
       // [badge:type:texte] ou [badge:texte]
       const rawType = (match[20] || 'neutral').toLowerCase();
       const badgeText = match[21].trim();
+      const badgeClass = resolveBadgeClass(rawType);
+      const badgePalette = BADGE_OFFICE_COLORS[badgeClass] || BADGE_OFFICE_COLORS['badge-neutral'];
       runs.push({
         text: `[ ${badgeText} ]`,
         format: {
@@ -150,11 +179,15 @@ export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
           bold: true,
           badge: true,
           badgeType: rawType,
+          color: badgePalette.color,
+          background: badgePalette.background,
         },
       });
     } else if (match[22] !== undefined) {
       // [chiffre:valeur:libellé:variante]
       const parsed = parseMetricTag(match[24], match[25], match[26]);
+      const metricClass = resolveMetricClass(parsed.variant);
+      const metricColor = METRIC_OFFICE_COLORS[metricClass] || 'C00000';
       runs.push({
         text: parsed.val,
         format: {
@@ -164,6 +197,7 @@ export const extractInlineStyles = (text, inheritedFormat = DEFAULT_FORMAT) => {
           metricVal: parsed.val,
           metricLabel: parsed.label,
           metricVariant: parsed.variant,
+          color: metricColor,
         },
       });
       if (parsed.label) {
@@ -496,8 +530,12 @@ export const parseToAST = (mdText) => {
         const callout = resolveCallout(rawType, rawTitle);
         const contentLines = quoteLines.slice(1);
         const quoteText = contentLines.join('\n');
+        const titleColor = CALLOUT_OFFICE_COLORS[callout.kind] || '0284C7';
         const runs = [
-          { text: `${callout.title}\n`, format: { bold: true } },
+          {
+            text: `${callout.title}\n`,
+            format: { ...DEFAULT_FORMAT, bold: true, color: titleColor, calloutTitle: true },
+          },
           ...(quoteText.trim() ? extractInlineStyles(quoteText) : []),
         ];
         ast.push({

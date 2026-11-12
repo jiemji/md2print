@@ -427,6 +427,11 @@ function toDocxRuns(runs, extraFormat = {}) {
   const docxRuns = [];
   runs.forEach((r) => {
     const lines = String(r.text ?? '').split('\n');
+    const runBg = r.format?.background ? String(r.format.background).replace(/^#/, '') : null;
+    const resolvedColor = extraFormat.forceColor
+      ? extraFormat.color
+      : r.format?.color || extraFormat.color;
+    const runColor = (resolvedColor || '').replace(/^#/, '') || undefined;
     lines.forEach((lineText, lineIdx) => {
       docxRuns.push(
         new window.docx.TextRun({
@@ -436,11 +441,19 @@ function toDocxRuns(runs, extraFormat = {}) {
           italics: extraFormat.italic || r.format.italic,
           strike: r.format.strike,
           font: extraFormat.code || r.format.code ? 'Consolas' : undefined,
-          size: extraFormat.size || (r.format.metric ? 64 : undefined),
+          size: extraFormat.size || (r.format.metric ? 56 : r.format.badge ? 19 : undefined),
           underline: r.format.underline
             ? { type: window.docx.UnderlineType.SINGLE }
             : undefined,
-          color: extraFormat.color || r.format.color || undefined,
+          color: runColor,
+          shading:
+            runBg && window.docx?.ShadingType
+              ? {
+                  type: window.docx.ShadingType.CLEAR,
+                  color: 'auto',
+                  fill: runBg,
+                }
+              : undefined,
         })
       );
     });
@@ -485,20 +498,11 @@ function createDocxTable(rowsData, docConfig) {
           return new window.docx.TableCell({
             children: [
               new window.docx.Paragraph({
-                children: runs.map(
-                  (r) =>
-                    new window.docx.TextRun({
-                      text: r.text,
-                      bold: isH || r.format.bold,
-                      italics: r.format.italic,
-                      strike: r.format.strike,
-                      font: r.format.code ? 'Consolas' : undefined,
-                      underline: r.format.underline
-                        ? { type: window.docx.UnderlineType.SINGLE }
-                        : undefined,
-                      color,
-                    })
-                ),
+                children: toDocxRuns(runs, {
+                  bold: isH,
+                  color,
+                  forceColor: isH,
+                }),
               }),
             ],
             shading: { fill },

@@ -920,6 +920,37 @@ export const setMermaidTheme = (presetName) => {
  */
 export const clearMermaidCache = () => mermaidSvgCache.clear();
 
+let mermaidLoadPromise = null;
+
+/**
+ * Charge dynamiquement la bibliothèque locale vendor/mermaid.min.js à la demande
+ * uniquement lorsqu'un diagramme Mermaid standard doit être rendu.
+ * @returns {Promise<boolean>} true si window.mermaid est disponible
+ */
+export const ensureMermaidLoaded = () => {
+  if (typeof window !== 'undefined' && window.mermaid) {
+    return Promise.resolve(true);
+  }
+  if (typeof document === 'undefined') {
+    return Promise.resolve(false);
+  }
+  if (mermaidLoadPromise) {
+    return mermaidLoadPromise;
+  }
+  mermaidLoadPromise = new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'vendor/mermaid.min.js';
+    script.async = true;
+    script.onload = () => resolve(Boolean(window.mermaid));
+    script.onerror = () => {
+      mermaidLoadPromise = null;
+      resolve(false);
+    };
+    document.head.appendChild(script);
+  });
+  return mermaidLoadPromise;
+};
+
 /**
  * Initialise la bibliothèque locale window.mermaid avec le preset actif si disponible.
  * @returns {boolean}
@@ -1463,6 +1494,7 @@ export const renderMermaidToSvg = async (code) => {
   }
 
   // 2. Traitement standard Mermaid pour tous les autres diagrammes (flowchart, sequence, etc.)
+  await ensureMermaidLoaded();
   if (!ensureMermaidInitialized()) return null;
 
   const renderId = `md2print-mmd-${mermaidIdSeq++}`;
