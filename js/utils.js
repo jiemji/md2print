@@ -263,6 +263,176 @@ export const readFileAsDataURL = (file) =>
   });
 
 /**
+ * Compresse et redimensionne à la volée une Data URL d'image (via `<canvas>`)
+ * afin de maîtriser le poids du CSS, d'IndexedDB et des exports autonomes.
+ * - Préserve tels quels les formats vectoriels (`svg+xml`) et animés (`gif`).
+ * - Redimensionne proportionnellement dans la boîte `maxWidth` x `maxHeight` (défaut : 1920x1080).
+ * - Détecte automatiquement si l'image comporte de la transparence réelle (`alpha < 250`) :
+ *   - Si l'image est opaque : encode en JPEG (`image/jpeg`, qualité `0.82` par défaut),
+ *     nativement compatible avec HTML, CSS, Word (`.docx`) et PowerPoint (`.pptx`).
+ *   - Si l'image possède de la transparence : conserve le canal alpha en `image/png`.
+ * - Ne remplace l'image source que si la version compressée est effectivement plus légère.
+ *
+ * @param {string} dataUrl - Data URL Base64 d'origine
+ * @param {object} [options={}] - Options de compression
+ * @param {number} [options.maxWidth=1920] - Largeur maximale en pixels
+ * @param {number} [options.maxHeight=1080] - Hauteur maximale en pixels
+ * @param {number} [options.quality=0.82] - Qualité JPEG (entre 0.1 et 1.0)
+ * @param {number} [options.minLengthToCompress=40960] - Seuil minimal de longueur Base64 avant compression (~30 Ko)
+ * @returns {Promise<string>} Data URL optimisée
+ */
+export const compressImageDataUrl = (dataUrl, options = {}) =>
+  new Promise((resolve) => {
+    if (
+      typeof document === 'undefined' ||
+      typeof Image === 'undefined' ||
+      !dataUrl ||
+      typeof dataUrl !== 'string' ||
+      !dataUrl.startsWith('data:image/')
+    ) {
+      resolve(dataUrl);
+      return;
+    }
+
+    const mimeMatch = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/i);
+    if (!mimeMatch) {
+      resolve(dataUrl);
+      return;
+    }
+
+    const subType = mimeMatch[1].toLowerCase();
+    if (subType === 'svg+xml' || subType === 'gif') {
+      resolve(dataUrl);
+      return;
+    }
+
+    const maxWidth = options.maxWidth ?? 1920;
+    const maxHeight = options.maxHeight ?? 1080;
+    const quality = options.quality ?? 0.82;
+    const minLengthToCompress = options.minLengthToCompress ?? 40960;
+
+    if (
+      dataUrl.length < minLengthToCompress &&
+      (subType === 'jpeg' || subType === 'jpg' || subType === 'png')
+    ) {
+      resolve(dataUrl);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const natW = img.naturalWidth || img.width || 0;
+        const natH = img.naturalHeight || img.height || 0;
+        if (natW <= 0 || natH <= 0) {
+          resolve(dataUrl);
+          return;
+        }
+
+        const { width: targetW, height: targetH } = fitDimensions(natW, natH, maxWidth, maxHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in ctx) {
+          ctx.imageSmoothingQuality = 'high';
+        }
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        let hasTransparency = false;
+        if (subType !== 'jpeg' && subType !== 'jpg' && subType !== 'bmp') {
+          try {
+            const imgData = ctx.getImageData(0, 0, targetW, targetH).data;
+            const step = 32; // Échantillonnage rapide 1 pixel sur 8 (8 * 4 canaux RGBA)
+            for (let i = 3; i < imgData.length; i += step) {
+              if (imgData[i] < 250) {
+                hasTransparency = true;
+                break;
+              }
+            }
+          } catch {
+            hasTransparency = subType === 'png';
+          }
+        }
+
+        const outMime = hasTransparency ? 'image/png' : 'image/jpeg';
+        const compressedUrl = hasTransparency
+          ? canvas.toDataURL('image/png')
+          : canvas.toDataURL('image/jpeg', quality);
+
+        if (
+          compressedUrl &&
+          compressedUrl.startsWith('data:image/') &&
+          (compressedUrl.length < dataUrl.length || subType === 'bmp')
+        ) {
+          resolve(compressedUrl);
+        } else {
+          resolve(dataUrl);
+        }
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+
+/**
+ * Lit un fichier image local et le compresse automatiquement en Data URL Base64 optimisée.
+ * @param {File} file - Fichier image à lire et compresser
+ * @param {object} [options={}] - Options transmises à {@link compressImageDataUrl}
+ * @returns {Promise<string>} Data URL Base64 compressée
+ */
+export const readAndCompressImageFile = async (file, options = {}) => {
+  const rawDataUrl = await readFileAsDataURL(file);
+  return compressImageDataUrl(rawDataUrl, options);
+};
+
+/**
+ * Parcourt un texte (feuille CSS ou document Markdown) et compresse à la volée toutes les
+ * images Base64 volumineuses (`data:image/...;base64,...`) qui y sont intégrées.
+ * @param {string} text - Contenu CSS ou Markdown
+ * @param {object} [options={}] - Options transmises à {@link compressImageDataUrl}
+ * @returns {Promise<string>} Texte avec images Base64 optimisées
+ */
+export const compressEmbeddedImagesInText = async (text, options = {}) => {
+  if (!text || typeof text !== 'string' || !text.includes('data:image/')) {
+    return text;
+  }
+  const minLen = options.minLengthToCompress ?? 40960;
+  const dataUrlRegex = /data:image\/(?:png|jpe?g|webp|bmp);base64,[A-Za-z0-9+/=]+/gi;
+  const matches = text.match(dataUrlRegex);
+  if (!matches || matches.length === 0) {
+    return text;
+  }
+
+  const uniqueUrls = [...new Set(matches.filter((u) => u.length >= minLen))];
+  if (uniqueUrls.length === 0) {
+    return text;
+  }
+
+  const replacements = new Map();
+  for (const rawUrl of uniqueUrls) {
+    const compressed = await compressImageDataUrl(rawUrl, options);
+    if (compressed && compressed.length < rawUrl.length) {
+      replacements.set(rawUrl, compressed);
+    }
+  }
+
+  if (replacements.size === 0) {
+    return text;
+  }
+
+  return text.replace(dataUrlRegex, (match) => replacements.get(match) || match);
+};
+
+/**
  * Redonne la main au thread principal du navigateur pour garder l'interface fluide.
  * @returns {Promise<void>}
  */

@@ -26,6 +26,9 @@ import {
   readFileAsText,
   readFileAsArrayBuffer,
   readFileAsDataURL,
+  compressImageDataUrl,
+  readAndCompressImageFile,
+  compressEmbeddedImagesInText,
   resolveImagePaths,
   validateOutputConfig,
   pruneUnusedLocalImages,
@@ -1317,7 +1320,8 @@ function initEventListeners() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const cssText = await readFileAsText(file);
+      const rawCssText = await readFileAsText(file);
+      const cssText = await compressEmbeddedImagesInText(rawCssText);
       const isSlide = state.currentViewport === 'slide';
       const mode = isSlide ? 'slide' : 'report';
       if (isSlide) {
@@ -1434,6 +1438,10 @@ async function loadMarkdownFile(file, checkDirty = true) {
       getNextImageId,
       false
     );
+    const localEntries = Object.entries(state.localImages);
+    for (const [imgKey, rawUrl] of localEntries) {
+      state.localImages[imgKey] = await compressImageDataUrl(rawUrl);
+    }
     state.markdown = serializeEditorToMarkdown(dom.mdEditor);
     state.currentFileName = file.name;
     state.isDirty = false;
@@ -1484,7 +1492,7 @@ async function handleSaveMarkdown() {
  */
 async function insertImageAsBase64(file, customAlt) {
   try {
-    const dataUrl = await readFileAsDataURL(file);
+    const dataUrl = await readAndCompressImageFile(file);
     const alt = customAlt || file.name.replace(/\.[^/.]+$/, '') || 'Image';
     const imgId = getNextImageId();
 

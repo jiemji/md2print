@@ -18,6 +18,7 @@ import { extractAndGroupColumns, extractAndRenderTimelines } from '../js/HtmlGen
 import { segmentMarkdownToSlides, blockToPlainText } from '../js/PptxTemplateEngine.js';
 import { generateDocx } from '../js/DocxGenerator.js';
 import { parseConfigFromCss } from '../js/StyleSettingsManager.js';
+import { compressImageDataUrl, compressEmbeddedImagesInText } from '../js/utils.js';
 
 describe('tagParsers — Callouts, Badges, KPIs, Colonnes et Frises', () => {
   it('resolveCallout analyse les types d alerte GitHub et les titres personnalises', () => {
@@ -408,5 +409,54 @@ describe('HtmlGenerator & StyleSettingsManager — Extraction colonnes, frises e
     assert.equal(tables[1].rows[0].children[1].width.size, 67);
 
     delete globalThis.window;
+  });
+
+  it('compressImageDataUrl et compressEmbeddedImagesInText compressent en live les images volumineuses', async () => {
+    globalThis.document = {
+      createElement: (tag) => {
+        if (tag === 'canvas') {
+          return {
+            width: 0,
+            height: 0,
+            getContext: () => ({
+              imageSmoothingEnabled: true,
+              drawImage: () => {},
+              getImageData: () => ({ data: new Uint8ClampedArray([255, 255, 255, 255]) }),
+            }),
+            toDataURL: (mime) => `data:${mime};base64,COMPRESSED_PAYLOAD`,
+          };
+        }
+        return {};
+      },
+    };
+    globalThis.Image = class {
+      constructor() {
+        this.naturalWidth = 3840;
+        this.naturalHeight = 2160;
+      }
+      set src(val) {
+        this._src = val;
+        if (this.onload) this.onload();
+      }
+    };
+
+    const bigPayload = 'A'.repeat(50000);
+    const rawPngUrl = `data:image/png;base64,${bigPayload}`;
+    const compressed = await compressImageDataUrl(rawPngUrl, { minLengthToCompress: 1000 });
+    assert.equal(compressed, 'data:image/jpeg;base64,COMPRESSED_PAYLOAD');
+
+    // Préservation des SVG vectoriels
+    const svgUrl = `data:image/svg+xml;base64,${bigPayload}`;
+    assert.equal(await compressImageDataUrl(svgUrl, { minLengthToCompress: 1000 }), svgUrl);
+
+    // Compression à la volée dans une feuille CSS
+    const cssWithBigImg = `.slide { background-image: url('${rawPngUrl}'); }`;
+    const compressedCss = await compressEmbeddedImagesInText(cssWithBigImg, {
+      minLengthToCompress: 1000,
+    });
+    assert.ok(compressedCss.includes('data:image/jpeg;base64,COMPRESSED_PAYLOAD'));
+
+    delete globalThis.document;
+    delete globalThis.Image;
   });
 });

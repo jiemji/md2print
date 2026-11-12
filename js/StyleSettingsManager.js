@@ -9,7 +9,12 @@
  * @requires module:utils
  * @requires module:defaultThemeStyles
  */
-import { MERMAID_THEME_PRESETS } from './utils.js';
+import {
+  MERMAID_THEME_PRESETS,
+  compressImageDataUrl,
+  readAndCompressImageFile,
+  compressEmbeddedImagesInText,
+} from './utils.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 
 /**
@@ -2626,16 +2631,27 @@ export class StyleSettingsManager {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        const text = await file.text();
+        const rawText = await file.text();
         if (file.name.toLowerCase().endsWith('.json')) {
-          const parsed = JSON.parse(text);
+          const parsed = JSON.parse(rawText);
           const targetMode = (parsed.report || parsed.slide) ? this.activeMode : this.activeMode;
           const cfgData = parsed[targetMode] || parsed;
+          for (const sectionKey of ['coverSlide', 'chapterSlide', 'contentSlide']) {
+            if (cfgData?.[sectionKey]?.bgImage) {
+              cfgData[sectionKey].bgImage = await compressImageDataUrl(cfgData[sectionKey].bgImage);
+            }
+            if (cfgData?.[sectionKey]?.headerBgImage) {
+              cfgData[sectionKey].headerBgImage = await compressImageDataUrl(
+                cfgData[sectionKey].headerBgImage
+              );
+            }
+          }
           this.setConfig(targetMode, cfgData);
           this.updateFormValues();
           this.updateLivePreview();
           this.handleApply();
         } else {
+          const text = await compressEmbeddedImagesInText(rawText);
           const parsed = parseConfigFromCss(text, this.activeMode);
           if (parsed?.config) {
             const targetMode = parsed.mode || this.activeMode;
@@ -2690,18 +2706,18 @@ export class StyleSettingsManager {
         }
       });
 
-      fileInput?.addEventListener('change', (e) => {
+      fileInput?.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          const dataUrl = evt.target.result;
+        try {
+          const dataUrl = await readAndCompressImageFile(file);
           this.setBindValue(`${bindKey}.${imgProp}`, dataUrl);
           this.setBindValue(`${bindKey}.${nameProp}`, file.name);
           if (fileNameLabel) fileNameLabel.textContent = file.name;
           this.updateLivePreview();
-        };
-        reader.readAsDataURL(file);
+        } catch (err) {
+          console.error('Erreur lecture/compression image de fond :', err);
+        }
       });
 
       clearBtn?.addEventListener('click', () => {
