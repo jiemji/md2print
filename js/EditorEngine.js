@@ -950,7 +950,7 @@ export function ensureTrailingSentinel(editorEl) {
  * - Convertit les images Base64 / jetons en objets graphiques .image-cartouche
  * - Formate les blocs de code (``` ... ```) sans interpréter le Markdown interne
  * - Aligne visuellement les colonnes des tableaux Markdown via CSS sans altérer le fichier .md
- * - Formate les séparateurs horizontaux (---, ***, ___), les titres (# à #####) et les citations (> ...)
+ * - Formate les séparateurs horizontaux (---, ***, ___), les titres (# à #####) avec slugs uniques et index de ligne exacts, et les citations (> ...)
  * - Décale les listes (- *, 1.) et listes de tâches (- [ ], - [x]) de 5 caractères par niveau d'imbrication
  * @param {HTMLElement|null} editorEl - Conteneur DOM de l'éditeur
  * @param {string} markdownText - Contenu Markdown
@@ -1001,6 +1001,7 @@ export function setEditorContent(
 
   const lines = normalizedText.split('\n');
   const fragment = document.createDocumentFragment();
+  const usedHeadingSlugs = new Set();
   let inCodeBlock = false;
   let activeCalloutType = null;
   let i = 0;
@@ -1225,8 +1226,17 @@ export function setEditorContent(
         const headingSpan = document.createElement('span');
         headingSpan.className = `md-heading-line md-h${level}`;
         const headingText = line.replace(/^#{1,6}\s+/, '').trim();
+        // Attribution d'un slug unique et du numéro de ligne source exact pour la synchronisation bidirectionnelle avec le sommaire HTML
+        const baseSlug = toSlug(headingText) || `section-${level}`;
+        let uniqueSlug = baseSlug;
+        let counter = 1;
+        while (usedHeadingSlugs.has(uniqueSlug)) {
+          uniqueSlug = `${baseSlug}-${counter++}`;
+        }
+        usedHeadingSlugs.add(uniqueSlug);
         headingSpan.dataset.headingText = headingText;
-        headingSpan.dataset.slug = toSlug(headingText);
+        headingSpan.dataset.slug = uniqueSlug;
+        headingSpan.dataset.lineIndex = String(i);
         headingSpan.appendChild(buildLineInlineNodes(line));
         fragment.appendChild(headingSpan);
       } else if (quoteMatch) {

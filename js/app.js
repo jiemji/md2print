@@ -30,7 +30,6 @@ import {
   readAndCompressImageFile,
   compressEmbeddedImagesInText,
   resolveImagePaths,
-  validateOutputConfig,
   pruneUnusedLocalImages,
   renderMermaidBlocksMap,
   setMermaidTheme,
@@ -56,7 +55,6 @@ import {
 } from './EditorEngine.js';
 import {
   savePreferences,
-  saveCustomConfig,
   saveCustomTemplate,
   saveCustomPptTemplate,
   saveCustomCss,
@@ -70,7 +68,7 @@ import {
 } from './StorageService.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 import { parseConfigFromCss } from './themeCssEngine.js';
-import { generateStandaloneHTML, updateIframePreview } from './HtmlGenerator.js';
+import { generateStandaloneHTML, updateIframePreview, extractTOC } from './HtmlGenerator.js';
 import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 
 /**
@@ -98,7 +96,6 @@ import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
  * @property {Object|null} themeConfigs - Configurations de styles pour chaque mode ('report', 'slide')
  * @property {boolean} syncScroll - Vrai si le défilement lié entre l'éditeur et l'aperçu est activé
  * @property {boolean} isEditorHidden - Vrai si le panneau éditeur Markdown est masqué (plein écran aperçu)
- * @property {boolean} isEditorTocCollapsed - Vrai si le volet sommaire (#, ##, ###) de l'éditeur est replié
  */
 
 // --- État Applicatif Singleton ---
@@ -127,7 +124,6 @@ const state = {
   themeConfigs: null,
   syncScroll: true,
   isEditorHidden: false,
-  isEditorTocCollapsed: false,
 };
 
 // --- Cache des Références DOM ---
@@ -138,6 +134,9 @@ const dom = {};
  * @returns {void}
  */
 const initDomRefs = () => {
+  dom.dropdownBurger = document.getElementById('dropdownBurger');
+  dom.btnToggleBurger = document.getElementById('btnToggleBurger');
+  dom.burgerMenu = document.getElementById('burgerMenu');
   dom.btnNewFile = document.getElementById('btnNewFile');
   dom.btnOpenFile = document.getElementById('btnOpenFile');
   dom.fileInput = document.getElementById('fileInput');
@@ -156,8 +155,6 @@ const initDomRefs = () => {
   dom.btnToggleConfig = document.getElementById('btnToggleConfig');
   dom.configStatusText = document.getElementById('configStatusText');
   dom.btnMenuOpenStyleSettings = document.getElementById('btnMenuOpenStyleSettings');
-  dom.btnLoadConfigJson = document.getElementById('btnLoadConfigJson');
-  dom.configJsonInput = document.getElementById('configJsonInput');
   dom.btnLoadTemplateDocx = document.getElementById('btnLoadTemplateDocx');
   dom.templateDocxInput = document.getElementById('templateDocxInput');
   dom.btnLoadTemplatePptx = document.getElementById('btnLoadTemplatePptx');
@@ -165,6 +162,7 @@ const initDomRefs = () => {
   dom.btnLoadCustomCss = document.getElementById('btnLoadCustomCss');
   dom.customCssInput = document.getElementById('customCssInput');
   dom.btnResetConfig = document.getElementById('btnResetConfig');
+  dom.btnResetConfigMenu = document.getElementById('btnResetConfigMenu');
 
   dom.dropdownExport = document.getElementById('dropdownExport');
   dom.btnToggleExport = document.getElementById('btnToggleExport');
@@ -173,15 +171,7 @@ const initDomRefs = () => {
   dom.btnExportPptx = document.getElementById('btnExportPptx');
 
   dom.btnToggleTheme = document.getElementById('btnToggleTheme');
-
   dom.btnToggleEditor = document.getElementById('btnToggleEditor');
-  dom.btnHideEditor = document.getElementById('btnHideEditor');
-  dom.editorToolbar = document.getElementById('editorToolbar');
-  dom.editorTocSidebar = document.getElementById('editorTocSidebar');
-  dom.btnToggleEditorToc = document.getElementById('btnToggleEditorToc');
-  dom.btnCloseEditorToc = document.getElementById('btnCloseEditorToc');
-  dom.editorTocList = document.getElementById('editorTocList');
-  dom.editorTocCount = document.getElementById('editorTocCount');
 
   dom.workspace = document.getElementById('workspace');
   dom.pageStyleConfig = document.getElementById('pageStyleConfig');
@@ -502,7 +492,7 @@ async function loadDefaultConfigAndTemplate(forceReset = false) {
 function updateConfigStatusUI() {
   if (!dom.configStatusText) return;
   const cssStatus = state.customCssFileName || 'par défaut (Word / PPTX)';
-  dom.configStatusText.innerHTML = `Config : ${escapeHtml(state.configFileName)}<br>Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}<br>CSS : ${escapeHtml(cssStatus)}`;
+  dom.configStatusText.innerHTML = `Modèle Word : ${escapeHtml(state.templateFileName)}<br>Modèle PPT : ${escapeHtml(state.pptTemplateFileName)}<br>CSS : ${escapeHtml(cssStatus)}`;
 }
 
 /**
@@ -801,9 +791,28 @@ function initEventListeners() {
     await loadMarkdownFile(file, false);
   });
 
-  // F1.4 — Sauvegarder (Téléchargement classique du fichier .md)
-  dom.btnSaveFile.addEventListener('click', () => {
+  // F1.4 — Sauvegarder (avec choix ou modification du nom de fichier)
+  dom.btnSaveFile?.addEventListener('click', () => {
     handleSaveMarkdown();
+  });
+
+  // Modification directe du nom de fichier en cliquant sur son intitulé dans le bandeau supérieur
+  dom.currentFileName?.addEventListener('click', async () => {
+    const current = state.currentFileName || 'document.md';
+    const newName = window.prompt('Modifier le nom du fichier :', current);
+    if (newName !== null) {
+      let finalName = newName.trim() || current;
+      if (!/\.(md|markdown)$/i.test(finalName)) {
+        finalName = `${finalName}.md`;
+      }
+      if (finalName !== state.currentFileName) {
+        state.currentFileName = finalName;
+        state.isDirty = true;
+        await persistDraftNow();
+        updateFileNameDisplay();
+        showToast(`Nom du fichier modifié : ${finalName}`);
+      }
+    }
   });
 
   // Raccourci global Ctrl+S / Cmd+S, F8 (Bascule Défilement lié) et F9 (Masquage éditeur)
@@ -835,7 +844,6 @@ function initEventListeners() {
     if (e.data === '`' || e.data === '\n' || e.data === ']' || e.data === ':') {
       checkForUnfencedCartouches();
     }
-    scheduleEditorTocUpdate(200);
     schedulePreviewUpdate(400);
     scheduleDraftSave(1500);
   });
@@ -1158,23 +1166,9 @@ function initEventListeners() {
     toggleEditorPane();
   });
 
-  dom.btnHideEditor?.addEventListener('click', () => {
-    toggleEditorPane(true);
-  });
-
-  // Gestion du volet latéral Sommaire des titres (#, ##, ###)
-  dom.btnToggleEditorToc?.addEventListener('click', () => {
-    toggleEditorToc();
-  });
-
-  dom.btnCloseEditorToc?.addEventListener('click', () => {
-    toggleEditorToc(true);
-  });
-
-  // Défilement de l'éditeur Markdown : synchronisation défilement et mise à jour titre actif
+  // Défilement de l'éditeur Markdown : synchronisation défilement avec l'aperçu
   dom.mdEditor.addEventListener('scroll', () => {
     syncScrollEditorToIframe();
-    updateActiveTocHeadingOnScroll();
   });
 
   // F3 / F4 — Sélecteur de Vue (Rapport / Slide)
@@ -1220,54 +1214,42 @@ function initEventListeners() {
     openStyleSettingsPage();
   });
 
-  // Menus déroulants Configuration & Exporter
-  dom.btnToggleConfig.addEventListener('click', (e) => {
+  // Menu Burger principal : ouverture, fermeture et fermeture automatique au clic d'un item
+  dom.btnToggleBurger?.addEventListener('click', (e) => {
     e.stopPropagation();
-    dom.dropdownExport.classList.remove('open');
-    dom.dropdownConfig.classList.toggle('open');
+    dom.dropdownConfig?.classList.remove('open');
+    dom.dropdownExport?.classList.remove('open');
+    dom.dropdownBurger?.classList.toggle('open');
   });
 
-  dom.btnToggleExport.addEventListener('click', (e) => {
+  dom.burgerMenu?.querySelectorAll('.dropdown-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      dom.dropdownBurger?.classList.remove('open');
+    });
+  });
+
+  // Menus déroulants Configuration & Exporter
+  dom.btnToggleConfig?.addEventListener('click', (e) => {
     e.stopPropagation();
-    dom.dropdownConfig.classList.remove('open');
-    dom.dropdownExport.classList.toggle('open');
+    dom.dropdownBurger?.classList.remove('open');
+    dom.dropdownExport?.classList.remove('open');
+    dom.dropdownConfig?.classList.toggle('open');
+  });
+
+  dom.btnToggleExport?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dom.dropdownBurger?.classList.remove('open');
+    dom.dropdownConfig?.classList.remove('open');
+    dom.dropdownExport?.classList.toggle('open');
   });
 
   document.addEventListener('click', () => {
-    dom.dropdownConfig.classList.remove('open');
-    dom.dropdownExport.classList.remove('open');
+    dom.dropdownBurger?.classList.remove('open');
+    dom.dropdownConfig?.classList.remove('open');
+    dom.dropdownExport?.classList.remove('open');
   });
 
-  // Chargement personnalisé et validé de output_config.json et template .docx
-  dom.btnLoadConfigJson.addEventListener('click', () => {
-    dom.configJsonInput.value = '';
-    dom.configJsonInput.click();
-  });
-
-  dom.configJsonInput.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await readFileAsText(file);
-      const parsed = JSON.parse(text);
-      const validation = validateOutputConfig(parsed);
-      if (!validation.valid) {
-        showToast(validation.error || 'Structure JSON invalide', 'error');
-        return;
-      }
-      state.outputConfig = parsed;
-      state.configFileName = file.name;
-      await saveCustomConfig({
-        outputConfig: state.outputConfig,
-        configFileName: state.configFileName,
-      });
-      updateConfigStatusUI();
-      showToast(`Configuration chargée : ${file.name}`, 'success');
-    } catch (err) {
-      showToast(`Erreur JSON : ${err.message}`, 'error');
-    }
-  });
-
+  // Chargement d'un modèle Word .docx personnalisé
   dom.btnLoadTemplateDocx.addEventListener('click', () => {
     dom.templateDocxInput.value = '';
     dom.templateDocxInput.click();
@@ -1351,7 +1333,7 @@ function initEventListeners() {
     }
   });
 
-  dom.btnResetConfig?.addEventListener('click', async () => {
+  const handleResetConfig = async () => {
     await clearCustomConfigAndTemplate();
     await loadDefaultConfigAndTemplate(true);
     if (styleSettingsManager) {
@@ -1362,12 +1344,15 @@ function initEventListeners() {
     }
     updatePreview();
     showToast('Configuration, modèles et styles CSS réinitialisés par défaut');
-  });
+  };
+
+  dom.btnResetConfig?.addEventListener('click', handleResetConfig);
+  dom.btnResetConfigMenu?.addEventListener('click', handleResetConfig);
 
   // Actions d'export (HTML, DOCX, PPTX)
-  dom.btnExportHtml.addEventListener('click', () => handleExportHtml());
-  dom.btnExportDocx.addEventListener('click', () => handleExportDocx());
-  dom.btnExportPptx.addEventListener('click', () => handleExportPptx());
+  dom.btnExportHtml?.addEventListener('click', () => handleExportHtml());
+  dom.btnExportDocx?.addEventListener('click', () => handleExportDocx());
+  dom.btnExportPptx?.addEventListener('click', () => handleExportPptx());
 
   // F7 — Bascule de Thème (Sombre Bleu/Gris <-> Clair Sépia) avec persistance IndexedDB
   dom.btnToggleTheme.addEventListener('click', () => {
@@ -1387,19 +1372,17 @@ function initEventListeners() {
  * @returns {void}
  */
 function populateFolderSelect(mdFiles) {
+  if (!dom.folderFileSelect) return;
   dom.folderFileSelect.innerHTML = '';
-  if (mdFiles.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'Aucun fichier .md';
-    dom.folderFileSelect.appendChild(opt);
+  if (!mdFiles || mdFiles.length === 0) {
+    dom.folderFileSelect.style.display = 'none';
     dom.folderFileSelect.disabled = true;
     return;
   }
 
   const defaultOpt = document.createElement('option');
   defaultOpt.value = '';
-  defaultOpt.textContent = `Sélectionner un fichier (${mdFiles.length})`;
+  defaultOpt.textContent = `Fichiers du dossier (${mdFiles.length})`;
   dom.folderFileSelect.appendChild(defaultOpt);
 
   mdFiles.forEach((file, idx) => {
@@ -1410,6 +1393,7 @@ function populateFolderSelect(mdFiles) {
   });
 
   dom.folderFileSelect.disabled = false;
+  dom.folderFileSelect.style.display = 'inline-block';
 }
 
 /**
@@ -1457,26 +1441,70 @@ async function loadMarkdownFile(file, checkDirty = true) {
 }
 
 /**
- * Sauvegarde le contenu de l'éditeur par téléchargement classique d'un fichier .md
+ * Sauvegarde le contenu de l'éditeur en fichier Markdown (.md)
  * en réinjectant le binaire Base64 complet à la place des objets graphiques [image].
+ * Permet à l'utilisateur de modifier le nom du fichier lors de la sauvegarde
+ * (via la boîte de dialogue native du système ou une invitation de saisie).
+ * Met à jour le nom du fichier dans le bandeau supérieur et l'état persistant.
  * @returns {Promise<void>}
  */
 async function handleSaveMarkdown() {
   state.markdown = serializeEditorToMarkdown(dom.mdEditor);
   pruneUnusedLocalImages(state.markdown, state.localImages);
 
-  let fileName = state.currentFileName;
-  if (!fileName || fileName === 'Sans titre.md') {
+  let defaultName = state.currentFileName;
+  if (!defaultName || defaultName === 'Sans titre.md') {
     const detectedTitle = extractTitle(state.markdown);
-    fileName = detectedTitle ? `${toSlug(detectedTitle)}.md` : 'document.md';
-    state.currentFileName = fileName;
-  } else if (!/\.(md|markdown)$/i.test(fileName)) {
-    fileName = `${fileName}.md`;
-    state.currentFileName = fileName;
+    defaultName = detectedTitle ? `${toSlug(detectedTitle)}.md` : 'document.md';
+  } else if (!/\.(md|markdown)$/i.test(defaultName)) {
+    defaultName = `${defaultName}.md`;
   }
 
   const fullMarkdown = resolveImagePaths(state.markdown, state.localImages);
   const blob = new Blob([fullMarkdown], { type: 'text/markdown;charset=utf-8' });
+
+  // 1. API native File System Access (Chrome, Edge) : ouverture de la boîte système "Enregistrer sous"
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const fileHandle = await window.showSaveFilePicker({
+        suggestedName: defaultName,
+        types: [
+          {
+            description: 'Fichier Markdown (*.md)',
+            accept: { 'text/markdown': ['.md', '.markdown'] },
+          },
+        ],
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      // Met à jour le nom du fichier si modifié par l'utilisateur dans la boîte de dialogue
+      state.currentFileName = fileHandle.name;
+      state.isDirty = false;
+      await persistDraftNow();
+      updateFileNameDisplay();
+      showToast(`Fichier sauvegardé : ${fileHandle.name}`, 'success');
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // Annulation volontaire par l'utilisateur
+        return;
+      }
+      console.warn('showSaveFilePicker indisponible ou refusé, repli sur invitation de saisie :', err);
+    }
+  }
+
+  // 2. Repli standard : invitation de saisie du nom de fichier si showSaveFilePicker n'est pas supporté
+  const customName = window.prompt('Nom du fichier à sauvegarder :', defaultName);
+  if (customName === null) {
+    return; // Annulé par l'utilisateur
+  }
+  let fileName = customName.trim() || defaultName;
+  if (!/\.(md|markdown)$/i.test(fileName)) {
+    fileName = `${fileName}.md`;
+  }
+  state.currentFileName = fileName;
   downloadBlob(blob, fileName);
   state.isDirty = false;
   await persistDraftNow();
@@ -1746,8 +1774,6 @@ async function updatePreview() {
     updatePlannedSlides();
     syncSlideToCursor();
   }
-
-  renderEditorToc();
 }
 
 /**
@@ -1979,188 +2005,100 @@ function toggleEditorPane(forceHide = null) {
       dom.btnToggleEditor.title = "Masquer l'éditeur Markdown (Raccourci : F9)";
     }
     state.isEditorHidden = false;
-    renderEditorToc();
   }
 }
 
 /**
- * Bascule l'affichage du volet latéral de sommaire des titres dans l'éditeur Markdown.
- * Réduit ou agrandit la colonne latérale gauche intégrée dans l'éditeur.
- * @param {boolean|null} [forceCollapse=null] - Forcer le repli (true), l'ouverture (false) ou basculer (null)
+ * Fait défiler l'éditeur Markdown jusqu'à la ligne du titre sélectionné, active une animation flash
+ * et positionne le défilement sans voler le focus ni interrompre l'interaction de lecture.
+ * @param {Object} options
+ * @param {number|null} [options.lineIndex=null] - Index de la ligne (0-based) dans le document Markdown source
+ * @param {string} [options.slug=''] - Slug unique du titre
+ * @param {string} [options.title=''] - Texte nettoyé du titre
+ * @param {string} [options.rawText=''] - Texte brut du titre
+ * @param {number|null} [options.headingIndex=null] - Index ordonné du titre parmi tous les titres du sommaire
  * @returns {void}
  */
-function toggleEditorToc(forceCollapse = null) {
-  if (!dom.editorTocSidebar) return;
-  const isCollapsed = dom.editorTocSidebar.classList.contains('collapsed');
-  const shouldCollapse = forceCollapse !== null ? forceCollapse : !isCollapsed;
+function jumpToEditorHeading(options = {}) {
+  if (!dom.mdEditor || state.isEditorHidden) return;
+  const { lineIndex, slug, title, rawText, headingIndex } = options;
 
-  if (shouldCollapse) {
-    dom.editorTocSidebar.classList.add('collapsed');
-    state.isEditorTocCollapsed = true;
-    dom.btnToggleEditorToc?.classList.remove('btn-active');
-  } else {
-    dom.editorTocSidebar.classList.remove('collapsed');
-    state.isEditorTocCollapsed = false;
-    dom.btnToggleEditorToc?.classList.add('btn-active');
-    renderEditorToc();
-  }
-}
-
-let editorTocDebounceTimer = null;
-
-/**
- * Planifie la mise à jour du sommaire de l'éditeur avec un délai anti-rebond pour préserver la fluidité de frappe.
- * @param {number} [delay=200] - Délai d'attente en millisecondes
- * @returns {void}
- */
-function scheduleEditorTocUpdate(delay = 200) {
-  if (editorTocDebounceTimer) clearTimeout(editorTocDebounceTimer);
-  editorTocDebounceTimer = setTimeout(() => {
-    editorTocDebounceTimer = null;
-    renderEditorToc();
-  }, delay);
-}
-
-/**
- * Analyse le document Markdown actif et construit l'arborescence des titres (#, ##, ###).
- * Ignore systématiquement les lignes situées à l'intérieur de blocs de code délimités par des triples backticks.
- * Construit les boutons de saut rapide avec indentation hiérarchique et actualise le compteur de titres.
- * @returns {void}
- */
-function renderEditorToc() {
-  if (!dom.editorTocList) return;
-
-  const rawMd = state.markdown || '';
-  const lines = rawMd.split('\n');
-  const headings = [];
-  let inCodeBlock = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^```/.test(line.trim())) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) continue;
-
-    const match = line.match(/^(#{1,3})[ \t]+(.*)/);
-    if (match) {
-      const level = match[1].length;
-      const rawText = match[2].trim();
-      const cleanText = rawText
-        .replace(/[*_`~]/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .trim();
-
-      headings.push({
-        level,
-        rawText,
-        cleanText: cleanText || '(Titre sans texte)',
-        lineIndex: i,
-      });
-    }
-  }
-
-  if (dom.editorTocCount) {
-    dom.editorTocCount.textContent = `${headings.length} titre${headings.length > 1 ? 's' : ''}`;
-  }
-
-  if (headings.length === 0) {
-    dom.editorTocList.innerHTML = '<div class="editor-toc-empty">Aucun titre détecté (#, ##, ###)</div>';
-    return;
-  }
-
-  dom.editorTocList.innerHTML = '';
-  const fragment = document.createDocumentFragment();
-
-  headings.forEach((h, idx) => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = `editor-toc-item level-${h.level}`;
-    item.dataset.lineIndex = String(h.lineIndex);
-    item.dataset.headingIndex = String(idx);
-    item.title = `${'#'.repeat(h.level)} ${h.cleanText} (Ligne ${h.lineIndex + 1})`;
-
-    const tag = document.createElement('span');
-    tag.className = 'editor-toc-tag';
-    tag.textContent = '#'.repeat(h.level);
-
-    const text = document.createElement('span');
-    text.className = 'editor-toc-text';
-    text.textContent = h.cleanText;
-
-    item.appendChild(tag);
-    item.appendChild(text);
-
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      jumpToEditorHeading(h.lineIndex, h.rawText, h.level);
-      dom.editorTocList?.querySelectorAll('.editor-toc-item').forEach((el) => el.classList.remove('active'));
-      item.classList.add('active');
-    });
-
-    fragment.appendChild(item);
-  });
-
-  dom.editorTocList.appendChild(fragment);
-  updateActiveTocHeadingOnScroll();
-}
-
-/**
- * Fait défiler l'éditeur Markdown jusqu'à la ligne du titre sélectionné, active une animation flash,
- * positionne le curseur d'édition et synchronise la diapositive correspondante en vision Slide.
- * @param {number} lineIndex - Index de la ligne (0-based) dans le document Markdown source
- * @param {string} rawText - Texte brut du titre pour fallback de recherche par contenu
- * @param {number} level - Niveau hiérarchique du titre (1, 2 ou 3)
- * @returns {void}
- */
-function jumpToEditorHeading(lineIndex, rawText, level) {
-  if (!dom.mdEditor) return;
-
-  const rawMd = state.markdown || '';
-  const lines = rawMd.split('\n');
-  let charOffset = 0;
-  for (let i = 0; i < Math.min(lineIndex, lines.length); i++) {
-    charOffset += lines[i].length + 1;
-  }
-
-  const pos = findDomPosition(dom.mdEditor, charOffset);
   let targetEl = null;
 
-  if (pos && pos.container) {
-    if (pos.container === dom.mdEditor) {
-      if (dom.mdEditor.children.length > 0) {
-        const idx = Math.min(pos.offset, dom.mdEditor.children.length - 1);
-        targetEl = dom.mdEditor.children[idx];
-      }
-    } else {
-      targetEl =
-        pos.container.nodeType === Node.ELEMENT_NODE
-          ? pos.container
-          : pos.container.parentElement;
-    }
+  // 1. Recherche prioritaire par data-line-index
+  if (lineIndex !== null && lineIndex !== undefined && lineIndex >= 0) {
+    targetEl = dom.mdEditor.querySelector(`.md-heading-line[data-line-index="${lineIndex}"]`);
   }
 
-  if (!targetEl || targetEl === dom.mdEditor) {
-    const headingLines = Array.from(dom.mdEditor.querySelectorAll('.md-heading-line'));
-    for (const hl of headingLines) {
-      if (
-        hl.textContent.includes(rawText) ||
-        (hl.dataset.headingText && rawText.includes(hl.dataset.headingText))
-      ) {
+  // 2. Recherche par data-slug sur .md-heading-line
+  if (!targetEl && slug) {
+    targetEl = dom.mdEditor.querySelector(`.md-heading-line[data-slug="${slug}"]`);
+  }
+
+  // 3. Recherche par index d'ordre parmi les éléments .md-heading-line
+  const headingEls = Array.from(dom.mdEditor.querySelectorAll('.md-heading-line'));
+  if (!targetEl && typeof headingIndex === 'number' && headingIndex >= 0 && headingIndex < headingEls.length) {
+    targetEl = headingEls[headingIndex];
+  }
+
+  // 4. Recherche par correspondance de texte sur .md-heading-line
+  if (!targetEl && (title || rawText)) {
+    const cleanSearch = (title || rawText).replace(/^#{1,6}\s+/, '').replace(/[*_`]/g, '').trim().toLowerCase();
+    for (const hl of headingEls) {
+      const hlText = (hl.dataset.headingText || hl.textContent || '').replace(/^#{1,6}\s+/, '').replace(/[*_`]/g, '').trim().toLowerCase();
+      if (hlText && (hlText === cleanSearch || hlText.includes(cleanSearch) || cleanSearch.includes(hlText))) {
         targetEl = hl;
         break;
       }
     }
   }
 
+  // 5. Recherche par balayage de secours dans le texte global du conteneur si aucune classe .md-heading-line ne correspond
+  if (!targetEl && (title || rawText)) {
+    const cleanSearch = (title || rawText).replace(/^#{1,6}\s+/, '').trim().toLowerCase();
+    const walker = document.createTreeWalker(dom.mdEditor, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (
+        node.classList &&
+        !node.classList.contains('image-cartouche') &&
+        !node.classList.contains('mermaid-cartouche') &&
+        !node.classList.contains('html-cartouche')
+      ) {
+        const text = (node.textContent || '').trim().toLowerCase();
+        if (text.startsWith('#') && text.includes(cleanSearch)) {
+          targetEl = node;
+          break;
+        }
+      }
+    }
+  }
+
+  // 6. Repli de secours par offset de caractères dans le DOM
+  if (!targetEl && lineIndex !== null && lineIndex !== undefined && lineIndex >= 0) {
+    const rawMd = state.markdown || '';
+    const lines = rawMd.split('\n');
+    let charOffset = 0;
+    for (let i = 0; i < Math.min(lineIndex, lines.length); i++) {
+      charOffset += lines[i].length + 1;
+    }
+    const pos = findDomPosition(dom.mdEditor, charOffset);
+    if (pos && pos.container) {
+      targetEl = pos.container.nodeType === Node.ELEMENT_NODE
+        ? pos.container
+        : pos.container.parentElement;
+    }
+  }
+
   if (targetEl && targetEl !== dom.mdEditor) {
+    // Calcul de la position de défilement relative dans dom.mdEditor
     const editorRect = dom.mdEditor.getBoundingClientRect();
     const targetRect = targetEl.getBoundingClientRect();
-    const targetY = dom.mdEditor.scrollTop + (targetRect.top - editorRect.top) - 20;
+    const currentScroll = dom.mdEditor.scrollTop;
+    const targetY = currentScroll + (targetRect.top - editorRect.top) - 30;
 
     dom.mdEditor.scrollTo({
-      top: Math.max(0, targetY),
+      top: Math.max(0, Math.round(targetY)),
       behavior: 'smooth',
     });
 
@@ -2170,75 +2108,103 @@ function jumpToEditorHeading(lineIndex, rawText, level) {
     setTimeout(() => {
       targetEl.classList.remove('heading-jump-highlight');
     }, 1200);
-
-    if (pos && pos.container) {
-      try {
-        dom.mdEditor.focus();
-        const range = document.createRange();
-        range.setStart(pos.container, pos.offset);
-        range.collapse(true);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      } catch (_) { }
-    }
-
-    if (state.currentViewport === 'slide') {
-      syncSlideToCursor();
-    }
   }
 }
 
-let activeTocScrollTimer = null;
-
 /**
- * Met à jour l'élément actif du sommaire de l'éditeur en fonction de la position courante de défilement.
- * Parcourt les éléments de titres du sommaire et applique la classe `.active` sur le titre le plus haut visible.
+ * Gère la navigation synchronisée déclenchée depuis le sommaire de la visualisation HTML.
+ * Positionne la diapositive en vision Slide et fait défiler l'éditeur non-WYSIWYG jusqu'au titre correspondant.
+ * @param {string} slug - Identifiant slug unique de l'ancre ou de la diapositive
+ * @param {number|null} [slideIndex=null] - Index de la diapositive en vision Slide (-1 si non déterminé)
+ * @param {number|null} [headingIndex=null] - Index ordonné du titre dans le sommaire
+ * @param {number|null} [lineIndex=null] - Numéro de ligne source dans le Markdown
  * @returns {void}
  */
-function updateActiveTocHeadingOnScroll() {
-  if (!dom.editorTocList || activeTocScrollTimer) return;
-  activeTocScrollTimer = setTimeout(() => {
-    activeTocScrollTimer = null;
-    const items = Array.from(dom.editorTocList.querySelectorAll('.editor-toc-item'));
-    if (items.length === 0) return;
+function navigateFromToc(slug, slideIndex = null, headingIndex = null, lineIndex = null) {
+  if (!slug && (slideIndex === null || slideIndex === undefined || slideIndex < 0)) return;
 
-    const rawMd = state.markdown || '';
-    const lines = rawMd.split('\n');
-    const scrollTop = dom.mdEditor.scrollTop;
-    const editorRect = dom.mdEditor.getBoundingClientRect();
+  // Verrouille temporairement la synchronisation bidirectionnelle du scroll
+  // afin d'empêcher les écouteurs de défilement de court-circuiter l'animation fluide
+  isSyncingScroll = true;
+  clearTimeout(syncScrollTimer);
+  syncScrollTimer = setTimeout(() => {
+    isSyncingScroll = false;
+  }, 900);
 
-    let activeItem = null;
-
-    for (const item of items) {
-      const lineIdx = parseInt(item.dataset.lineIndex, 10);
-      if (isNaN(lineIdx)) continue;
-
-      let charOffset = 0;
-      for (let i = 0; i < Math.min(lineIdx, lines.length); i++) {
-        charOffset += lines[i].length + 1;
-      }
-
-      const pos = findDomPosition(dom.mdEditor, charOffset);
-      if (pos && pos.container) {
-        const el =
-          pos.container.nodeType === Node.ELEMENT_NODE
-            ? pos.container
-            : pos.container.parentElement;
-        if (el && el !== dom.mdEditor) {
-          const top = el.getBoundingClientRect().top - editorRect.top + scrollTop;
-          if (top <= scrollTop + 80) {
-            activeItem = item;
-          } else {
-            break;
-          }
-        }
+  // 1. Positionnement de la diapositive en vision Slide
+  if (state.currentViewport === 'slide' && typeof slideIndex === 'number' && slideIndex >= 0) {
+    const iframeWin = dom.previewIframe?.contentWindow;
+    if (iframeWin && typeof iframeWin.showSlide === 'function') {
+      const currentInIframe = typeof iframeWin.getCurrentSlideIndex === 'function'
+        ? iframeWin.getCurrentSlideIndex()
+        : -1;
+      if (currentInIframe !== slideIndex) {
+        iframeWin.showSlide(slideIndex);
       }
     }
+  }
 
-    if (activeItem) {
-      items.forEach((el) => el.classList.remove('active'));
-      activeItem.classList.add('active');
-    }
-  }, 100);
+  // 2. Positionnement de l'éditeur Markdown non-WYSIWYG
+  if (!state.markdown && dom.mdEditor) {
+    state.markdown = serializeEditorToMarkdown(dom.mdEditor);
+  }
+
+  const headings = extractTOC(state.markdown || '');
+  let targetHeading = null;
+
+  if (typeof headingIndex === 'number' && headingIndex >= 0 && headingIndex < headings.length) {
+    targetHeading = headings[headingIndex];
+  }
+
+  if (!targetHeading && slug) {
+    targetHeading = headings.find((h) => h.slug === slug);
+  }
+
+  if (!targetHeading && typeof lineIndex === 'number' && lineIndex >= 0) {
+    targetHeading = headings.find((h) => h.lineIndex === lineIndex);
+  }
+
+  if (!targetHeading && slug) {
+    targetHeading = headings.find((h) => h.slug.startsWith(slug) || slug.startsWith(h.slug));
+  }
+
+  const effectiveLineIndex = targetHeading
+    ? targetHeading.lineIndex
+    : (typeof lineIndex === 'number' ? lineIndex : null);
+  const rawText = targetHeading ? targetHeading.rawText : '';
+  const title = targetHeading ? targetHeading.title : '';
+  const effectiveSlug = targetHeading ? targetHeading.slug : slug;
+  const effectiveHeadingIndex = targetHeading
+    ? headings.indexOf(targetHeading)
+    : (typeof headingIndex === 'number' ? headingIndex : null);
+
+  // Exécution sur le frame d'animation suivant pour que le clic et la gestion du focus
+  // dans l'iframe soient totalement achevés sans annuler le défilement de l'éditeur
+  requestAnimationFrame(() => {
+    jumpToEditorHeading({
+      lineIndex: effectiveLineIndex,
+      slug: effectiveSlug,
+      title,
+      rawText,
+      headingIndex: effectiveHeadingIndex,
+    });
+  });
 }
+
+// Interface d'appel global pour les clics dans le sommaire de l'iframe de visualisation
+window.onIframeTocClick = function (slug, slideIndex, headingIndex, lineIndex) {
+  navigateFromToc(slug, slideIndex, headingIndex, lineIndex);
+};
+
+// Écouteur de messages postMessage de secours (si iframe isolé)
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'TOC_NAVIGATE') {
+    navigateFromToc(
+      event.data.slug,
+      event.data.slideIndex,
+      event.data.headingIndex,
+      event.data.lineIndex
+    );
+  }
+});
+

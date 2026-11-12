@@ -187,16 +187,26 @@ body {
   outline: 2px solid var(--accent-color);
 }
 
-/* === Affichage en lecture seule du nom de fichier === */
+/* === Affichage et renommage interactif du nom de fichier === */
 .current-filename {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-secondary);
-  padding-left: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
+  max-width: 240px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.current-filename:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+  border-color: var(--border-color);
 }
 
 .current-filename.is-dirty {
@@ -248,10 +258,40 @@ body {
   border-style: dashed;
 }
 
-/* === Menus Déroulants (Configuration & Exporter) === */
+/* === Menus Déroulants (Burger, Configuration, Exporter) === */
 .dropdown {
   position: relative;
   display: inline-block;
+}
+
+/* Menu Burger supérieur */
+.burger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.burger-icon {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 14px;
+  height: 11px;
+}
+
+.burger-line {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background-color: currentColor;
+  border-radius: 1px;
+}
+
+.burger-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
 }
 
 .dropdown-menu {
@@ -268,6 +308,30 @@ body {
   gap: 2px;
   z-index: 500;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.dropdown-menu-left {
+  left: 0;
+  right: auto;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 5px 0;
+}
+
+.dropdown-group-title {
+  padding: 5px 10px 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.dropdown-subitem {
+  padding-left: 18px;
 }
 
 .dropdown.open .dropdown-menu {
@@ -332,185 +396,6 @@ body {
   color: var(--accent-text) !important;
 }
 
-/* === Barre d'Outils Supérieure de l'Éditeur === */
-.editor-toolbar {
-  height: 36px;
-  min-height: 36px;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.editor-toolbar-left,
-.editor-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.editor-toc-count {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-/* === Corps de l'Éditeur (Sommaire + Saisie) === */
-.editor-body-container {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  height: calc(100% - 36px);
-  overflow: hidden;
-  position: relative;
-}
-
-/* === Volet Latéral Sommaire de l'Éditeur === */
-.editor-toc-sidebar {
-  width: 240px;
-  min-width: 180px;
-  max-width: 320px;
-  height: 100%;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-  transition: width 0.18s ease, opacity 0.18s ease;
-}
-
-.editor-toc-sidebar.collapsed {
-  display: none;
-}
-
-.editor-toc-header {
-  height: 34px;
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-elevated);
-}
-
-.editor-toc-title {
-  font-size: 0.76rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-}
-
-.btn-subtle {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.btn-subtle:hover {
-  color: var(--text-primary);
-  background-color: var(--bg-hover);
-}
-
-.editor-toc-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 4px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.editor-toc-empty {
-  padding: 16px 12px;
-  font-size: 0.80rem;
-  color: var(--text-secondary);
-  font-style: italic;
-  text-align: center;
-}
-
-/* Éléments du Sommaire Éditeur */
-.editor-toc-item {
-  display: flex;
-  align-items: baseline;
-  width: 100%;
-  background: none;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  padding: 5px 10px;
-  font-family: inherit;
-  color: var(--text-primary);
-  text-decoration: none;
-  border-left: 3px solid transparent;
-  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-
-.editor-toc-item:hover {
-  background-color: var(--bg-hover);
-}
-
-.editor-toc-item.active {
-  background-color: var(--bg-elevated);
-  border-left-color: var(--accent-color);
-  color: var(--accent-color);
-  font-weight: 600;
-}
-
-.editor-toc-tag {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--accent-color);
-  margin-right: 6px;
-  flex-shrink: 0;
-  font-weight: 700;
-  opacity: 0.85;
-}
-
-.editor-toc-text {
-  font-size: 0.82rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Niveaux d'indentation du sommaire (#, ##, ###) */
-.editor-toc-item.level-1 {
-  font-weight: 700;
-  padding-left: 8px;
-}
-
-.editor-toc-item.level-2 {
-  font-weight: 500;
-  padding-left: 18px;
-}
-
-.editor-toc-item.level-3 {
-  font-size: 0.80rem;
-  color: var(--text-secondary);
-  padding-left: 28px;
-}
-
-.editor-toc-item.level-3 .editor-toc-text {
-  font-size: 0.80rem;
-}
-
 /* Animation flash d'atterrissage sur le titre dans l'éditeur */
 @keyframes headingFlash {
   0% {
@@ -534,6 +419,8 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
+  position: relative;
+  overflow: hidden;
 }
 
 .md-editor {

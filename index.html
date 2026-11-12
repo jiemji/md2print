@@ -18,22 +18,43 @@
   <div class="app-container">
     <!-- Barre de Menu Supérieure -->
     <header class="app-header">
-      <!-- Zone Gauche : Gestion des fichiers .md -->
+      <!-- Zone Gauche : Menu Burger, Fichiers du dossier et Nom du fichier -->
       <div class="header-group header-left">
-        <span class="app-brand">md2print</span>
-        <button type="button" class="btn" id="btnNewFile">Nouveau</button>
-        <button type="button" class="btn" id="btnOpenFile">Ouvrir fichier</button>
-        <input type="file" id="fileInput" class="hidden-input" accept=".md,.markdown,.txt">
+        <!-- Menu Burger -->
+        <div class="dropdown burger-dropdown" id="dropdownBurger">
+          <button type="button" class="btn burger-btn" id="btnToggleBurger" aria-label="Menu principal" title="Menu principal">
+            <span class="burger-icon" aria-hidden="true">
+              <span class="burger-line"></span>
+              <span class="burger-line"></span>
+              <span class="burger-line"></span>
+            </span>
+            <span class="burger-label">Menu</span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-left burger-menu" id="burgerMenu">
+            <button type="button" class="dropdown-item" id="btnNewFile">Nouveau</button>
+            <button type="button" class="dropdown-item" id="btnOpenFile">Ouvrir fichier</button>
+            <button type="button" class="dropdown-item" id="btnOpenFolder">Ouvrir dossier</button>
+            <button type="button" class="dropdown-item" id="btnSaveFile">Sauvegarder</button>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-group-title">Exporter</div>
+            <button type="button" class="dropdown-item dropdown-subitem" id="btnExportHtml">HTML (.html)</button>
+            <button type="button" class="dropdown-item dropdown-subitem" id="btnExportDocx">Word (.docx)</button>
+            <button type="button" class="dropdown-item dropdown-subitem" id="btnExportPptx">PowerPoint (.pptx)</button>
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item" id="btnResetConfig">Réinitialiser par défaut</button>
+          </div>
+        </div>
 
-        <button type="button" class="btn" id="btnOpenFolder">Ouvrir dossier</button>
+        <input type="file" id="fileInput" class="hidden-input" accept=".md,.markdown,.txt">
         <input type="file" id="folderInput" class="hidden-input" webkitdirectory multiple>
 
-        <select id="folderFileSelect" class="file-select" title="Fichiers Markdown du dossier" disabled>
+        <span class="app-brand">md2print</span>
+
+        <select id="folderFileSelect" class="file-select" title="Fichiers Markdown du dossier" style="display: none;">
           <option value="">Aucun dossier chargé</option>
         </select>
 
-        <button type="button" class="btn btn-primary" id="btnSaveFile">Sauvegarder</button>
-        <span class="current-filename" id="currentFileName">Sans titre.md</span>
+        <span class="current-filename" id="currentFileName" title="Cliquer pour modifier le nom du fichier">Sans titre.md</span>
       </div>
 
       <!-- Zone Centrale : Sélecteur de Mode (Rapport / Slide), Masquage éditeur et Défilement synchronisé -->
@@ -46,7 +67,7 @@
         <button type="button" class="btn" id="btnToggleSyncScroll" title="Activer ou désactiver le défilement lié entre l'éditeur et l'aperçu (Raccourci : F8)">Défilement lié : Activé</button>
       </div>
 
-      <!-- Zone Droite : Configuration, Export et Thème -->
+      <!-- Zone Droite : Configuration et Thème -->
       <div class="header-group header-right">
         <!-- Bouton direct d'accès à la page de paramétrage des styles -->
         <button type="button" class="btn" id="btnOpenStyleSettings" title="Personnaliser les polices, tailles et couleurs de chaque type de balise">Styles des balises</button>
@@ -56,29 +77,17 @@
           <button type="button" class="btn" id="btnToggleConfig">Configuration</button>
           <div class="dropdown-menu">
             <div class="dropdown-status" id="configStatusText">
-              Config : par défaut<br>Modèle : par défaut
+              Modèle Word : par défaut<br>Modèle PPT : par défaut
             </div>
             <button type="button" class="dropdown-item" id="btnMenuOpenStyleSettings">Paramétrer les styles des balises</button>
-            <button type="button" class="dropdown-item" id="btnLoadConfigJson">Charger configuration (.json)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplateDocx">Charger modèle Word (.docx)</button>
             <button type="button" class="dropdown-item" id="btnLoadTemplatePptx">Charger modèle PowerPoint (.potx)</button>
             <button type="button" class="dropdown-item" id="btnLoadCustomCss">Charger CSS personnalisé (.css)</button>
-            <button type="button" class="dropdown-item" id="btnResetConfig">Réinitialiser par défaut</button>
+            <button type="button" class="dropdown-item" id="btnResetConfigMenu">Réinitialiser par défaut</button>
           </div>
-          <input type="file" id="configJsonInput" class="hidden-input" accept=".json">
           <input type="file" id="templateDocxInput" class="hidden-input" accept=".docx,.dotx">
           <input type="file" id="templatePptxInput" class="hidden-input" accept=".potx">
           <input type="file" id="customCssInput" class="hidden-input" accept=".css">
-        </div>
-
-        <!-- Menu déroulant Exporter -->
-        <div class="dropdown" id="dropdownExport">
-          <button type="button" class="btn btn-primary" id="btnToggleExport">Exporter</button>
-          <div class="dropdown-menu">
-            <button type="button" class="dropdown-item" id="btnExportHtml">HTML (.html)</button>
-            <button type="button" class="dropdown-item" id="btnExportDocx">Word (.docx)</button>
-            <button type="button" class="dropdown-item" id="btnExportPptx">PowerPoint (.pptx)</button>
-          </div>
         </div>
 
         <!-- Bouton de bascule de thème -->
@@ -89,39 +98,15 @@
     <!-- Espace de Travail Split-View (Gauche : Éditeur / Droite : Aperçu) -->
     <main class="workspace" id="workspace">
       <section class="pane-editor" id="paneEditor">
-        <!-- Barre d'outils supérieure de l'éditeur Markdown -->
-        <div class="editor-toolbar" id="editorToolbar">
-          <div class="editor-toolbar-left">
-            <button type="button" class="btn btn-sm" id="btnToggleEditorToc" title="Afficher ou masquer le sommaire des titres Markdown">Sommaire</button>
-            <span class="editor-toc-count" id="editorTocCount">0 titre</span>
-          </div>
-          <div class="editor-toolbar-right">
-            <button type="button" class="btn btn-sm" id="btnHideEditor" title="Masquer l'éditeur Markdown pour afficher l'aperçu plein écran">Masquer l'éditeur</button>
-          </div>
-        </div>
-
-        <!-- Corps de l'éditeur avec volet sommaire (#, ##, ###) et saisie -->
-        <div class="editor-body-container" id="editorBodyContainer">
-          <aside class="editor-toc-sidebar" id="editorTocSidebar">
-            <div class="editor-toc-header">
-              <span class="editor-toc-title">Sommaire des titres</span>
-              <button type="button" class="btn-subtle" id="btnCloseEditorToc" title="Fermer le sommaire">Fermer</button>
-            </div>
-            <div class="editor-toc-list" id="editorTocList">
-              <div class="editor-toc-empty">Aucun titre détecté (#, ##, ###)</div>
-            </div>
-          </aside>
-
-          <div
-            id="mdEditor"
-            class="md-editor"
-            contenteditable="true"
-            role="textbox"
-            aria-multiline="true"
-            data-placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
-            spellcheck="false"
-          ></div>
-        </div>
+        <div
+          id="mdEditor"
+          class="md-editor"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          data-placeholder="Saisissez votre texte Markdown (.md) ici, ou glissez-déposez un fichier .md ou une image..."
+          spellcheck="false"
+        ></div>
       </section>
 
       <div class="pane-resizer" id="paneResizer" title="Glisser pour ajuster la largeur"></div>

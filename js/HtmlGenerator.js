@@ -28,7 +28,7 @@ import {
 } from './utils.js';
 
 export { parseTimelineStep };
-import { planSlides } from './SlidePlanner.js';
+import { planSlides, findSlideIndexForLine } from './SlidePlanner.js';
 import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
 
 let markedExtensionsInitialized = false;
@@ -101,8 +101,8 @@ function ensureMarkedExtensions() {
 
 /**
  * Extrait la table des matières (H1, H2, H3) du texte Markdown normalisé.
- * @param {string} normalizedMarkdown
- * @returns {Array<{ level: number, title: string, slug: string }>}
+ * @param {string} normalizedMarkdown - Contenu Markdown nettoyé
+ * @returns {Array<{ level: number, title: string, rawText: string, slug: string, lineIndex: number }>}
  */
 export const extractTOC = (normalizedMarkdown) => {
   if (!normalizedMarkdown) return [];
@@ -111,7 +111,7 @@ export const extractTOC = (normalizedMarkdown) => {
   const usedSlugs = new Set();
   let inCodeBlock = false;
 
-  lines.forEach((line) => {
+  lines.forEach((line, lineIndex) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('```')) {
       inCodeBlock = !inCodeBlock;
@@ -122,7 +122,8 @@ export const extractTOC = (normalizedMarkdown) => {
     const match = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (match) {
       const level = match[1].length;
-      const title = match[2].replace(/[*_`]/g, '').trim();
+      const rawText = match[2].trim();
+      const title = rawText.replace(/[*_`]/g, '').trim();
       const baseSlug = toSlug(title) || `section-${level}`;
       let uniqueSlug = baseSlug;
       let counter = 1;
@@ -130,7 +131,7 @@ export const extractTOC = (normalizedMarkdown) => {
         uniqueSlug = `${baseSlug}-${counter++}`;
       }
       usedSlugs.add(uniqueSlug);
-      toc.push({ level, title, slug: uniqueSlug });
+      toc.push({ level, title, rawText, slug: uniqueSlug, lineIndex });
     }
   });
 
@@ -748,10 +749,11 @@ function buildPreviewParts(rawMarkdown, options = {}) {
 
   let parsedContent = '';
   let slidesHTML = '';
+  let plannedSlides = null;
 
   if (isSlide) {
     // Découpage unifié des diapositives synchronisé avec PowerPoint (.pptx)
-    const plannedSlides = planSlides(cleanMarkdown, docTitle, {
+    plannedSlides = planSlides(cleanMarkdown, docTitle, {
       pptConfig,
       templateId,
       mermaidSvgMap,
@@ -815,11 +817,12 @@ function buildPreviewParts(rawMarkdown, options = {}) {
     tocItemsHTML = '<li class="toc-empty">Aucune section détectée</li>';
   } else {
     tocItemsHTML = tocList
-      .map((item) => {
+      .map((item, idx) => {
         const levelClass = `toc-item toc-h${item.level}`;
+        const slideIdx = isSlide && plannedSlides ? findSlideIndexForLine(plannedSlides, item.lineIndex) : -1;
         return `
-          <li class="${levelClass}" data-slug="${escapeHtml(item.slug)}">
-            <a href="#${escapeHtml(item.slug)}" class="toc-link" onclick="handleTocClick(event, '${escapeHtml(item.slug)}')">
+          <li class="${levelClass}" data-slug="${escapeHtml(item.slug)}" data-heading-index="${idx}" data-slide-index="${slideIdx}" data-line-index="${item.lineIndex}">
+            <a href="#${escapeHtml(item.slug)}" class="toc-link" onclick="handleTocClick(event, '${escapeHtml(item.slug)}', ${slideIdx}, ${idx}, ${item.lineIndex})">
               <span class="toc-text">${escapeHtml(item.title)}</span>
             </a>
           </li>
@@ -1685,30 +1688,60 @@ export const generateStandaloneHTML = (rawMarkdown, options = {}) => {
         }
       };
 
-      window.handleTocClick = function(event, targetId) {
+      /**
+       * Gère le clic sur un lien du sommaire dans l'aperçu HTML.
+       * Déclenche le défilement ou l'affichage de la diapositive locale et notifie l'application parente.
+       * @param {MouseEvent} event
+       * @param {string} targetId - Identifiant slug unique du titre cible
+       * @param {number} [slideIdx=-1] - Index résolu de la diapositive en mode Slide
+       * @param {number} [headingIndex=0] - Index hiérarchique du titre dans le sommaire
+       * @param {number} [lineIndex=0] - Numéro de ligne source dans le Markdown
+       */
+      window.handleTocClick = function(event, targetId, slideIdx, headingIndex, lineIndex) {
         event.preventDefault();
 
+        let matchedSlideIndex = typeof slideIdx === 'number' && slideIdx >= 0 ? slideIdx : -1;
         if (isSlideMode) {
-          const slides = document.querySelectorAll('.slide');
-          for (let i = 0; i < slides.length; i++) {
-            if (
-              slides[i].dataset.slug === targetId ||
-              (slides[i].querySelector && slides[i].querySelector('#' + CSS.escape(targetId)))
-            ) {
-              showSlide(i);
-              break;
+          if (matchedSlideIndex < 0) {
+            const slides = document.querySelectorAll('.slide');
+            for (let i = 0; i < slides.length; i++) {
+              if (
+                slides[i].dataset.slug === targetId ||
+                (slides[i].querySelector && slides[i].querySelector('#' + CSS.escape(targetId)))
+              ) {
+                matchedSlideIndex = i;
+                break;
+              }
             }
+          }
+          if (matchedSlideIndex >= 0) {
+            showSlide(matchedSlideIndex);
           }
           const sidebar = document.getElementById('tocSidebar');
           if (sidebar) {
             sidebar.classList.add('collapsed');
           }
-          return;
+        } else {
+          const target = document.getElementById(targetId);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         }
 
-        const target = document.getElementById(targetId);
-        if (!target) return;
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Synchronise la diapositive et l'éditeur non-WYSIWYG dans l'application parente
+        try {
+          if (window.parent && typeof window.parent.onIframeTocClick === 'function') {
+            window.parent.onIframeTocClick(targetId, matchedSlideIndex, headingIndex, lineIndex);
+          } else if (window.parent) {
+            window.parent.postMessage({
+              type: 'TOC_NAVIGATE',
+              slug: targetId,
+              slideIndex: matchedSlideIndex,
+              headingIndex: headingIndex,
+              lineIndex: lineIndex,
+            }, '*');
+          }
+        } catch (_) {}
       };
 
       function updateSlideControls() {

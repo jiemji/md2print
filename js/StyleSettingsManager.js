@@ -118,10 +118,9 @@ export class StyleSettingsManager {
           </div>
           <div class="style-config-actions">
             <button type="button" class="btn btn-primary" id="btnApplyStyleConfig">Appliquer les styles</button>
-            <button type="button" class="btn" id="btnImportStyleConfig">Importer style (.css / .json)</button>
-            <input type="file" id="styleConfigFileInput" class="hidden-input" accept=".css,.json">
-            <button type="button" class="btn" id="btnExportStyleCss">Exporter CSS (.css)</button>
-            <button type="button" class="btn" id="btnExportStyleJson">Exporter JSON (.json)</button>
+            <button type="button" class="btn" id="btnImportStyleConfig">Importer style (.css)</button>
+            <input type="file" id="styleConfigFileInput" class="hidden-input" accept=".css">
+            <button type="button" class="btn" id="btnExportStyleCss">Exporter style (.css)</button>
             <button type="button" class="btn" id="btnResetStyleDefaults">Réinitialiser par défaut</button>
             <button type="button" class="btn" id="btnCloseStyleConfig">Retour à l'éditeur</button>
           </div>
@@ -898,7 +897,7 @@ export class StyleSettingsManager {
       this.handleApply();
     });
 
-    // Importation de styles (.css ou .json)
+    // Importation de styles (.css)
     const btnImport = this.container.querySelector('#btnImportStyleConfig');
     const inputImport = this.container.querySelector('#styleConfigFileInput');
     btnImport?.addEventListener('click', () => {
@@ -913,37 +912,17 @@ export class StyleSettingsManager {
       if (!file) return;
       try {
         const rawText = await file.text();
-        if (file.name.toLowerCase().endsWith('.json')) {
-          const parsed = JSON.parse(rawText);
-          const targetMode = (parsed.report || parsed.slide) ? this.activeMode : this.activeMode;
-          const cfgData = parsed[targetMode] || parsed;
-          for (const sectionKey of ['coverSlide', 'chapterSlide', 'contentSlide']) {
-            if (cfgData?.[sectionKey]?.bgImage) {
-              cfgData[sectionKey].bgImage = await compressImageDataUrl(cfgData[sectionKey].bgImage);
-            }
-            if (cfgData?.[sectionKey]?.headerBgImage) {
-              cfgData[sectionKey].headerBgImage = await compressImageDataUrl(
-                cfgData[sectionKey].headerBgImage
-              );
-            }
+        const text = await compressEmbeddedImagesInText(rawText);
+        const parsed = parseConfigFromCss(text, this.activeMode);
+        if (parsed?.config) {
+          const targetMode = parsed.mode || this.activeMode;
+          if (targetMode !== this.activeMode) {
+            this.switchMode(targetMode);
           }
-          this.setConfig(targetMode, cfgData);
+          this.setConfig(targetMode, parsed.config);
           this.updateFormValues();
           this.updateLivePreview();
           this.handleApply();
-        } else {
-          const text = await compressEmbeddedImagesInText(rawText);
-          const parsed = parseConfigFromCss(text, this.activeMode);
-          if (parsed?.config) {
-            const targetMode = parsed.mode || this.activeMode;
-            if (targetMode !== this.activeMode) {
-              this.switchMode(targetMode);
-            }
-            this.setConfig(targetMode, parsed.config);
-            this.updateFormValues();
-            this.updateLivePreview();
-            this.handleApply();
-          }
         }
       } catch (err) {
         console.error('Erreur importation style :', err);
@@ -952,10 +931,6 @@ export class StyleSettingsManager {
 
     this.container.querySelector('#btnExportStyleCss')?.addEventListener('click', () => {
       this.handleExportCss();
-    });
-
-    this.container.querySelector('#btnExportStyleJson')?.addEventListener('click', () => {
-      this.handleExportJson();
     });
 
     this.container.querySelector('#btnResetStyleDefaults')?.addEventListener('click', async () => {
@@ -1657,26 +1632,6 @@ console.log(report.status);</code></pre>
     const a = document.createElement('a');
     a.href = url;
     a.download = `md2print-${mode}-personnalise.css`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  /**
-   * Télécharge la configuration JSON du mode actif.
-   * Déclenche également l'application et la persistance immédiate dans l'application.
-   * @returns {void}
-   */
-  handleExportJson() {
-    this.handleApply();
-    const mode = this.activeMode;
-    const jsonText = JSON.stringify(this.configs[mode], null, 2);
-    const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `md2print-${mode}-config.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
