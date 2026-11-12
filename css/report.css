@@ -60,6 +60,7 @@
   --report-column-radius: 6px;
   --report-column-padding: 14px;
   --report-column-font-size: 0.95rem;
+  --report-column-title-size: 1.05rem;
   --report-h5-size: 0.98rem;
   --report-quote-size: 0.95rem;
   --report-code-size: 0.88rem;
@@ -855,9 +856,15 @@ blockquote p:last-child {
 }
 
 .markdown-rendered-content .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1));
+}
+
+.markdown-rendered-content .slide-column .slide-column-header h4,
+.markdown-rendered-content .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(var(--report-column-title-size, var(--report-h4-size, 1.05rem)) * var(--col-font-scale, 1));
 }
 
 .markdown-rendered-content .slide-column h5,

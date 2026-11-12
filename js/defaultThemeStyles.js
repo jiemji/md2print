@@ -69,6 +69,7 @@ export const DEFAULT_REPORT_CSS = `/* ==========================================
   --report-column-radius: 6px;
   --report-column-padding: 14px;
   --report-column-font-size: 0.95rem;
+  --report-column-title-size: 1.05rem;
 
   /* Accents corporatifs Word (ClrScheme Office) */
   --report-accent-blue: #4472C4;         /* Accent1 Word */
@@ -859,9 +860,15 @@ blockquote p:last-child {
 }
 
 .markdown-rendered-content .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1));
+}
+
+.markdown-rendered-content .slide-column .slide-column-header h4,
+.markdown-rendered-content .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(var(--report-column-title-size, var(--report-h4-size, 1.05rem)) * var(--col-font-scale, 1));
 }
 
 .markdown-rendered-content .slide-column h5,
@@ -1362,6 +1369,7 @@ export const DEFAULT_SLIDE_CSS = `/* ===========================================
   --slide-column-radius: 6px;
   --slide-column-padding: 14px;
   --slide-column-font-size: 1rem;
+  --slide-column-title-size: 1.15rem;
   --slide-shadow: 0 16px 48px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
   --slide-radius: 8px;
 
@@ -2401,9 +2409,15 @@ html, body {
 }
 
 .slide-body .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(1.15rem * var(--col-font-scale, 1));
+}
+
+.slide-body .slide-column .slide-column-header h4,
+.slide-body .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(var(--slide-column-title-size, 1.15rem) * var(--col-font-scale, 1));
 }
 
 .slide-body .slide-column blockquote,

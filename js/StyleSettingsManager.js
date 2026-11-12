@@ -3,7 +3,7 @@
  * @description Contrôleur de la page de paramétrage interactif des styles, couleurs,
  * polices et dimensions pour chaque type de balise (Vision Rapport et Vision Slide).
  * Gère également les arrière-plans d'images, l'opacité, la transparence des bandeaux,
- * les marges latérales, la taille du texte des colonnes, et l'import/export de thèmes personnalisés.
+ * les marges latérales, les tailles de titre et de texte des colonnes, et l'import/export de thèmes personnalisés.
  *
  * Fonctionne 100 % hors-ligne, sans dépendance externe ni icône.
  * @requires module:utils
@@ -24,6 +24,7 @@ import {
 
 export { DEFAULT_STYLE_CONFIG, FONT_OPTIONS, parseConfigFromCss, generateThemeCss };
 
+/**
  * Gestionnaire d'interface pour la page de configuration des styles de balises.
  */
 export class StyleSettingsManager {
@@ -578,6 +579,10 @@ export class StyleSettingsManager {
                     <div class="input-inline-group">
                       <label class="input-sublabel">Marge interne</label>
                       <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.padding" placeholder="14px">
+                    </div>
+                    <div class="input-inline-group">
+                      <label class="input-sublabel">Taille du titre</label>
+                      <input type="text" class="text-input size-input" style="width: 75px;" data-bind="column.titleSize" placeholder="1.15rem">
                     </div>
                     <div class="input-inline-group">
                       <label class="input-sublabel">Taille du texte</label>

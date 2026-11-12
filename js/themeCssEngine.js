@@ -56,6 +56,16 @@ import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
  */
 
 /**
+ * @typedef {Object} StyleColumnConfig
+ * @property {string} bg - Couleur de fond de la colonne
+ * @property {string} border - Couleur de bordure de la colonne
+ * @property {string} padding - Marge intérieure de la colonne (ex: '14px')
+ * @property {string} radius - Rayon des coins arrondis (ex: '6px')
+ * @property {string} [fontSize] - Taille de police de base du contenu des colonnes
+ * @property {string} [titleSize] - Taille de police du titre d'en-tête (.slide-column-header), alignée par défaut sur ##### (h4.size)
+ */
+
+/**
  * @typedef {Object} StyleThemeConfig
  * @property {StyleHeadingConfig} hMain - Titre principal de document ou couverture (#)
  * @property {StyleHeadingConfig} h1 - Titre de niveau 1 ou titre de chapitre (##)
@@ -72,7 +82,7 @@ import { DEFAULT_REPORT_CSS, DEFAULT_SLIDE_CSS } from './defaultThemeStyles.js';
  * @property {Object} code - Paramètres des blocs et extraits de code
  * @property {Object} table - Couleurs et bordures des tableaux
  * @property {Object} mermaid - Couleurs et bordures des diagrammes Mermaid
- * @property {{ bg: string, border: string, padding: string, radius: string, fontSize?: string }} column - Couleurs, bordures, marges et taille de police des colonnes
+ * @property {StyleColumnConfig} column - Couleurs, bordures, marges, taille de texte et taille de titre des colonnes
  * @property {{ nodeSize: string, nodeFontSize?: string, titleFontSize?: string, descFontSize?: string }} [timeline] - Paramètres des pastilles et polices de la frise chronologique ([frise])
  * @property {SlideBackgroundConfig} [coverSlide] - Spécifique diaporama : slide de couverture
  * @property {SlideBackgroundConfig} [chapterSlide] - Spécifique diaporama : slide de chapitre
@@ -150,6 +160,7 @@ export const DEFAULT_STYLE_CONFIG = {
       padding: '14px',
       radius: '6px',
       fontSize: '0.95rem',
+      titleSize: '1.05rem',
     },
     timeline: {
       nodeSize: '57px',
@@ -227,6 +238,7 @@ export const DEFAULT_STYLE_CONFIG = {
       padding: '14px',
       radius: '6px',
       fontSize: '1rem',
+      titleSize: '1.15rem',
     },
     timeline: {
       nodeSize: '57px',
@@ -418,6 +430,13 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
             defaults[k] = v;
           }
         }
+        // Rétrocompatibilité : un thème antérieur sans column.titleSize hérite de la taille ##### (h4)
+        if (!rawConfig.column?.titleSize) {
+          defaults.column = {
+            ...(defaults.column || {}),
+            titleSize: defaults.h4?.size || DEFAULT_STYLE_CONFIG[modeInTag].column.titleSize,
+          };
+        }
         if (modeInTag === 'slide') {
           extractSlideBgImagesFromCss(css, defaults, false);
         }
@@ -521,6 +540,11 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (cssVars[`${prefix}column-radius`]) cfg.column.radius = cssVars[`${prefix}column-radius`];
   if (cssVars[`${prefix}column-padding`]) cfg.column.padding = cssVars[`${prefix}column-padding`];
   if (cssVars[`${prefix}column-font-size`]) cfg.column.fontSize = cssVars[`${prefix}column-font-size`];
+  let hasExplicitColTitleSize = false;
+  if (cssVars[`${prefix}column-title-size`]) {
+    cfg.column.titleSize = cssVars[`${prefix}column-title-size`];
+    hasExplicitColTitleSize = true;
+  }
 
   // Frise chronologique ([frise])
   cfg.timeline = {
@@ -590,6 +614,24 @@ export function parseConfigFromCss(css, defaultMode = 'slide') {
   if (colBg) cfg.column.bg = normalizeColor(colBg);
   const colFontSize = extractRuleProp('\\.slide-column-content', 'font-size');
   if (colFontSize) cfg.column.fontSize = colFontSize;
+  // Extraction heuristique de la taille de titre d'en-tête : déballage de calc(<taille> * var(--col-font-scale, 1))
+  if (!hasExplicitColTitleSize) {
+    const rawColTitleSize = extractRuleProp('(?:\\.slide-body\\s+|\\.markdown-rendered-content\\s+)?(?:\\.slide-column\\s+)?\\.slide-column-header\\s+h4(?:,\\s*[^\\{]+)?', 'font-size');
+    if (rawColTitleSize) {
+      const calcMatch = rawColTitleSize.match(/^calc\(\s*([^\s*]+)\s*\*\s*var\(--col-font-scale/);
+      const resolvedColTitleSize = calcMatch
+        ? calcMatch[1]
+        : (!rawColTitleSize.includes('calc(') && !rawColTitleSize.includes('var(') ? rawColTitleSize : null);
+      if (resolvedColTitleSize) {
+        cfg.column.titleSize = resolvedColTitleSize;
+        hasExplicitColTitleSize = true;
+      }
+    }
+  }
+  // Sans surcharge dédiée détectée, alignement sur le titre de niveau ##### (h4)
+  if (!hasExplicitColTitleSize) {
+    cfg.column.titleSize = cfg.h4?.size || DEFAULT_STYLE_CONFIG[mode].column.titleSize;
+  }
 
   const isExplicitCssValue = (val) => Boolean(val && !val.startsWith('var(') && !val.startsWith('calc(') && val !== 'inherit');
   const timelineNodeWidth = extractRuleProp('\\.timeline-node', 'width');
@@ -651,10 +693,11 @@ function normalizeCssSize(rawValue, fallback, defaultUnit = 'px') {
 }
 
 /**
- * Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
- * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales, taille de texte des colonnes).
+ * @description Génère le code CSS complet pour un mode donné ('report' ou 'slide') à partir de l'objet de configuration.
+ * - Injecte les variables :root personnalisées (typographies, couleurs, liserés, fonds, métriques, marges latérales, taille de titre et de texte des colonnes).
  * - Applique les règles impératives de confinement de diapositive, superposition d'images d'arrière-plan,
- *   transparence des bandeaux, disposition multi-colonnes flexible et mise à l'échelle typographique (--col-font-scale).
+ *   transparence des bandeaux, disposition multi-colonnes flexible, dimensionnement autonome des en-têtes (.slide-column-header)
+ *   et mise à l'échelle typographique (--col-font-scale).
  * - Intègre en tête le bloc de métadonnées JSON standard [md2print-config:mode=...] assurant la persistance.
  *
  * @function generateThemeCss
@@ -678,6 +721,8 @@ export function generateThemeCss(mode, config) {
   const timelineNodeFontSize = normalizeCssSize(cfg.timeline?.nodeFontSize, '0.88rem', 'rem');
   const timelineTitleFontSize = normalizeCssSize(cfg.timeline?.titleFontSize, '0.95rem', 'rem');
   const timelineDescFontSize = normalizeCssSize(cfg.timeline?.descFontSize, '0.82rem', 'rem');
+  const defaultColTitleSize = cfg.h4?.size || (isSlide ? '1.15rem' : '1.05rem');
+  const colTitleSize = normalizeCssSize(cfg.column?.titleSize, defaultColTitleSize, 'rem');
 
   // Surcharges CSS explicites injectées à la suite du thème de base
   const overrides = isSlide
@@ -718,6 +763,7 @@ export function generateThemeCss(mode, config) {
   --slide-column-radius: ${cfg.column?.radius || '6px'};
   --slide-column-padding: ${cfg.column?.padding || '14px'};
   --slide-column-font-size: ${cfg.column?.fontSize || '1rem'};
+  --slide-column-title-size: ${colTitleSize};
   --slide-h3-size: ${cfg.h3.size};
   --slide-h4-size: ${cfg.h3.size};
   --slide-h5-size: ${cfg.h4.size};
@@ -1172,9 +1218,14 @@ ${cfg.chapterSlide?.bgImage ? `
 }
 .slide-body .slide-column h3,
 .slide-body .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(${cfg.h3.size} * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column .slide-column-header h4,
+.slide-body .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(${colTitleSize} * var(--col-font-scale, 1)) !important;
 }
 .slide-body .slide-column h5,
 .slide-column .doc-h5 {
@@ -1308,6 +1359,7 @@ ${cfg.chapterSlide?.bgImage ? `
   --report-column-radius: ${cfg.column?.radius || '6px'};
   --report-column-padding: ${cfg.column?.padding || '14px'};
   --report-column-font-size: ${cfg.column?.fontSize || '0.95rem'};
+  --report-column-title-size: ${colTitleSize};
   --report-h5-size: ${cfg.h5?.size || '0.98rem'};
   --report-quote-size: ${cfg.quote.size};
   --report-code-size: ${cfg.code.size};
@@ -1611,9 +1663,14 @@ ${cfg.chapterSlide?.bgImage ? `
   font-size: calc(${cfg.h2.size} * var(--col-font-scale, 1));
 }
 .markdown-rendered-content .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(${cfg.h3.size} * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .slide-column-header h4,
+.markdown-rendered-content .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(${colTitleSize} * var(--col-font-scale, 1));
 }
 .markdown-rendered-content .slide-column h5,
 .slide-column .doc-h5 {

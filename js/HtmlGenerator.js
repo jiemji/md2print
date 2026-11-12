@@ -5,7 +5,7 @@
  * les schémas Mermaid vectoriels, les alertes/callouts GitHub, les badges inline,
  * les cartouches de données/métriques agrandies (5x), les blocs de composants HTML/JS exécutables,
  * la disposition multi-colonnes flexible ([colonne:taille:titre:couleur:ratio]) avec en-têtes
- * centrés (H4), palette typologique de couleur de fond/bordure, ajustement d'échelle de police
+ * centrés (balise H4 dimensionnée par défaut sur ##### via --*-column-title-size), palette typologique de couleur de fond/bordure, ajustement d'échelle de police
  * interne (--col-font-scale), les frises chronologiques ([frise]...[/frise]),
  * la mise à jour incrémentale de l'iframe d'aperçu, et le support des modes Rapport continu et Diaporama interactif 16:9.
  * @requires utils
@@ -445,6 +445,7 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
           const hasFontScaleClass = col.fontScale !== 1 ? ' has-column-font-scale' : '';
           if (col.title) {
             hasHeaderClass = ' has-column-header';
+            // Rendu sémantique en H4 mais dimensionné indépendamment par --*-column-title-size (défaut = #####)
             const titleHtml = parseMarkdownToHTML(`#### ${col.title}`, mermaidSvgMap);
             let headerClass = 'slide-column-header';
             let headerStyle = '';
@@ -1192,9 +1193,14 @@ const SLIDE_CONTAINMENT_CSS = `
 }
 .slide-body .slide-column h3,
 .slide-body .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(var(--slide-h4-size, 1.15rem) * var(--col-font-scale, 1));
+}
+.slide-body .slide-column .slide-column-header h4,
+.slide-body .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(var(--slide-column-title-size, var(--slide-h5-size, 1.15rem)) * var(--col-font-scale, 1));
 }
 .slide-body .slide-column h5,
 .slide-column .doc-h5 {
@@ -1232,9 +1238,14 @@ const SLIDE_CONTAINMENT_CSS = `
   font-size: calc(var(--slide-h3-size, 1.35rem) * var(--col-font-scale, 1)) !important;
 }
 .slide-body .slide-column.has-column-font-scale h4,
-.slide-column.has-column-font-scale .slide-column-header h4,
 .slide-column.has-column-font-scale .doc-h4 {
   font-size: calc(var(--slide-h4-size, 1.15rem) * var(--col-font-scale, 1)) !important;
+}
+.slide-body .slide-column.has-column-font-scale .slide-column-header h4,
+.slide-body .slide-column.has-column-font-scale .slide-column-header .doc-h4,
+.slide-column.has-column-font-scale .slide-column-header h4,
+.slide-column.has-column-font-scale .slide-column-header .doc-h4 {
+  font-size: calc(var(--slide-column-title-size, var(--slide-h5-size, 1.15rem)) * var(--col-font-scale, 1)) !important;
 }
 .slide-body .slide-column.has-column-font-scale h5,
 .slide-column.has-column-font-scale .doc-h5 {
@@ -1470,9 +1481,14 @@ const REPORT_CONTAINMENT_CSS = `
   font-size: calc(var(--report-h2-size, 1.35rem) * var(--col-font-scale, 1));
 }
 .markdown-rendered-content .slide-column h4,
-.slide-column .slide-column-header h4,
 .slide-column .doc-h4 {
   font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1));
+}
+.markdown-rendered-content .slide-column .slide-column-header h4,
+.markdown-rendered-content .slide-column .slide-column-header .doc-h4,
+.slide-column .slide-column-header h4,
+.slide-column .slide-column-header .doc-h4 {
+  font-size: calc(var(--report-column-title-size, var(--report-h4-size, 1.05rem)) * var(--col-font-scale, 1));
 }
 .markdown-rendered-content .slide-column h5,
 .slide-column .doc-h5 {
@@ -1510,9 +1526,14 @@ const REPORT_CONTAINMENT_CSS = `
   font-size: calc(var(--report-h2-size, 1.35rem) * var(--col-font-scale, 1)) !important;
 }
 .markdown-rendered-content .slide-column.has-column-font-scale h4,
-.slide-column.has-column-font-scale .slide-column-header h4,
 .slide-column.has-column-font-scale .doc-h4 {
   font-size: calc(var(--report-h3-size, 1.15rem) * var(--col-font-scale, 1)) !important;
+}
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-header h4,
+.markdown-rendered-content .slide-column.has-column-font-scale .slide-column-header .doc-h4,
+.slide-column.has-column-font-scale .slide-column-header h4,
+.slide-column.has-column-font-scale .slide-column-header .doc-h4 {
+  font-size: calc(var(--report-column-title-size, var(--report-h4-size, 1.05rem)) * var(--col-font-scale, 1)) !important;
 }
 .markdown-rendered-content .slide-column.has-column-font-scale h5,
 .slide-column.has-column-font-scale .doc-h5 {

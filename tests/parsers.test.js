@@ -477,4 +477,32 @@ describe('HtmlGenerator & StyleSettingsManager — Extraction colonnes, frises e
     delete globalThis.document;
     delete globalThis.Image;
   });
+
+  it('column.titleSize utilise par defaut la taille ##### (h4), reste personnalisable et conserve --col-font-scale', () => {
+    assert.equal(DEFAULT_STYLE_CONFIG.slide.column.titleSize, DEFAULT_STYLE_CONFIG.slide.h4.size);
+    assert.equal(DEFAULT_STYLE_CONFIG.report.column.titleSize, DEFAULT_STYLE_CONFIG.report.h4.size);
+
+    // 1. Surcharge explicite et multiplication par --col-font-scale
+    const customSlideCfg = JSON.parse(JSON.stringify(DEFAULT_STYLE_CONFIG.slide));
+    customSlideCfg.column.titleSize = '1.45rem';
+    const slideCss = generateThemeCss('slide', customSlideCfg);
+    assert.ok(slideCss.includes('--slide-column-title-size: 1.45rem;'));
+    assert.ok(slideCss.includes('.slide-column .slide-column-header .doc-h4 {\n  font-size: calc(1.45rem * var(--col-font-scale, 1)) !important;'));
+
+    const roundtrip = parseConfigFromCss(slideCss, 'slide');
+    assert.equal(roundtrip?.config?.column?.titleSize, '1.45rem');
+
+    // 2. Retrocompatibilite : un theme sans column.titleSize suit la taille ##### (h4)
+    const legacyTagCss = [
+      '/* [md2print-config:mode=report] {"h4":{"size":"1.12rem"},"column":{"bg":"#ffffff"}} [/md2print-config] */',
+      ':root { --report-column-bg: #ffffff; }',
+    ].join('\n');
+    const parsedLegacy = parseConfigFromCss(legacyTagCss, 'report');
+    assert.equal(parsedLegacy?.config?.column?.titleSize, '1.12rem');
+
+    // 3. Sans tag JSON, fallback vers h4.size ou la variable CSS explicite
+    const varOnlyCss = ':root { --report-column-title-size: 1.28rem; }';
+    const parsedVarOnly = parseConfigFromCss(varOnlyCss, 'report');
+    assert.equal(parsedVarOnly?.config?.column?.titleSize, '1.28rem');
+  });
 });
