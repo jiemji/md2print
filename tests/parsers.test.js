@@ -14,7 +14,11 @@ import {
 import { normalizeMermaidCode, wrapUnfencedMermaidBlocks } from '../js/mermaidEngine.js';
 import { parseToAST, extractInlineStyles } from '../js/MarkdownParser.js';
 import { planSlides, findSlideIndexForLine } from '../js/SlidePlanner.js';
-import { extractAndGroupColumns, extractAndRenderTimelines } from '../js/HtmlGenerator.js';
+import {
+  extractAndGroupColumns,
+  extractAndRenderTimelines,
+  decorateRenderedTables,
+} from '../js/HtmlGenerator.js';
 import { segmentMarkdownToSlides, blockToPlainText } from '../js/PptxTemplateEngine.js';
 import { generateDocx } from '../js/DocxGenerator.js';
 import {
@@ -504,5 +508,21 @@ describe('HtmlGenerator & StyleSettingsManager — Extraction colonnes, frises e
     const varOnlyCss = ':root { --report-column-title-size: 1.28rem; }';
     const parsedVarOnly = parseConfigFromCss(varOnlyCss, 'report');
     assert.equal(parsedVarOnly?.config?.column?.titleSize, '1.28rem');
+  });
+
+  it('decorateRenderedTables conserve la classe doc-table meme si des badges sont presents dans les cellules', () => {
+    const rawTable = [
+      '<table>',
+      '<thead><tr><th>Element</th><th>Statut</th></tr></thead>',
+      '<tbody><tr><td>Audit</td><td><span class="badge badge-success">OK</span></td></tr></tbody>',
+      '</table>',
+    ].join('');
+    const decorated = decorateRenderedTables(rawTable);
+    assert.ok(decorated.startsWith('<div class="table-responsive-wrapper"><table class="doc-table">'));
+    assert.ok(decorated.includes('<span class="badge badge-success">OK</span>'));
+
+    const customClassTable = '<table class="custom"><tbody><tr><td><span class="badge badge-info">Info</span></td></tr></tbody></table>';
+    const decoratedCustom = decorateRenderedTables(customClassTable);
+    assert.ok(decoratedCustom.includes('<table class="custom doc-table">'));
   });
 });

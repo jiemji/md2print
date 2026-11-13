@@ -422,6 +422,38 @@ const convertRawEmptyLinesToPlaceholders = (md) => {
   return out.join('\n');
 };
 
+/**
+ * Ajoute la classe CSS `doc-table` sur chaque balise ouvrante `<table>` (sans inspecter
+ * les attributs `class` des éléments imbriqués comme les badges) et l'enveloppe dans
+ * un conteneur `.table-responsive-wrapper`.
+ * @function decorateRenderedTables
+ * @param {string} html - HTML brut produit par Marked.js
+ * @returns {string} HTML enrichi avec `.table-responsive-wrapper` et `.doc-table`
+ */
+export function decorateRenderedTables(html) {
+  if (!html) return '';
+  return html.replace(/(<table\b[^>]*>)([\s\S]*?<\/table>)/gi, (_, openTag, rest) => {
+    // Inspecte uniquement la balise ouvrante <table> afin que les attributs class des enfants (ex. badges) ne masquent pas doc-table
+    let updatedOpenTag = openTag;
+    if (!/\bclass=["'][^"']*\bdoc-table\b[^"']*["']/i.test(updatedOpenTag)) {
+      if (/\bclass=["']/i.test(updatedOpenTag)) {
+        updatedOpenTag = updatedOpenTag.replace(/(\bclass=["'])([^"']*)/i, '$1$2 doc-table');
+      } else {
+        updatedOpenTag = updatedOpenTag.replace(/^<table\b/i, '<table class="doc-table"');
+      }
+    }
+    return `<div class="table-responsive-wrapper">${updatedOpenTag}${rest}</div>`;
+  });
+}
+
+/**
+ * Convertit le Markdown normalisé en fragment HTML enrichi (colonnes, frises, Mermaid,
+ * callouts, badges, chiffres KPI, blocs HTML exécutables et tableaux décorés).
+ * @function parseMarkdownToHTML
+ * @param {string} cleanMarkdown - Markdown préalablement normalisé
+ * @param {Record<string, string>} [mermaidSvgMap={}] - Dictionnaire des SVG Mermaid pré-rendus
+ * @returns {string} Fragment HTML prêt à être injecté dans le document ou l'aperçu
+ */
 const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
   if (typeof window.marked === 'undefined') {
     return '<p>Erreur : La bibliothèque Marked.js n\'est pas chargée.</p>';
@@ -646,17 +678,7 @@ const parseMarkdownToHTML = (cleanMarkdown, mermaidSvgMap = {}) => {
 
   const parsed = window.marked.parse(markedReadyMarkdown);
 
-  let processedHtml = parsed.replace(/(<table\b[^>]*>[\s\S]*?<\/table>)/gi, (match) => {
-    let tableHtml = match;
-    if (!/class=["'][^"']*doc-table[^"']*["']/i.test(tableHtml)) {
-      if (/class=["']/i.test(tableHtml)) {
-        tableHtml = tableHtml.replace(/(<table\b[^>]*class=["'])([^"']*)/i, '$1$2 doc-table');
-      } else {
-        tableHtml = tableHtml.replace(/^<table\b/i, '<table class="doc-table"');
-      }
-    }
-    return `<div class="table-responsive-wrapper">${tableHtml}</div>`;
-  });
+  let processedHtml = decorateRenderedTables(parsed);
 
   // Envelopper les balises métriques isolées dans un conteneur flex dédié sans déborder sur les balises voisines
   processedHtml = processedHtml.replace(
