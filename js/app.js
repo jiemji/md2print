@@ -3,14 +3,15 @@
  * @description Contrôleur principal de l'application SPA md2print.
  * Orchestre les interactions utilisateur, la manipulation de cartouches graphiques dépliables
  * et déplaçables par glisser-déposer (.image-cartouche, .mermaid-cartouche, .html-cartouche),
- * la synchronisation temps réel entre l'éditeur Markdown et l'aperçu WYSIWYG (rapport paginé et diaporamas 16:9),
- * le volet de sommaire hiérarchique (#, ##, ###), le masquage adaptatif de l'éditeur pour l'affichage plein écran,
- * la gestion du thème (sombre, sépia), la persistance locale IndexedDB, et les exportations documentaires
- * (HTML autonome, Word .docx, PowerPoint .pptx).
+ * la synchronisation temps réel entre l'éditeur Markdown et l'aperçu HTML (rapport continu et diaporama 16:9),
+ * le déport de l'aperçu HTML dans une fenêtre externe indépendante et synchronisée,
+ * le masquage adaptatif de l'éditeur pour l'affichage plein écran, la gestion du thème (sombre, sépia),
+ * la persistance locale IndexedDB, et les exportations documentaires (HTML autonome, Word .docx, PowerPoint .pptx).
  * @requires module:utils
  * @requires module:EditorEngine
  * @requires module:StorageService
  * @requires module:defaultThemeStyles
+ * @requires module:themeCssEngine
  * @requires module:StyleSettingsManager
  * @requires module:HtmlGenerator
  * @requires module:DocxGenerator
@@ -172,6 +173,7 @@ const initDomRefs = () => {
 
   dom.btnToggleTheme = document.getElementById('btnToggleTheme');
   dom.btnToggleEditor = document.getElementById('btnToggleEditor');
+  dom.btnDetachPreview = document.getElementById('btnDetachPreview');
 
   dom.workspace = document.getElementById('workspace');
   dom.pageStyleConfig = document.getElementById('pageStyleConfig');
@@ -320,9 +322,7 @@ async function restoreFromIndexedDB() {
       prefs.editorWidthPct <= 80
     ) {
       state.editorWidthPct = prefs.editorWidthPct;
-      if (dom.paneEditor) {
-        dom.paneEditor.style.width = `${state.editorWidthPct}%`;
-      }
+      applyEditorSplitWidth();
     }
     if (typeof prefs.syncScroll === 'boolean') {
       state.syncScroll = prefs.syncScroll;
@@ -1161,9 +1161,26 @@ function initEventListeners() {
     toggleSyncScroll();
   });
 
-  // Bascule de masquage de l'éditeur Markdown (Bouton en-tête et barre d'outils)
+  // Bascule de masquage de l'éditeur Markdown (bouton d'en-tête ou touche F9)
   dom.btnToggleEditor?.addEventListener('click', () => {
     toggleEditorPane();
+  });
+
+  // Bascule de déportation de l'aperçu HTML dans une fenêtre externe indépendante
+  dom.btnDetachPreview?.addEventListener('click', () => {
+    toggleDetachPreviewPane();
+  });
+
+  // Fermeture propre de la fenêtre d'aperçu externe lors du déchargement de l'application
+  window.addEventListener('pagehide', () => {
+    clearDetachedCloseMonitor();
+    if (detachedPreviewWindow && !detachedPreviewWindow.closed) {
+      try {
+        detachedPreviewWindow.close();
+      } catch {
+        // Ignorer si la fenêtre externe est déjà en cours de fermeture
+      }
+    }
   });
 
   // Défilement de l'éditeur Markdown : synchronisation défilement avec l'aperçu
@@ -1182,7 +1199,7 @@ function initEventListeners() {
     (e) => {
       if (state.currentViewport !== 'slide') return;
       if (e.ctrlKey) return;
-      const iframeWin = dom.previewIframe?.contentWindow;
+      const iframeWin = getActivePreviewIframe()?.contentWindow;
       if (!iframeWin || typeof iframeWin.nextSlide !== 'function') return;
 
       if (Math.abs(e.deltaY) < 15) return;
@@ -1538,11 +1555,404 @@ async function insertImageAsBase64(file, customAlt) {
   }
 }
 
-// --- Gestion de l'Aperçu Iframe, Debounce & Défilement Synchronisé ---
+// --- Gestion de l'Aperçu Iframe, Fenêtre Externe Déportée, Debounce & Défilement Synchronisé ---
+
+/**
+ * Position de lecture capturée dans une iframe d'aperçu pour préserver le contexte lors du déport ou du réattachement.
+ * @typedef {Object} PreviewReadingPosition
+ * @property {number} scrollY - Défilement vertical en pixels (mode Rapport)
+ * @property {number} slideIndex - Index 0-based de la diapositive affichée (mode Slide)
+ */
+
+/**
+ * Options de fermeture appliquées lors de la réintégration de l'aperçu déporté.
+ * @typedef {Object} DetachedCloseOptions
+ * @property {boolean} [closeWindow=false] - Vrai pour fermer explicitement la fenêtre externe existante
+ */
 
 let isSyncingScroll = false;
 let syncScrollTimer = null;
 let previewDebounceTimer = null;
+let detachedPreviewWindow = null;
+let detachedPreviewIframe = null;
+let detachedClosePollTimer = null;
+let isRestoringDetachedWindow = false;
+
+/**
+ * Applique la largeur en pourcentage de la colonne éditeur via la propriété CSS personnalisée `--editor-width`
+ * sur l'espace de travail afin que le mode déporté puisse étendre l'éditeur à 100 % sans écraser la préférence utilisateur.
+ * @returns {void}
+ */
+function applyEditorSplitWidth() {
+  if (!dom.workspace) return;
+  dom.workspace.style.setProperty('--editor-width', `${state.editorWidthPct}%`);
+}
+
+/**
+ * Arrête et nettoie l'intervalle de surveillance de fermeture de la fenêtre externe.
+ * @returns {void}
+ */
+function clearDetachedCloseMonitor() {
+  if (detachedClosePollTimer) {
+    clearInterval(detachedClosePollTimer);
+    detachedClosePollTimer = null;
+  }
+}
+
+/**
+ * Indique si l'aperçu HTML est actuellement déporté dans une fenêtre externe encore ouverte.
+ * @returns {boolean} Vrai si une fenêtre externe active héberge l'iframe d'aperçu
+ */
+function isPreviewDetached() {
+  return Boolean(detachedPreviewWindow && !detachedPreviewWindow.closed && detachedPreviewIframe);
+}
+
+/**
+ * Retourne l'élément iframe actif pour la prévisualisation (fenêtre externe si déportée, sinon colonne droite).
+ * Déclenche automatiquement la réintégration si une fermeture externe vient d'être détectée.
+ * @returns {HTMLIFrameElement|null} Élément iframe cible actif, ou null si introuvable
+ */
+function getActivePreviewIframe() {
+  if (detachedPreviewWindow && detachedPreviewWindow.closed && !isRestoringDetachedWindow) {
+    handleDetachedPreviewClosed();
+  }
+  return isPreviewDetached() ? detachedPreviewIframe : dom.previewIframe;
+}
+
+/**
+ * Capture la position de lecture courante d'une iframe d'aperçu (scroll vertical ou diapositive active).
+ * @param {HTMLIFrameElement|null} iframe - Élément iframe source à inspecter
+ * @returns {PreviewReadingPosition} Position capturée (repli sur 0 si le contexte n'est plus accessible)
+ */
+function capturePreviewPosition(iframe) {
+  const pos = { scrollY: 0, slideIndex: 0 };
+  try {
+    const win = iframe?.contentWindow;
+    if (!win) return pos;
+    pos.scrollY = win.scrollY || win.pageYOffset || 0;
+    if (typeof win.getCurrentSlideIndex === 'function') {
+      const idx = win.getCurrentSlideIndex();
+      if (typeof idx === 'number' && idx >= 0) {
+        pos.slideIndex = idx;
+      }
+    }
+  } catch {
+    // Ignorer si le contexte de fenêtre vient d'être détruit lors de la fermeture
+  }
+  return pos;
+}
+
+/**
+ * Restaure la position de lecture (scroll vertical ou diapositive active) dans l'iframe cible après rendu.
+ * @param {HTMLIFrameElement|null} iframe - Élément iframe cible à positionner
+ * @param {PreviewReadingPosition|null} pos - Position précédemment capturée
+ * @returns {void}
+ */
+function restorePreviewPosition(iframe, pos) {
+  if (!iframe || !pos) return;
+  try {
+    const win = iframe.contentWindow;
+    if (!win) return;
+    if (state.currentViewport === 'report' && pos.scrollY > 0) {
+      const schedule = typeof win.requestAnimationFrame === 'function'
+        ? win.requestAnimationFrame.bind(win)
+        : requestAnimationFrame;
+      schedule(() => {
+        try {
+          // Verrouille temporairement le scroll lié pour éviter un rebond vers l'éditeur lors de la restauration
+          isSyncingScroll = true;
+          win.scrollTo(0, pos.scrollY);
+          clearTimeout(syncScrollTimer);
+          syncScrollTimer = setTimeout(() => {
+            isSyncingScroll = false;
+          }, 60);
+        } catch {
+          isSyncingScroll = false;
+        }
+      });
+    } else if (state.currentViewport === 'slide' && typeof win.showSlide === 'function') {
+      if (pos.slideIndex > 0) {
+        win.showSlide(pos.slideIndex);
+      }
+    }
+  } catch {
+    // Ignorer si l'iframe n'est plus disponible
+  }
+}
+
+/**
+ * Met à jour les libellés, classes visuelles et attributs d'accessibilité des boutons d'en-tête
+ * en fonction de l'état déporté de la fenêtre d'aperçu.
+ * @param {boolean} isDetached - Vrai lorsque l'aperçu est affiché dans la fenêtre externe
+ * @returns {void}
+ */
+function updateDetachPreviewButtonUI(isDetached) {
+  if (dom.btnDetachPreview) {
+    dom.btnDetachPreview.textContent = isDetached
+      ? "Rattacher l'aperçu"
+      : "Déporter l'aperçu";
+    dom.btnDetachPreview.classList.toggle('btn-active', isDetached);
+    dom.btnDetachPreview.setAttribute('aria-pressed', String(isDetached));
+    dom.btnDetachPreview.title = isDetached
+      ? "Rattacher l'aperçu HTML dans la colonne de droite"
+      : "Déporter l'aperçu HTML dans une fenêtre externe indépendante";
+  }
+
+  if (dom.btnToggleEditor) {
+    // Évite d'obtenir un espace de travail sans aucun volet visible tant que l'aperçu est externe
+    dom.btnToggleEditor.disabled = isDetached;
+    dom.btnToggleEditor.title = isDetached
+      ? "Indisponible lorsque l'aperçu est déporté dans une fenêtre externe"
+      : state.isEditorHidden
+        ? "Afficher l'éditeur Markdown (Raccourci : F9)"
+        : "Masquer l'éditeur Markdown (Raccourci : F9)";
+  }
+}
+
+/**
+ * Calcule les dimensions et coordonnées initiales de la fenêtre externe à partir du panneau d'aperçu courant.
+ * @returns {string} Chaîne de paramètres `windowFeatures` prête pour `window.open`
+ */
+function buildDetachedWindowFeatures() {
+  const previewRect = dom.panePreview?.getBoundingClientRect();
+  const availW = window.screen?.availWidth || 1280;
+  const availH = window.screen?.availHeight || 800;
+  const screenX = typeof window.screenX === 'number' ? window.screenX : 0;
+  const screenY = typeof window.screenY === 'number' ? window.screenY : 0;
+  const chromeTop = Math.max(0, (window.outerHeight || availH) - window.innerHeight);
+
+  const width = Math.max(520, Math.round(previewRect?.width || Math.min(960, availW * 0.5)));
+  const height = Math.max(420, Math.round(previewRect?.height || Math.min(840, availH * 0.85)));
+  const left = Math.max(
+    0,
+    screenX + Math.round(previewRect?.width ? previewRect.left : (window.outerWidth || availW) * 0.5)
+  );
+  const top = Math.max(0, screenY + chromeTop + Math.round(previewRect?.top || 20));
+
+  return [
+    'popup=yes',
+    `width=${width}`,
+    `height=${height}`,
+    `left=${left}`,
+    `top=${top}`,
+    'resizable=yes',
+    'scrollbars=yes',
+  ].join(',');
+}
+
+/**
+ * Réintègre la visualisation HTML dans la colonne de droite lorsque la fenêtre externe est fermée
+ * ou lorsque l'utilisateur demande manuellement son rattachement.
+ * @async
+ * @param {PreviewReadingPosition|null} [preCapturedPos=null] - Position déjà capturée avant fermeture explicite
+ * @param {DetachedCloseOptions} [options={}] - Options de contrôle de fermeture de la fenêtre
+ * @returns {Promise<void>}
+ */
+async function handleDetachedPreviewClosed(preCapturedPos = null, { closeWindow = false } = {}) {
+  if (isRestoringDetachedWindow) return;
+
+  const popupToClose = detachedPreviewWindow;
+  const hadDetachedState = Boolean(
+    popupToClose ||
+      detachedPreviewIframe ||
+      dom.workspace?.classList.contains('is-preview-detached')
+  );
+  if (!hadDetachedState) return;
+
+  // Pose le verrou et purge les références avant .close() afin que les événements
+  // synchrones beforeunload/pagehide déclenchés par la fermeture ne ré-entrent pas
+  isRestoringDetachedWindow = true;
+  const savedPos = preCapturedPos || capturePreviewPosition(detachedPreviewIframe);
+
+  clearDetachedCloseMonitor();
+  detachedPreviewWindow = null;
+  detachedPreviewIframe = null;
+
+  if (closeWindow && popupToClose && !popupToClose.closed) {
+    try {
+      popupToClose.close();
+    } catch {
+      // Ignorer si la fenêtre externe a déjà été fermée
+    }
+  }
+
+  dom.workspace?.classList.remove('is-preview-detached');
+  updateDetachPreviewButtonUI(false);
+
+  try {
+    await updatePreview();
+    const hasSavedReportScroll = state.currentViewport === 'report' && savedPos.scrollY > 0;
+    const hasSavedSlide = state.currentViewport === 'slide' && savedPos.slideIndex > 0;
+    if (hasSavedReportScroll || hasSavedSlide) {
+      restorePreviewPosition(dom.previewIframe, savedPos);
+    } else if (state.currentViewport === 'report' && state.syncScroll) {
+      syncScrollEditorToIframe();
+    }
+    showToast('Aperçu HTML replacé dans la colonne de droite');
+  } finally {
+    isRestoringDetachedWindow = false;
+  }
+}
+
+/**
+ * Ouvre l'aperçu HTML dans une fenêtre externe non modale, déplaçable et redimensionnable,
+ * et étend l'éditeur non-WYSIWYG sur toute la largeur de l'espace de travail.
+ * @async
+ * @returns {Promise<void>}
+ */
+async function detachPreviewPane() {
+  if (isPreviewDetached()) {
+    detachedPreviewWindow.focus();
+    return;
+  }
+
+  const savedPos = capturePreviewPosition(dom.previewIframe);
+  // L'appel window.open doit rester synchrone dans le geste utilisateur pour éviter le blocage des popups
+  const popup = window.open('', 'md2printPreviewWindow', buildDetachedWindowFeatures());
+
+  if (!popup || popup.closed) {
+    showToast(
+      "Impossible d'ouvrir la fenêtre externe (bloquée par le navigateur). Veuillez autoriser les popups.",
+      'error'
+    );
+    return;
+  }
+
+  try {
+    const popupDoc = popup.document;
+    // Héberger une <iframe> dédiée dans le popup évite que doc.open()/write() lors des rendus
+    // complets ne supprime les écouteurs beforeunload/pagehide attachés à la fenêtre externe
+    popupDoc.open();
+    popupDoc.write(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aperçu md2print</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+    .detached-preview-iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background-color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="detachedPreviewIframe" class="detached-preview-iframe" title="Aperçu du document formaté"></iframe>
+</body>
+</html>`);
+    popupDoc.close();
+    popupDoc.title = `${resolveDocumentTitle()} — Aperçu md2print`;
+
+    const popupIframe = popupDoc.getElementById('detachedPreviewIframe');
+    if (!popupIframe) {
+      popup.close();
+      showToast("Erreur lors de l'initialisation de la fenêtre externe.", 'error');
+      return;
+    }
+
+    // Relais direct des clics du sommaire et des messages vers la fenêtre principale
+    popup.onIframeTocClick = (...args) => {
+      if (typeof window.onIframeTocClick === 'function') {
+        window.onIframeTocClick(...args);
+      }
+    };
+    popup.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'TOC_NAVIGATE') {
+        navigateFromToc(
+          event.data.slug,
+          event.data.slideIndex,
+          event.data.headingIndex,
+          event.data.lineIndex
+        );
+      }
+    });
+
+    const onPopupClose = () => {
+      handleDetachedPreviewClosed();
+    };
+    popup.addEventListener('pagehide', onPopupClose);
+    popup.addEventListener('beforeunload', onPopupClose);
+
+    clearDetachedCloseMonitor();
+    detachedClosePollTimer = setInterval(() => {
+      if (!detachedPreviewWindow || detachedPreviewWindow.closed) {
+        handleDetachedPreviewClosed();
+      }
+    }, 350);
+
+    // Libère le contenu de l'iframe intégrée devenue masquée pour éviter les écouteurs redondants
+    try {
+      const inlineDoc = dom.previewIframe?.contentDocument;
+      if (inlineDoc) {
+        inlineDoc.open();
+        inlineDoc.write('');
+        inlineDoc.close();
+      }
+    } catch {
+      // Ignorer si le document intégré n'était pas initialisé
+    }
+
+    detachedPreviewWindow = popup;
+    detachedPreviewIframe = popupIframe;
+
+    if (state.isEditorHidden) {
+      toggleEditorPane(false);
+    }
+
+    dom.workspace?.classList.add('is-preview-detached');
+    updateDetachPreviewButtonUI(true);
+
+    await updatePreview();
+    if (!isPreviewDetached()) return;
+    restorePreviewPosition(detachedPreviewIframe, savedPos);
+    popup.focus();
+    showToast('Aperçu HTML déporté dans une fenêtre indépendante');
+  } catch (err) {
+    clearDetachedCloseMonitor();
+    detachedPreviewWindow = null;
+    detachedPreviewIframe = null;
+    dom.workspace?.classList.remove('is-preview-detached');
+    updateDetachPreviewButtonUI(false);
+    try {
+      popup.close();
+    } catch {}
+    showToast(`Erreur lors du déport de l'aperçu : ${err.message}`, 'error');
+  }
+}
+
+/**
+ * Rattache manuellement l'aperçu HTML dans la colonne de droite et ferme la fenêtre externe.
+ * @async
+ * @returns {Promise<void>}
+ */
+async function reattachPreviewPane() {
+  await handleDetachedPreviewClosed(capturePreviewPosition(detachedPreviewIframe), {
+    closeWindow: true,
+  });
+}
+
+/**
+ * Bascule l'aperçu HTML entre la colonne intégrée et la fenêtre externe indépendante.
+ * @returns {void}
+ */
+function toggleDetachPreviewPane() {
+  if (isPreviewDetached()) {
+    reattachPreviewPane();
+  } else {
+    detachPreviewPane();
+  }
+}
 
 /**
  * Calcule la position de défilement cible en interpolant les segments délimités par les titres (headings).
@@ -1558,8 +1968,9 @@ function computeSyncedScrollPosition(currentPos, maxSource, maxTarget, direction
   if (currentPos <= 0 || maxSource <= 0) return 0;
   if (currentPos >= maxSource) return maxTarget;
 
-  const iframeDoc = dom.previewIframe?.contentDocument;
-  const iframeWin = dom.previewIframe?.contentWindow;
+  const activeIframe = getActivePreviewIframe();
+  const iframeDoc = activeIframe?.contentDocument;
+  const iframeWin = activeIframe?.contentWindow;
   if (!iframeDoc || !iframeWin) {
     return Math.round((currentPos / maxSource) * maxTarget);
   }
@@ -1624,8 +2035,9 @@ function computeSyncedScrollPosition(currentPos, maxSource, maxTarget, direction
  */
 function syncScrollEditorToIframe() {
   if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
-  const iframeWin = dom.previewIframe?.contentWindow;
-  const iframeDoc = dom.previewIframe?.contentDocument;
+  const activeIframe = getActivePreviewIframe();
+  const iframeWin = activeIframe?.contentWindow;
+  const iframeDoc = activeIframe?.contentDocument;
   if (!iframeWin || !iframeDoc?.documentElement) return;
 
   const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
@@ -1654,8 +2066,9 @@ function syncScrollEditorToIframe() {
  */
 function syncScrollIframeToEditor() {
   if (isSyncingScroll || !state.syncScroll || state.currentViewport !== 'report') return;
-  const iframeWin = dom.previewIframe?.contentWindow;
-  const iframeDoc = dom.previewIframe?.contentDocument;
+  const activeIframe = getActivePreviewIframe();
+  const iframeWin = activeIframe?.contentWindow;
+  const iframeDoc = activeIframe?.contentDocument;
   if (!iframeWin || !iframeDoc?.documentElement) return;
 
   const maxEditorScroll = dom.mdEditor.scrollHeight - dom.mdEditor.clientHeight;
@@ -1723,7 +2136,9 @@ function resolveDocumentTitle() {
 }
 
 /**
- * Met à jour immédiatement l'iframe de prévisualisation avec le document HTML autonome.
+ * Met à jour immédiatement l'iframe de prévisualisation active (intégrée ou déportée)
+ * avec le document HTML autonome et synchronise le titre de la fenêtre externe le cas échéant.
+ * @async
  * @returns {Promise<void>}
  */
 async function updatePreview() {
@@ -1732,7 +2147,7 @@ async function updatePreview() {
     previewDebounceTimer = null;
   }
 
-  const iframe = dom.previewIframe;
+  const iframe = getActivePreviewIframe();
   if (!iframe) return;
 
   let prevIframeScroll = 0;
@@ -1742,6 +2157,14 @@ async function updatePreview() {
     prevIframeScroll = 0;
   }
 
+  const docTitle = resolveDocumentTitle();
+  if (isPreviewDetached() && detachedPreviewWindow.document) {
+    const detachedTitle = `${docTitle} — Aperçu md2print`;
+    if (detachedPreviewWindow.document.title !== detachedTitle) {
+      detachedPreviewWindow.document.title = detachedTitle;
+    }
+  }
+
   const activeMermaidPreset = state.themeConfigs?.[state.currentViewport]?.mermaid?.preset || 'default';
   setMermaidTheme(activeMermaidPreset);
   const [mermaidSvgMap] = await Promise.all([
@@ -1749,7 +2172,7 @@ async function updatePreview() {
     ensureHighlightLoadedIfNeeded(state.markdown),
   ]);
   const { didFullReload } = updateIframePreview(iframe, state.markdown, {
-    docTitle: resolveDocumentTitle(),
+    docTitle,
     viewMode: state.currentViewport,
     localImages: state.localImages,
     mermaidSvgMap,
@@ -1796,7 +2219,7 @@ function updatePlannedSlides() {
 function syncSlideToCursor() {
   if (state.currentViewport !== 'slide') return;
 
-  const iframeWin = dom.previewIframe?.contentWindow;
+  const iframeWin = getActivePreviewIframe()?.contentWindow;
   if (!iframeWin || typeof iframeWin.showSlide !== 'function') return;
 
   const offsets = getEditorSelectionOffsets(dom.mdEditor);
@@ -1946,12 +2369,12 @@ function initResizer() {
   });
 
   document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
+    if (!isResizing || dom.workspace?.classList.contains('is-preview-detached')) return;
     const rect = dom.workspace.getBoundingClientRect();
     const relativeX = e.clientX - rect.left;
     const percentage = Math.min(80, Math.max(20, (relativeX / rect.width) * 100));
     state.editorWidthPct = Math.round(percentage * 10) / 10;
-    dom.paneEditor.style.width = `${state.editorWidthPct}%`;
+    applyEditorSplitWidth();
   });
 
   document.addEventListener('mouseup', () => {
@@ -1963,21 +2386,13 @@ function initResizer() {
   });
 }
 
-// --- Gestion du Masquage de l'Éditeur & du Sommaire des Titres (#, ##, ###) ---
-
-/**
- * @typedef {Object} TocHeadingItem
- * @property {number} level - Niveau hiérarchique du titre (1 pour #, 2 pour ##, 3 pour ###)
- * @property {string} rawText - Texte brut du titre extrait de la ligne Markdown
- * @property {string} cleanText - Texte assaini et débarrassé de la mise en forme inline
- * @property {number} lineIndex - Index de la ligne (0-based) dans le document Markdown source
- */
+// --- Gestion du Masquage de l'Éditeur & Navigation depuis le Sommaire ---
 
 /**
  * Bascule la visibilité de la fenêtre non-WYSIWYG (Éditeur Markdown).
- * Permet d'étendre la zone d'aperçu en mode plein écran (100 % de largeur).
- * Synchronise l'état du bouton d'en-tête, applique les classes CSS d'invisibilité,
- * et restaure le sommaire lors de la réouverture.
+ * Permet d'étendre la zone d'aperçu en mode plein écran (100 % de largeur) et
+ * synchronise l'état du bouton d'en-tête ainsi que les classes CSS de masquage,
+ * tout en bloquant le masquage lorsque l'aperçu est déporté dans une fenêtre externe.
  * @param {boolean|null} [forceHide=null] - Forcer le masquage (true), l'affichage (false) ou basculer l'état (null)
  * @returns {void}
  */
@@ -1985,6 +2400,11 @@ function toggleEditorPane(forceHide = null) {
   if (!dom.paneEditor) return;
   const isHidden = dom.paneEditor.classList.contains('is-hidden');
   const shouldHide = forceHide !== null ? forceHide : !isHidden;
+
+  if (shouldHide && isPreviewDetached()) {
+    showToast("L'éditeur reste affiché tant que l'aperçu est déporté", 'info');
+    return;
+  }
 
   if (shouldHide) {
     dom.paneEditor.classList.add('is-hidden');
@@ -2133,7 +2553,7 @@ function navigateFromToc(slug, slideIndex = null, headingIndex = null, lineIndex
 
   // 1. Positionnement de la diapositive en vision Slide
   if (state.currentViewport === 'slide' && typeof slideIndex === 'number' && slideIndex >= 0) {
-    const iframeWin = dom.previewIframe?.contentWindow;
+    const iframeWin = getActivePreviewIframe()?.contentWindow;
     if (iframeWin && typeof iframeWin.showSlide === 'function') {
       const currentInIframe = typeof iframeWin.getCurrentSlideIndex === 'function'
         ? iframeWin.getCurrentSlideIndex()
@@ -2178,9 +2598,9 @@ function navigateFromToc(slug, slideIndex = null, headingIndex = null, lineIndex
     ? headings.indexOf(targetHeading)
     : (typeof headingIndex === 'number' ? headingIndex : null);
 
-  // Exécution sur le frame d'animation suivant pour que le clic et la gestion du focus
-  // dans l'iframe soient totalement achevés sans annuler le défilement de l'éditeur
-  requestAnimationFrame(() => {
+  // Exécution sur le frame d'animation suivant (ou immédiatement en arrière-plan)
+  // pour que le clic et la gestion du focus dans l'iframe soient achevés sans bloquer si la fenêtre est masquée
+  const runJump = () => {
     jumpToEditorHeading({
       lineIndex: effectiveLineIndex,
       slug: effectiveSlug,
@@ -2188,7 +2608,12 @@ function navigateFromToc(slug, slideIndex = null, headingIndex = null, lineIndex
       rawText,
       headingIndex: effectiveHeadingIndex,
     });
-  });
+  };
+  if (isPreviewDetached() && document.hidden) {
+    setTimeout(runJump, 0);
+  } else {
+    requestAnimationFrame(runJump);
+  }
 }
 
 // Interface d'appel global pour les clics dans le sommaire de l'iframe de visualisation

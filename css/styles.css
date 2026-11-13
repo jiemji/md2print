@@ -390,6 +390,18 @@ body {
   display: none !important;
 }
 
+/* Aperçu HTML déporté dans une fenêtre indépendante : l'éditeur prend toute la largeur */
+.workspace.is-preview-detached .pane-resizer,
+.workspace.is-preview-detached .pane-preview {
+  display: none;
+}
+
+.workspace.is-preview-detached .pane-editor {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 100%;
+}
+
 .btn-active {
   background-color: var(--accent-color) !important;
   border-color: var(--accent-color) !important;
@@ -412,7 +424,7 @@ body {
 }
 
 .pane-editor {
-  width: 50%;
+  width: var(--editor-width, 50%);
   min-width: 20%;
   max-width: 80%;
   height: 100%;
